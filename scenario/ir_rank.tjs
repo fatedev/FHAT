@@ -1,0 +1,2019 @@
+/*******************************************************************************
+	風雲イリヤ城 - エンディング後のランク表示
+*******************************************************************************/
+
+
+
+class CIriyaRankShootingStar
+{
+var		parWin,parLayer,parScene;
+	function CIriyaRankShootingStar( _pr_win, _pr_layer, _pr_scene )
+	{
+		parWin   = _pr_win;
+		parLayer = _pr_layer;
+		parScene = _pr_scene;
+
+		init_data();
+		return;
+	}
+	function finalize()
+	{
+		release_data();
+		return;
+	}
+
+	var		PRN_SHOOTING_PX		= 268;
+	var		PRN_SHOOTING_PY		= 80;
+
+
+
+	var		mode;
+
+
+	var		prn_shooting;
+	var		prn_flash;
+
+	var		prn_page;
+	var		time_count;
+
+	function init_data()
+	{
+		mode = 0;
+
+		prn_shooting = void;
+		prn_flash    = void;
+		return;
+	}
+	function release_data()
+	{
+		DeleteArrayObject( prn_shooting, 1 );
+		prn_shooting = void;
+
+		DeleteArrayObject( prn_flash, 1 );
+		prn_shooting = void;
+		return;
+	}
+
+
+	function Init( _layer_offset )
+	{
+	var		i;
+	var		file_name;
+	var		off_x,off_y;
+
+		release_data();
+
+		prn_shooting = new Array();
+		prn_flash    = new Array();
+
+		for (i=0;  ;  i++) {
+			file_name = "ir_ed_last_star%02d".sprintf( i );
+			if (isImageFile(file_name)  ==  false)
+				break;
+			prn_shooting[i] = EasyCreateLayerObject( parWin,parLayer, file_name,
+									clAdapt, false, PRN_SHOOTING_PX,PRN_SHOOTING_PY, _layer_offset );
+		}
+
+		with ( prn_shooting[prn_shooting.count-1] )
+		{
+			off_x = .left + .width;
+			off_y = .top  + .height;
+		}
+
+		for (i=0;  ;  i++) {
+			file_name = "ir_ed_last_cross_%03d".sprintf( i );
+			if (isImageFile(file_name)  ==  false)
+				break;
+			prn_flash[i] = EasyCreateLayerObject( parWin,parLayer, file_name,
+									clAdapt, false, 0,0, _layer_offset );
+
+			with ( prn_flash[i] )
+			{
+				.left = off_x - .width/2;
+				.top  = off_y - .height/2;
+			}
+		}
+		return;
+	}
+
+	function StartAnime()
+	{
+		mode = 1;
+		time_count = 0;
+
+		prn_page = 0;
+		prn_shooting[prn_page].visible = true;
+
+		PlaySE( SE_CASTLE_CLASH_SHOOTING_STAR );
+		return;
+	}
+
+	function Update()
+	{
+		switch ( mode )
+		{
+		case 0:
+			return ( false );
+
+		case 1:
+			time_count += 1;
+			if (time_count  <  3)
+				break;
+			prn_shooting[prn_page].visible = false;
+			prn_page += 1;
+
+			time_count = 0;
+			if (prn_page  <  prn_shooting.count) {
+				prn_shooting[prn_page].visible = true;
+				break;
+			}
+			mode = 2;
+			time_count = 0;
+			break;
+
+		case 2:
+			time_count += 1;
+			if (time_count  <  10)
+				break;
+
+			mode = 3;
+			time_count = 0;
+
+			prn_page = 0;
+			prn_flash[prn_page].visible = true;
+			PlaySE( SE_CASTLE_CLASH_FLASH_STAR );
+			break;
+
+		case 3:
+			time_count += 1;
+			if (time_count  <  3)
+				break;
+			prn_flash[prn_page].visible = false;
+			prn_page += 1;
+
+			time_count = 0;
+			if (prn_page  <  prn_flash.count) {
+				prn_flash[prn_page].visible = true;
+				break;
+			}
+			mode = 10;
+			break;
+		case 10:
+			return ( false );
+		}
+		return ( true );
+	}
+
+
+}
+
+
+
+
+
+class CIriyaRankFailureFace
+{
+var		parWin,parLayer,parScene;
+	function CIriyaRankFailureFace( _pr_win, _pr_layer, _pr_scene )
+	{
+		parWin   = _pr_win;
+		parLayer = _pr_layer;
+		parScene = _pr_scene;
+
+		init_data();
+		return;
+	}
+	function finalize()
+	{
+		release_data();
+		return;
+	}
+
+
+	var		mode;
+
+	var		prn_face;
+
+
+	function init_data()
+	{
+		mode = 0;
+
+		prn_face =  new Array();
+		return;
+	}
+	function release_data()
+	{
+	var		i;
+
+		if (CheckValid(prn_face)  ==  true) {
+			for (i=0;  i<prn_face.count;  i++) {
+				if (CheckValid(prn_face[i])  ==  false)
+					continue;
+				ReleaseFadeAnime( prn_face[i] );
+				EasyReleaseLayer( prn_face[i] );
+				prn_face[i] = void;
+			}
+			prn_face = void;
+		}
+		return;
+	}
+
+
+	function SetPrintFaceData( _max_prn_num, _prn_id, _prn_chara_id, _layer_offset )
+	{
+	var		file_name;
+	var		prn_x,prn_y;
+	var		center_id_r,center_id_l;
+/*
+		switch ( _prn_id )
+		{
+		case 0:
+			prn_y = 16+16*2;
+			break;
+		case 1:
+			prn_y = 16+16*1;
+			break;
+		case 2:
+			prn_y = 16+16*0;
+			break;
+		case 3:
+			prn_y = 16+16*1;
+			break;
+		case 4:
+			prn_y = 16+16*2;
+			break;
+		}
+*/
+		if ((_max_prn_num%2)  ==  0) {
+			center_id_l = (int)(_max_prn_num / 2);
+			center_id_r = center_id_l-1;
+		} else {
+			center_id_l = (int)(_max_prn_num / 2);
+			center_id_r = center_id_l;
+		}
+
+		prn_x = SCREEN_SIZE_W/2 - (_max_prn_num*140)/2 + _prn_id*140;
+		if (center_id_r  >  _prn_id) {
+			prn_y = 16+16*(center_id_r-_prn_id);
+		} else
+		if ((center_id_r  ==  _prn_id)
+		||	(center_id_l  ==  _prn_id)) {
+			prn_y = 16;
+		} else
+		if (center_id_l  <  _prn_id) {
+			prn_y = 16+16*(_prn_id-center_id_l);
+		}
+
+		switch ( _prn_chara_id )
+		{
+		case CHARA_ID_SABER:
+			file_name = "ir_ed_last_saber";
+			break;
+		case CHARA_ID_ARCHER:
+			file_name = "ir_ed_last_archer";
+			break;
+		case CHARA_ID_RIDER:
+			file_name = "ir_ed_last_rider";
+			break;
+		case CHARA_ID_LANCER:
+			file_name = "ir_ed_last_lancer";
+			break;
+		case CHARA_ID_CASTER:
+			file_name = "ir_ed_last_caster";
+			break;
+		case CHARA_ID_CASTER:
+			file_name = "ir_ed_last_caster";
+			break;
+		case CHARA_ID_IRIYA:
+			file_name = "ir_ed_last_iriya";
+			break;
+		}
+
+		prn_face[_prn_id] = EasyCreateLayerObject( parWin,parLayer, file_name,
+								clAdapt, false, prn_x,prn_y, _layer_offset );
+
+		if (_prn_chara_id  ==  CHARA_ID_IRIYA) {
+			with ( prn_face[_prn_id] )
+			{
+				.setPos( .left-(.width-146)/2, .top );
+			}
+		}
+		return;
+	}
+
+
+	function FadeIn()
+	{
+		setup_fade_in_anime();
+		mode = 1;
+		return;
+	}
+	function setup_fade_in_anime()
+	{
+	var		i;
+		for (i=0;  i<prn_face.count;  i++) {
+			if (CheckValid(prn_face[i])  ==  false)
+				continue;
+
+			prn_face[i].visible = true;
+			EasyStartFadeAnime( prn_face[i], 0,80, (int)(FRAME_PER_SEC*1) );
+			StartFadeAnime( prn_face[i] );
+		}
+		return;
+	}
+	function update_fade_in_anime()
+	{
+	var		ret;
+	var		i;
+
+		ret = false;
+		for (i=0;  i<prn_face.count;  i++) {
+			if (CheckValid(prn_face[i])  ==  false)
+				continue;
+
+			if (ProcessFadeAnime(prn_face[i])  ==  "UPDATING")
+				ret = true;
+		}
+		return ( ret );
+	}
+
+
+
+	function Update()
+	{
+		switch ( mode )
+		{
+		case 0:
+			break;
+		case 1:
+			return ( update_fade_in_anime() );
+		}
+
+		return ( false );
+	}
+
+}
+
+
+class CIriyaRankEndCG
+{
+	function CIriyaRankEndCG()
+	{
+		init_data();
+	}
+	function finalize()
+	{
+		release_data();
+	}
+
+
+	var		prn_end;
+
+	function init_data()
+	{
+		prn_end = void;
+		return;
+	}
+	function release_data()
+	{
+		EasyReleaseLayer( prn_end );
+		prn_end = void;
+		return;
+	}
+
+	function Init( _pr_win, _pr_layer, _px,_py, _priority )
+	{
+		release_data();
+
+		prn_end = EasyCreateLayerObject( _pr_win, _pr_layer, "ir_ed_last_end", clAdapt, false, _px,_py, _priority );
+		return;
+	}
+
+	function Print()
+	{
+		PlaySE( SE_CASTLE_CLASH_PRN_END_FONT );
+		prn_end.visible = true;
+		return;
+	}
+
+	function CenteringPosition()
+	{
+		with ( prn_end )
+		{
+			.left = CalcCenterPosX( .parent, prn_end );
+			.top  = CalcCenterPosY( .parent, prn_end );
+		}
+		return;
+	}
+	function AddPosition( _add_x, _add_y )
+	{
+		with ( prn_end )
+		{
+			.left += _add_x;
+			.top  += _add_y;
+		}
+	}
+}
+
+class CIrlyaRankSmokeObj
+{
+	function CIrlyaRankSmokeObj()
+	{
+		init_data();
+	}
+	function finalize()
+	{
+		release_data();
+	}
+
+
+	var		PRN_TIME		=1;
+
+	var		prn_smoke;
+	var		prn_time;
+
+	var		prn_x,prn_y,off_x,off_y;
+
+	function init_data()
+	{
+		prn_x = 0;
+		prn_y = 0;
+		off_x = 0;
+		off_y = 0;
+
+		prn_smoke = void;
+		return;
+	}
+	function release_data()
+	{
+		EasyReleaseLayer( prn_smoke );
+		prn_smoke = void;
+		prn_time = 0;
+		return;
+	}
+
+	function Create( _window, _layer, _cg, _px, _py, _priority, _time=PRN_TIME )
+	{
+		release_data();
+
+		prn_x = _px;
+		prn_y = _py;
+
+		prn_smoke = new CSpriteLayer(_window, _layer );
+		SetLayerInfoParam( prn_smoke, _cg, _px, _py, _priority );
+
+		prn_smoke.visible = true;
+		prn_time = _time+(SKIP_COUNT-1);
+
+		SetPos( off_x, off_y );
+		return;
+	}
+
+	function Update()
+	{
+		if (prn_time  ==  0)
+			return ( false );
+
+//		prn_smoke.left ^= 2;
+//		prn_smoke.setPos( prn_smoke.left, prn_smoke.top );
+		prn_time -= 1;
+		return ( true );
+	}
+
+	function SetPos( _prn_x, _prn_y )
+	{
+		off_x = _prn_x;
+		off_y = _prn_y;
+		prn_smoke.setPos( prn_x+off_x, prn_y+off_y );
+		return;
+	}
+
+}
+
+
+class CIrlyaRankSmokeManageObj
+{
+var		parWin,parLayer;
+	function CIrlyaRankSmokeManageObj( _pr_win, _pr_layer )
+	{
+		parWin   = _pr_win;
+		parLayer = _pr_layer;
+		init_data();
+	}
+	function finalize()
+	{
+		release_data();
+	}
+
+
+	var		smoke_obj;
+	var		smoke_cg;
+
+	var		off_x,off_y;
+
+	function init_data()
+	{
+		off_x = 0;
+		off_y = 0;
+
+		smoke_obj = void;
+		smoke_cg = void;
+		return;
+	}
+	function release_data()
+	{
+	var		i;
+		if (CheckValid(smoke_obj)  ==  true) {
+			for (i=0;  i<smoke_obj.count;  i++)
+				EasyObjectInvalidate( smoke_obj[i] );
+			EasyObjectInvalidate( smoke_obj );
+			smoke_obj = void;
+		}
+
+		EasyReleaseLayer( smoke_cg );
+		smoke_cg = void;
+
+		return;
+	}
+
+	function Init()
+	{
+		smoke_cg = EasyCreateLayerObject( parWin,parLayer, "ir_ed_last_smoke", clAdapt, false, 0,0, 0 );
+		smoke_obj = new Array();
+		return;
+	}
+	function GetSmokeSizeW()
+	{
+		if (CheckValid(smoke_cg)  ==  false)
+			return ( 0 );
+		return ( smoke_cg.imageWidth );
+	}
+	function GetSmokeSizeH()
+	{
+		if (CheckValid(smoke_cg)  ==  false)
+			return ( 0 );
+		return ( smoke_cg.imageHeight );
+	}
+
+	function Create( _px, _py, _priority, _time )
+	{
+	var	_obj;
+		_obj = new CIrlyaRankSmokeObj();
+		_obj.Create( parWin,parLayer, smoke_cg, _px,_py, _priority, _time );
+		_obj.SetPos( off_x, off_y );
+		smoke_obj.add( _obj );
+		return;
+	}
+
+	function UpdateManage()
+	{
+	var		i;
+
+		for (i=0;  i<smoke_obj.count;  ) {
+			if (smoke_obj[i].Update()   ==  false) {
+				EasyObjectInvalidate( smoke_obj[i] );
+				smoke_obj.erase( i );
+				continue;
+			}
+
+			i += 1;
+		}
+		return;
+	}
+	function GetSmokeNum()
+	{
+		return ( smoke_obj.count );
+	}
+
+	function SetPos( _prn_x, _prn_y )
+	{
+	var		i;
+		off_x = _prn_x;
+		off_y = _prn_y;
+		for (i=0;  i<smoke_obj.count;  i++) {
+			smoke_obj[i].SetPos( off_x, off_y );
+		}
+		return;
+	}
+}
+
+
+
+class CIriyaRankCastle
+{
+var		parWin,parLayer;
+	function CIriyaRankCastle( _pr_win, _pr_layer )
+	{
+		parWin   = _pr_win;
+		parLayer = _pr_layer;
+		init_buffer();
+	}
+	function finalize()
+	{
+		Release();
+	}
+
+	// 城表示位置
+	var	PRN_CASTLE_BASE_X = 270;
+	var	PRN_CASTLE_BASE_Y = 344;
+
+	var		CASTLE_YURE_W			= 2;		// 城の揺れ幅
+	var		CASTLE_YURE_H			= 1;		// 城の揺れ幅
+	var		GROUND_YURE1_W			= 2;//1;	// 岬の揺れ幅
+	var		GROUND_YURE1_H			= 0;		// 岬の揺れ幅
+	var		CASTLE_CLASH_SPEED_FIRST	= 0;//-0.5;		// 城の沈む速さ
+	var		GROUND_YURE2_W			= 4;//1;	// 岬の揺れ幅
+	var		GROUND_YURE2_H			= 0;		// 岬の揺れ幅
+	var		CASTLE_CLASH_SPEED		= -0.8;//-0.5;		// 城の沈む速さ
+	var		GROUND_YURE3_W			= 2;//1;	// 岬の揺れ幅
+	var		GROUND_YURE3_H			= 0;		// 岬の揺れ幅
+
+	var		CASTLE_CLASH_SMOKE_NUM = 3;			// 城が崩れる間に生成する破壊煙の１フレーム内の生成数
+	var		PRN_CASTLE_CLASH_SMOKE_TIME = 2;		// 表示時間
+
+	var	mode;
+		var	MODE_NONE					=0;
+		var	MODE_CLASH_ANIME_FIRST		=1;
+		var	MODE_CLASH_ANIME_MAIN		=2;
+		var	MODE_CLASH_ANIME_END_WAIT	=3;
+		var	MODE_CLASH_ANIME_END		=4;
+
+
+	var		PRN_SMOKE_LAYER_OFFSET 		= 50;		// 煙
+
+
+	var		CLASH_ANIME_FIRST_TIME		= 8;
+	var		CLASH_ANIME_END_WAIT_TIME	= 30;
+
+	var		smoke_manage;
+
+	var		prn_ground;
+	var		prn_castle;
+	var		prn_off_x;
+	var		prn_off_y;
+	var		now_prn_height;
+	var		_now_prn_height;
+
+	var		prn_x,yure_x,yure_bg_x;
+	var		prn_y,yure_y,yure_bg_y;
+
+	var		now_yure_w,now_yure_h;
+	var		now_clash_speed;
+
+	var		tmp_count;
+
+	var		layer_offset;
+
+	function init_buffer()
+	{
+		mode = MODE_NONE;
+
+		prn_off_x  = 0;
+		prn_off_y  = 0;
+
+		yure_x = 0;
+		yure_y = 0;
+
+		yure_bg_x = 0;
+		yure_bg_y = 0;
+
+		now_prn_height = 0;
+
+		layer_offset = 0;
+		prn_castle = void;
+		prn_ground = void;
+
+		now_yure_w = 0;
+		now_yure_h = 0;
+
+		clear_make_smoke_counter();
+		return;
+	}
+	function Release()
+	{
+		EasyReleaseLayer( prn_castle );
+		prn_castle = void;
+
+		EasyReleaseLayer( prn_ground );
+		prn_ground = void;
+
+		EasyObjectInvalidate( smoke_manage );
+		smoke_manage = void;
+
+
+		init_buffer();
+		return;
+	}
+
+
+	function Init( _layer_offset )
+	{
+		Release();
+
+		layer_offset = _layer_offset;
+
+		prn_castle = EasyCreateLayerObject( parWin,parLayer, "ir_ed_last_castle", clAdapt, false, 0,0, layer_offset );
+		now_prn_height = prn_castle.imageHeight;
+
+		smoke_manage = new CIrlyaRankSmokeManageObj( parWin, parLayer );
+		smoke_manage.Init();
+
+		prn_ground = EasyCreateLayerObject( parWin,parLayer, "ir_ed_last_ground", clAdapt, false, 0,0, layer_offset );
+		return;
+	}
+	function Print()
+	{
+		if (CheckValid(prn_castle))
+			prn_castle.visible = true;
+		if (CheckValid(prn_ground))
+			prn_ground.visible = true;
+		update_cg();
+		return;
+	}
+
+	function GetCastleW()
+	{
+		if (CheckValid(prn_castle)  ==  false)
+			return ( 0 );
+		return ( prn_castle.imageWidth );
+	}
+
+	function update_cg()
+	{
+		if (CheckValid(prn_castle)) {
+			with ( prn_castle )
+			{
+				.setSize( .imageWidth, now_prn_height );
+				.setPos( prn_off_x+PRN_CASTLE_BASE_X+yure_x, prn_off_y+PRN_CASTLE_BASE_Y-now_prn_height+yure_y );
+			}
+		}
+		if (CheckValid(prn_ground)) {
+			with ( prn_ground )
+			{
+				.setPos( prn_off_x+(SCREEN_SIZE_W-.imageWidth)+yure_bg_x, prn_off_y+(SCREEN_SIZE_H-.imageHeight)+yure_bg_y );
+			}
+		}
+		return;
+	}
+	function SetBasePos( _prn_x, _prn_y )
+	{
+	var		update_flag = true;
+
+		if ((prn_off_x  ==  _prn_x)
+		&&	(prn_off_y  ==  _prn_y))
+			update_flag = false;
+
+		if (update_flag  ==  true) {
+			prn_off_x = _prn_x;
+			prn_off_y = _prn_y;
+			smoke_manage.SetPos( prn_off_x, prn_off_y );
+		}
+		update_cg();
+		return;
+	}
+
+
+	function StartClash()
+	{
+		mode = MODE_CLASH_ANIME_FIRST;
+		_now_prn_height = now_prn_height;
+
+		if (SE_CASTLE_CLASH_VIBRATE  !==  void)
+			loopSound( SE_CASTLE_CLASH_VIBRATE, SE_CASTLE_CLASH_VIBRATE_FADE_IN_TIME );
+
+		tmp_count = CLASH_ANIME_FIRST_TIME;
+		now_yure_w = GROUND_YURE1_W;
+		now_yure_h = GROUND_YURE1_H;
+		now_clash_speed = CASTLE_CLASH_SPEED_FIRST;
+
+		clear_make_smoke_counter();
+		return;
+	}
+
+	function update_clash()
+	{
+	var		ret;
+
+		if (_now_prn_height  ==  0) {
+			ret = false;
+		} else {
+			ret = true;
+
+			_now_prn_height += now_clash_speed;
+			if (_now_prn_height  <=  0.0) {
+				_now_prn_height = 0;
+				if (SE_CASTLE_CLASH_VIBRATE  !==  void)
+					stopSound( SE_CASTLE_CLASH_VIBRATE, SE_CASTLE_CLASH_VIBRATE_FADE_OUT_TIME, true );
+			}
+			now_prn_height = (int)_now_prn_height;
+		}
+
+/*		if (yure_x  >  0)
+				yure_x = -CASTLE_YURE_W;
+		else	yure_x =  CASTLE_YURE_W;
+		if (yure_y  ==  0)
+				yure_y = CASTLE_YURE_H;
+		else	yure_y = 0;
+*/
+		if (yure_bg_x  ==  0)
+				yure_bg_x = now_yure_w;
+		else	yure_bg_x = 0;
+		if (yure_bg_y  ==  0)
+				yure_bg_y = now_yure_h;
+		else	yure_bg_y = 0;
+		yure_x = yure_bg_x;
+		yure_y = yure_bg_y;
+
+		update_cg();
+		return ( ret );
+	}
+
+
+	function Update()
+	{
+
+		switch ( mode )
+		{
+		case MODE_NONE:
+			break;
+
+		case MODE_CLASH_ANIME_FIRST:
+			update_clash();
+			if (tmp_count  >  0) {
+				tmp_count -= 1;
+				break;
+			}
+
+			mode = MODE_CLASH_ANIME_MAIN;
+			now_yure_w = GROUND_YURE2_W;
+			now_yure_h = GROUND_YURE2_H;
+			now_clash_speed = CASTLE_CLASH_SPEED;
+			break;
+
+		case MODE_CLASH_ANIME_MAIN:
+			update_make_smoke_counter();
+			make_castle_clash_smoke();
+			if (update_clash())
+				break;
+
+			mode = MODE_CLASH_ANIME_END_WAIT;
+			tmp_count = CLASH_ANIME_END_WAIT_TIME;
+			now_yure_w = GROUND_YURE3_W;
+			now_yure_h = GROUND_YURE3_H;
+			now_clash_speed = 0;
+			break;
+
+		case MODE_CLASH_ANIME_END_WAIT:
+			update_clash();
+			if (tmp_count  >  0) {
+				tmp_count -= 1;
+				break;
+			}
+
+			mode = MODE_CLASH_ANIME_END;
+			break;
+
+		case MODE_CLASH_ANIME_END:
+			break;
+		}
+
+		smoke_manage.UpdateManage();
+		return;
+	}
+
+	function CheckAnimeEnd()
+	{
+		if (mode  !=  MODE_CLASH_ANIME_END)
+			return ( false );
+		return ( true );
+	}
+
+
+	var		smoke_make_counter=0;
+	var		smoke_se_cycle_counter=0;
+	function clear_make_smoke_counter()
+	{
+		smoke_make_counter = 0;
+		smoke_se_cycle_counter = 0;
+		return;
+	}
+	function update_make_smoke_counter()
+	{
+		if (smoke_se_cycle_counter  ==  0)
+			PlaySE( SE_CASTLE_CLASH_SMOKE );
+		smoke_se_cycle_counter = (smoke_se_cycle_counter + 1) % SE_CASTLE_CLASH_SMOKE_CYCLE;
+
+		if (smoke_make_counter  ==  0)
+			make_smoke();
+
+		smoke_make_counter = (smoke_make_counter+1)%(2+(SKIP_COUNT-1));
+		return;
+	}
+	function make_smoke()
+	{
+	var		i,_tmp;
+	var		prn_px,prn_py,smoke_w;
+	var		create_num;
+
+
+		smoke_w = smoke_manage.GetSmokeSizeW();
+
+		create_num = 1 + ((GetCastleW() + (smoke_w-1)) \ smoke_w);
+
+		prn_px = PRN_CASTLE_BASE_X + (GetCastleW()-(smoke_w*create_num)) \ 2;
+		prn_py = PRN_CASTLE_BASE_Y-smoke_manage.GetSmokeSizeH()+12;
+
+		for (i=0;  i<create_num;  i++) {
+			smoke_manage.Create( prn_px, prn_py, layer_offset+PRN_SMOKE_LAYER_OFFSET );
+			prn_px += smoke_w;
+		}
+		return;
+	}
+	function make_castle_clash_smoke()
+	{
+	var		_px,_py;
+	var		i;
+		with ( prn_castle )
+		{
+			for (i=0;  i<CASTLE_CLASH_SMOKE_NUM;  i++) {
+				_px = .left-prn_off_x + rand_ave(.width);
+				_py = .top-prn_off_y  + rand_ave(.height)-16;
+
+				smoke_manage.Create(
+					_px,
+					_py,
+					layer_offset+PRN_SMOKE_LAYER_OFFSET,
+					PRN_CASTLE_CLASH_SMOKE_TIME );
+			}
+		}
+		return;
+	}
+
+	function GetSmokeNum()
+	{
+		return ( smoke_manage.GetSmokeNum() );
+	}
+}
+
+
+
+
+
+class CIriyaRankBG
+{
+var		parWin,parLayer;
+	function CIriyaRankBG( _pr_win, _pr_layer )
+	{
+		parWin   = _pr_win;
+		parLayer = _pr_layer;
+		init_buffer();
+	}
+	function finalize()
+	{
+		Release();
+	}
+
+
+	var		mode;
+
+	var		prn_bg;
+	var		prn_bg2;
+
+	var		fade_anime;
+
+	function init_buffer()
+	{
+		mode = 0;
+
+		prn_bg  = void;
+		prn_bg2 = void;
+
+		fade_anime = void;
+		return;
+	}
+	function Release()
+	{
+		EasyReleaseLayer( prn_bg );
+		prn_bg = void;
+
+		if (CheckValid(prn_bg2)  ==  true) {
+			ReleaseFadeAnime( prn_bg2 );
+			EasyReleaseLayer( prn_bg2 );
+			prn_bg2 = void;
+		}
+
+		init_buffer();
+		return;
+	}
+
+
+	function Init( _layer_offset )
+	{
+		Release();
+
+		prn_bg2 = EasyCreateLayerObject( parWin,parLayer, "ir_ed_last_bg_dark", clNone, false, 0,0, _layer_offset );
+		prn_bg  = EasyCreateLayerObject( parWin,parLayer, "ir_ed_last_bg", clNone, false, 0,0, _layer_offset );
+		return;
+	}
+	function Print()
+	{
+		prn_bg.visible = true;
+		prn_bg2.visible = false;
+		return;
+	}
+
+
+
+
+	function StartDark()
+	{
+		mode = 1;
+		prn_bg.visible = true;
+		prn_bg2.visible = true;
+
+		EasyStartFadeAnime( prn_bg2, 0,255, (int)(FRAME_PER_SEC*10) );
+		StartFadeAnime( prn_bg2 );
+		return;
+	}
+
+	function Update()
+	{
+		switch ( mode )
+		{
+		case 0:
+			break;
+		case 1:
+			if (ProcessFadeAnime(prn_bg2)  ==  "UPDATING")
+				return ( true );
+			prn_bg.visible = false;
+			break;
+		}
+
+		return ( false );
+	}
+
+
+}
+
+
+
+class CIriyaRank extends CIriyaScene
+{
+
+	@if (DEBUG_MODE  ==  1)
+	var		key_state;
+	@endif;
+
+	function CIriyaRank( parent, scene_id )
+	{
+		super.CIriyaScene( ... );
+		@if (DEBUG_MODE)
+		dm( "ランク" );
+		@endif
+
+		@if (DEBUG_MODE  ==  1)
+		key_state = new CIriyaKeyState();
+		key_state.UpdateState();
+		@endif
+
+
+		// ご褒美CGクリアをだす？？？
+@if ( DEBUG_MODE )
+dm( "getUseStageSkipFlag():" + parentLayer.getUseStageSkipFlag() );
+dm( "getUseContinueFlag():" + parentLayer.getUseContinueFlag() );
+@endif
+		if ((parentLayer.getUseStageSkipFlag()  ==  false)	// ステージスキップしてない？
+		&&	(parentLayer.getUseContinueFlag()  ==  false)) {	// コンティニューしてない？
+			parentLayer.setGohoubiCG( parentLayer.ご褒美CG_クリア );
+		}
+
+		init_data();
+	}
+
+	function finalize()
+	{
+		@if (DEBUG_MODE  ==  1)
+		if (CheckValid(key_state)  ==  true) {
+			EasyObjectInvalidate( key_state );
+			key_state = void;
+		}
+		@endif
+
+		release_data();
+
+		super.finalize( ... );
+	}
+
+
+
+	// 表示オフセット
+	var		PRN_THE_END_LAYER_OFFSET	=-  10;		// THE END
+	var		PRN_CHARA_LAYER_OFFSET		=-  50;		// キャラ
+	var		PRN_CASTLE_LAYER_OFFSET		=- 100;		// 城
+	var		PRN_STAR_LAYER_OFFSET 		=- 800;		// 流れ星
+	var		PRN_FAILURE_LAYER_OFFSET 	=- 900;		// お亡くなりキャラの顔
+	var		PRN_BG_LAYER_OFFSET 		=-1000;		// 背景
+
+
+	// 城表示座標位置(YはEYの位置になる)
+	var		PRN_CASTLE_BASE_X	=270;
+	var		PRN_CASTLE_BASE_Y	=340;
+	// THE END表示位置
+	var		PRN_THE_END_ADD_X		=  0;
+	var		PRN_THE_END_ADD_Y		=-16;
+
+	// キャラ表示位置のスライドサイズ
+	var		CHARA_START_SLIDE_Y		= 144;
+	var		GROUND_START_SLIDE_Y	= CHARA_START_SLIDE_Y+8;
+	var		FORWARD_SCROLL_SLIDE_Y	= -GROUND_START_SLIDE_Y;
+
+	var		CASTLE_SCROLL_SLIDE_Y	= 32;
+
+	var	FORWARD_SCROLL_TIME		= FRAME_PER_SEC*8;
+
+	var	SKIP_STAFF_ROLL_SPEED	= 16;
+
+
+
+	// ゲーム処理モード
+	var		mode;
+			var	MODE_NORMAL					= 1000;	// 通常状態
+			var	MODE_CLASH_CASTLE			= 1500;	// 城崩れる
+			var	MODE_CLASH_CASTLE_END		= 1510;	// 城倒壊後のウェイト
+
+			var	MODE_BACK_START_DARK		= 1520;	// 背景暗くする
+
+
+			var	MODE_PRINT_STAFF_ROLL		= 1550;	// スタッフロール表示
+
+			var	MODE_WAIT_STAR_START		= 1560;	// 流れ星表示前ウェイト
+			var	MODE_ANIME_STAR				= 1561;
+
+			var	MODE_START_PRINT_END		= 1600;	// THE END 表示前ウェイト
+			var	MODE_PRINT_END				= 1601;	// THE END 表示
+			var	MODE_PRINT_TOTAL_RANK		= 1700;	// 総合成績 表示
+			var	MODE_PRINT_TOTAL_RANK_END	= 1710;	// 総合成績 表示終了ウェイト
+			var	MODE_END_FADE_OUT			= 2000;	// 終了フェードアウト
+			var	MODE_END_FADE_OUT_WAIT		= 2010;	// 終了フェードアウト終了ウェイト
+
+	var		CLASH_START_WAIT		= 4;
+
+	var		CLASH_CASTLE_END_WAIT	= FRAME_PER_SEC*1;
+
+	var		CLASH_PRINT_END_WAIT	= 30*10;
+
+	var		TOTAL_RANK_END_WAIT		= 10*FRAME_PER_SEC;
+
+	var		END_FADE_OUT_TIME 		= 90;		// 終了フェード時間
+	var		END_FADE_OUT_WAIT_TIME	= 30;		// 終了フェード終了後の余韻用ウェイト
+
+
+	var		WAIT_STAR_START_TIME	= FRAME_PER_SEC*1;
+
+	var		START_PRINT_END_WAIT	= FRAME_PER_SEC*1;
+
+
+	var		sys_fade;
+
+	var		bg_back;
+	var		bg_castle;
+	var		smoke_manage;
+	var		end_obj;
+	var		failure_obj;
+	var		star_obj;
+
+	var		total_rank;
+
+	var		bg_ground,bak_bg_ground_pos_x,bak_bg_ground_pos_y;
+
+
+	var		forward_slide_y;
+	var		castle_slide_y;
+
+
+	function init_data()
+	{
+	var		prn_num;
+
+
+		set_tmp_counter( 0 );
+
+		release_sys_fade();
+
+
+		with (forward_slide_y = new CNumAnime() )
+		{
+			.SetAnimeParam( 0, FORWARD_SCROLL_SLIDE_Y, FORWARD_SCROLL_TIME );
+			.Start();
+			.Stop();
+		}
+		with (castle_slide_y = new CNumAnime() )
+		{
+			.SetAnimeParam( CASTLE_SCROLL_SLIDE_Y, 0, FORWARD_SCROLL_TIME );
+			.Start();
+			.Stop();
+		}
+
+
+		// 背景クラスの生成
+		bg_back = new CIriyaRankBG( parentWindow, parentLayer );
+		bg_back.Init( PRN_BG_LAYER_OFFSET );
+		bg_back.Print();
+
+		// 背景クラスの生成
+		bg_castle = new CIriyaRankCastle( parentWindow, parentLayer );
+		bg_castle.Init( PRN_CASTLE_LAYER_OFFSET );
+		update_castle_pos();
+		bg_castle.Print();
+
+
+		smoke_manage = new CIrlyaRankSmokeManageObj( parentWindow, parentLayer );
+		smoke_manage.Init();
+
+		with ( end_obj = new CIriyaRankEndCG() )
+		{
+			.Init( parentWindow, parentLayer, 0,0, PRN_THE_END_LAYER_OFFSET );
+			.CenteringPosition();
+			.AddPosition( PRN_THE_END_ADD_X, PRN_THE_END_ADD_Y );
+		}
+
+		total_rank = new CIriyaPrintGoalRank( parentWindow, parentLayer, this );
+		total_rank.Init();
+
+
+		bg_ground = EasyCreateLayerObject( parentWindow, parentLayer, "ir_ed_last_ground_f", clAdapt, true, 0,0, PRN_CASTLE_LAYER_OFFSET );
+		update_bg_ground( true );
+
+
+		create_prn_chara();
+
+		staff_roll = new CIriyaStaffRoll( parentWindow, parentLayer );
+		staff_roll.Init( PRN_STAR_LAYER_OFFSET );
+
+
+		{
+		var	i,num;
+			// 登録する数を計算
+			prn_num = MAX_PLAYER_NUM - get_left_servant_num();
+
+			with (failure_obj = new CIriyaRankFailureFace( parentWindow, parentLayer, this))
+			{
+				num = 0;
+				for (i=0;  i<MAX_PLAYER_NUM;  i++) {
+					if (parentLayer.CharaStatus[i].GetLastAliveFlag()  ==  true)
+						continue;
+					.SetPrintFaceData( prn_num, num, parentLayer.CharaStatus[i].GetServantID(), PRN_FAILURE_LAYER_OFFSET );
+					num += 1;
+				}
+				if (num  ==  0)
+					.SetPrintFaceData( 1, 0, CHARA_ID_IRIYA, PRN_FAILURE_LAYER_OFFSET );
+			}
+		}
+
+		star_obj = new CIriyaRankShootingStar( parentWindow, parentLayer, this );
+		star_obj.Init();
+
+
+		create_click_layer();
+
+		mode = MODE_NORMAL;
+		set_tmp_counter( CLASH_START_WAIT );
+		return;
+	}
+	function release_data()
+	{
+		release_prn_chara();
+
+
+		EasyObjectInvalidate( star_obj );
+		star_obj = void;
+
+		EasyObjectInvalidate( failure_obj );
+		failure_obj = void;
+
+		EasyObjectInvalidate( forward_slide_y );
+		forward_slide_y = void;
+		EasyObjectInvalidate( castle_slide_y );
+		castle_slide_y = void;
+		EasyReleaseLayer( bg_ground );
+		bg_ground = void;
+
+
+		EasyObjectInvalidate( bg_back );
+		bg_back = void;
+
+		EasyObjectInvalidate( bg_castle );
+		bg_castle = void;
+
+		EasyObjectInvalidate( smoke_manage );
+		smoke_manage = void;
+
+		EasyObjectInvalidate( end_obj );
+		end_obj = void;
+
+		EasyObjectInvalidate( total_rank );
+		total_rank = void;
+
+		ReleaseStaffRoll();
+
+		release_click_layer();
+		release_sys_fade();
+		return;
+	}
+
+
+	// 生き残ったサーバントの数を取得する
+	function get_left_servant_num()
+	{
+	var		num,i;
+		num = 0;
+		for (i=0;  i<MAX_PLAYER_NUM;  i++) {
+			if (parentLayer.CharaStatus[i].GetLastAliveFlag()  ==  false)
+				continue;
+			num += 1;
+		}
+		return ( num );
+	}
+
+
+
+	var		click_flag=false;
+	var		click_layer=void;
+	function create_click_layer()
+	{
+		with (click_layer = new CSpriteLayer(parentWindow,parentLayer))
+		{
+			.setPos( 0,0 );
+			.fill( RGBA_MAKE(0,0,0,0) );
+			.setSize( SCREEN_SIZE_W, SCREEN_SIZE_H );
+			.opacity = 0;
+		}
+		return;
+	}
+	function release_click_layer()
+	{
+		EasyReleaseLayer( click_layer );
+		click_layer = void;
+		return;
+	}
+	// クリック感知の開始
+	function start_click_layer()
+	{
+		click_flag = false;
+
+		if (CheckValid(click_layer)  ==  false)
+			return;
+		with ( click_layer )
+		{
+			.visible = true;
+			.setMouseDownCallback( click_layer_callback );
+			.setHitCheckAlphaLimit( "ALL" );
+		}
+		return;
+	}
+	// クリック感知の終了
+	function stop_click_layer()
+	{
+		if (CheckValid(click_layer)  ==  false)
+			return;
+		with ( click_layer )
+		{
+			.visible = false;
+			.setMouseDownCallback( void );
+			.setHitCheckAlphaLimit( "NONE" );
+			.visible = false;
+		}
+		return;
+	}
+	function click_layer_callback( _layer, _x,_y, _button,_shift )
+	{
+		if (_button  ==  mbLeft) {
+			click_flag = true;
+			stop_click_layer();
+		}
+		return;
+	}
+
+
+	var		staff_roll=void;
+	function StartUpStaffRoll()
+	{
+		ReleaseStaffRoll();
+		staff_roll = new CIriyaStaffRoll( parentWindow, parentLayer );
+		staff_roll.Init();
+		return;
+	}
+	function ReleaseStaffRoll()
+	{
+		EasyObjectInvalidate( staff_roll );
+		staff_roll = void;
+		return;
+	}
+	function UpdateStaffRoll()
+	{
+		if (CheckValid(staff_roll)  ==  false)
+			return;
+		staff_roll.Update();
+		return;
+	}
+	function CheckStaffRollEnd()
+	{
+		return ( staff_roll.CheckEnd() );
+	}
+
+
+	var		chara_anime;
+	var		prn_chara;
+	var		chara_cg;
+	var		chara_time;
+	var		prn_pos;
+
+	var		etc_chara_anime;
+	var		etc_prn_chara;
+	var		etc_chara_cg;
+	var		etc_chara_time;
+	var		etc_prn_pos;
+	function create_prn_chara()
+	{
+	var		i,j;
+	var		chara_id;
+	var		load_buf;
+	var		file_name;
+	var		image_id,image_offset,image_num,image_muki;
+	var		off_x,off_y;
+	var		left_num,prn_num;
+	var		offset_pos,slide_size;
+
+
+		left_num = get_left_servant_num();
+
+
+		// アニメタイムテーブル
+		chara_time = new Array();
+		chara_time[0] = 5;
+
+		// キャラCGの読み込み
+		file_name = void;
+		chara_cg = new Array();
+		for (i=0;  i<MAX_PLAYER_NUM;  i++) {
+			chara_cg[i] = new Array();
+			chara_id = parentLayer.CharaStatus[i].GetServantID();
+			switch ( chara_id )
+			{
+			case CHARA_ID_SABER:
+				image_id     = IMAGEID_ENDINGSTAND;
+				image_offset = 0;
+				image_num    = 1;
+				image_muki   = MUKI_RIGHT;
+				break;
+			case CHARA_ID_ARCHER:
+				image_id     = IMAGEID_ENDINGSTAND;
+				image_offset = 0;
+				image_num    = 1;
+				image_muki   = MUKI_RIGHT;
+				break;
+			case CHARA_ID_RIDER:
+				image_id     = IMAGEID_ENDINGSTAND;
+				image_offset = 0;
+				image_num    = 1;
+				image_muki   = MUKI_RIGHT;
+				break;
+			case CHARA_ID_LANCER:
+				image_id     = IMAGEID_ENDINGSTAND;
+				image_offset = 0;
+				image_num    = 1;
+				image_muki   = MUKI_RIGHT;
+				break;
+			case CHARA_ID_CASTER:
+				image_id     = IMAGEID_ENDINGSTAND;
+				image_offset = 0;
+				image_num    = 1;
+				image_muki   = MUKI_RIGHT;
+				break;
+			}
+
+			chara_cg[i][0] = new Array();
+			for (j=0;  j<image_num;  j++) {
+				EasyObjectInvalidate( file_name );
+				file_name = getCharacterImageFileInfo( chara_id, image_id|(image_offset+j), image_muki );
+				load_buf = GetLoadCharaData( file_name, parentWindow,parentLayer, 0,0 );
+				if (CheckValid(load_buf)  ==  false) {
+					break;
+				}
+				chara_cg[i][0][j] = load_buf;
+			}
+		}
+		EasyObjectInvalidate( file_name );
+
+
+		// キャラCGの読み込み(etc)
+		file_name = void;
+		etc_chara_cg = new Array();
+		for (i=0;  i<(3+1);  i++) {
+			etc_chara_cg[i] = new Array();
+			switch ( i )
+			{
+			case 0:
+				chara_id     = CHARA_ID_RIN;
+				image_id     = IMAGEID_WIN;
+				image_offset = 0;
+				image_num    = 1;
+				image_muki   = MUKI_LEFT;
+				break;
+			case 1:
+				chara_id     = CHARA_ID_SAKURA;
+				image_id     = IMAGEID_DOWN;
+				image_offset = 0;
+				image_num    = 1;
+				image_muki   = MUKI_RIGHT;
+				break;
+			case 2:
+				chara_id     = CHARA_ID_SHIROU;
+				image_id     = IMAGEID_DOWN;
+				image_offset = 0;
+				image_num    = 1;
+				image_muki   = MUKI_RIGHT;
+				break;
+			}
+
+			etc_chara_cg[i][0] = new Array();
+			for (j=0;  j<image_num;  j++) {
+				EasyObjectInvalidate( file_name );
+				file_name = getCharacterImageFileInfo( chara_id, image_id|(image_offset+j), image_muki );
+				load_buf = GetLoadCharaData( file_name, parentWindow,parentLayer, 0,0 );
+				if (CheckValid(load_buf)  ==  false) {
+					break;
+				}
+				etc_chara_cg[i][0][j] = load_buf;
+			}
+		}
+		EasyObjectInvalidate( file_name );
+
+		etc_chara_cg[3] = new Array();
+		etc_chara_cg[3][0] = new Array();
+		file_name = %[];
+		file_name.characterId = chara_id;
+		file_name.imageId = IMAGEID_STAND;
+		file_name.direction = MUKI_RIGHT;
+		file_name.filename = "ir_char_fuji00%02d".sprintf(0);
+		file_name.adapt = true;
+		file_name.mirror = false;
+		file_name.centerX = 46;
+		file_name.centerY = 98;
+		load_buf = GetLoadCharaData( file_name, parentWindow,parentLayer, 0,0 );
+		if (CheckValid(load_buf)  ==  true)
+			etc_chara_cg[3][0][0] = load_buf;
+
+
+
+
+
+		// キャラ表示レイヤの生成
+		prn_chara = new Array();
+		for (i=0;  i<MAX_PLAYER_NUM;  i++) {
+			with (prn_chara[i] = new CSpriteLayer(parentWindow, parentLayer))
+			{
+				.setSize( 0, 0 );
+			}
+		}
+
+		// キャラ表示レイヤの生成
+		etc_prn_chara = new Array();
+		for (i=0;  i<etc_chara_cg.count;  i++) {
+			with (etc_prn_chara[i] = new CSpriteLayer(parentWindow, parentLayer))
+			{
+				.setSize( 0, 0 );
+			}
+		}
+
+
+
+		// アニメデータデータのアサイン
+		left_num = get_left_servant_num();
+		slide_size = 68;
+		offset_pos = 168 + (MAX_PLAYER_NUM-left_num) * slide_size / 2;
+
+
+		chara_anime = new Array();
+		prn_pos     = new Array();
+		for (i=0,prn_num=0;  i<MAX_PLAYER_NUM;  i++) {
+			prn_pos[i] = new Array();
+			chara_anime[i] = new CIriyaCharaAnimeBase();
+			chara_anime[i].SetLayerData( prn_chara[i], chara_cg[i], chara_time );
+
+			switch ( parentLayer.CharaStatus[i].GetServantID() )
+			{
+			case CHARA_ID_SABER:
+				off_x = 8;
+				off_y = -18 +8;
+				break;
+			case CHARA_ID_ARCHER:
+				off_x = 8;
+				off_y = 0 +8;
+				break;
+			case CHARA_ID_RIDER:
+				off_x = 32;
+				off_y = 16 +8;
+				break;
+			case CHARA_ID_LANCER:
+				off_x = 0;
+				off_y = 16 +8;
+				break;
+			case CHARA_ID_CASTER:
+				off_x = -16-16;
+				off_y = -8 +8;
+				break;
+			}
+
+			prn_pos[i][0] = offset_pos+prn_num*slide_size+off_x;//64+i*80+off_x;
+			prn_pos[i][1] = SCREEN_SIZE_H + CHARA_START_SLIDE_Y +off_y;
+
+			if (parentLayer.CharaStatus[i].GetLastAliveFlag()  ==  false)
+				continue;
+			chara_anime[i].ChangeAnimeNo( 0 );
+			chara_anime[i].SetAnimeFlag( true );
+			chara_anime[i].Print();
+			chara_anime[i].SetPosition( prn_pos[i][0],prn_pos[i][1]+forward_slide_y.GetNowNum() );
+			chara_anime[i].SetPriority( PRN_CHARA_LAYER_OFFSET+i );
+
+			prn_num += 1;
+		}
+
+
+		// アニメデータデータのアサイン
+		etc_chara_anime = new Array();
+		etc_prn_pos     = new Array();
+		for (i=0;  i<etc_prn_chara.count;  i++) {
+			etc_prn_pos[i] = new Array();
+			etc_chara_anime[i] = new CIriyaCharaAnimeBase();
+			etc_chara_anime[i].SetLayerData( etc_prn_chara[i], etc_chara_cg[i], chara_time );
+
+			switch ( i )
+			{
+			case 0:
+				off_x = 568;
+				off_y = 0;
+				break;
+			case 1:
+				off_x = 712;
+				off_y = 0;
+				break;
+			case 2:
+				off_x = 656;
+				off_y = 0;
+				break;
+			case 3:
+				off_x = 32;
+				off_y = -16;
+				break;
+			}
+
+			etc_prn_pos[i][0] = off_x;
+			etc_prn_pos[i][1] = SCREEN_SIZE_H + CHARA_START_SLIDE_Y +off_y;
+
+			etc_chara_anime[i].ChangeAnimeNo( 0 );
+			etc_chara_anime[i].SetAnimeFlag( true );
+			etc_chara_anime[i].Print();
+			etc_chara_anime[i].SetPosition( etc_prn_pos[i][0],etc_prn_pos[i][1]+forward_slide_y.GetNowNum() );
+			etc_chara_anime[i].SetPriority( PRN_CHARA_LAYER_OFFSET+i );
+		}
+		return;
+	}
+	function release_prn_chara()
+	{
+		DeleteArrayObject( chara_cg, 3 );
+		chara_cg = void;
+		DeleteArrayObject( prn_chara, 1 );
+		prn_chara = void;
+		DeleteArrayObject( prn_pos, 2 );
+		prn_pos = void;
+		DeleteArrayObject( chara_time, 1 );
+		chara_time = void;
+		DeleteArrayObject( chara_anime, 1 );
+		chara_anime = void;
+
+
+		DeleteArrayObject( etc_chara_cg, 3 );
+		etc_chara_cg = void;
+		DeleteArrayObject( etc_prn_chara, 1 );
+		etc_prn_chara = void;
+		DeleteArrayObject( etc_prn_pos, 2 );
+		etc_prn_pos = void;
+		DeleteArrayObject( etc_chara_time, 1 );
+		etc_chara_time = void;
+		DeleteArrayObject( etc_chara_anime, 1 );
+		etc_chara_anime = void;
+		return;
+	}
+	function update_prn_chara()
+	{
+	var		i;
+		if (CheckValid(chara_anime)  ==  false)
+			return ( false );
+		for (i=0;  i<chara_anime.count;  i++) {
+			if (CheckValid(chara_anime[i])  ==  true) {
+				chara_anime[i].Update();
+				chara_anime[i].SetPosition( prn_pos[i][0]+bg_castle.yure_x,prn_pos[i][1]+forward_slide_y.GetNowNum() );
+			}
+		}
+
+		if (CheckValid(etc_chara_anime)  ==  false)
+			return ( false );
+		for (i=0;  i<etc_chara_anime.count;  i++) {
+			if (CheckValid(etc_chara_anime[i])  ==  true) {
+				etc_chara_anime[i].Update();
+				etc_chara_anime[i].SetPosition( etc_prn_pos[i][0]+bg_castle.yure_x,etc_prn_pos[i][1]+forward_slide_y.GetNowNum() );
+			}
+		}
+
+		return ( true );
+	}
+
+
+	function update_bg_ground( flag )
+	{
+	var		px,py;
+		with ( bg_ground )
+		{
+			px = SCREEN_SIZE_W-.width+bg_castle.yure_x;
+			py = SCREEN_SIZE_H+GROUND_START_SLIDE_Y-.height+forward_slide_y.GetNowNum();
+			if (flag  !=  true) {
+				if ((bak_bg_ground_pos_x  ==  px)
+				&&	(bak_bg_ground_pos_y  ==  py))
+					return;
+			}
+			.setPos( px, py );
+			bak_bg_ground_pos_x = px;
+			bak_bg_ground_pos_y = py;
+		}
+		return;
+	}
+	function update_castle_pos()
+	{
+		bg_castle.SetBasePos( 0, castle_slide_y.GetNowNum() );
+		return;
+	}
+
+
+
+
+
+
+	function create_sys_fade( _time )
+	{
+		release_sys_fade();
+
+		sys_fade = EasyCreateFadeLayer( parentWindow,parentLayer, "BLACK", "FADE_IN", _time );
+		SetLayerPriority( sys_fade, PRIORITY_SYSTEM_FADE );
+		return;
+	}
+	function release_sys_fade()
+	{
+		EasyReleaseFadeLayer( sys_fade );
+		sys_fade = void;
+		return;
+	}
+	function update_sys_fade()
+	{
+		// フェードアウトレイヤがある場合
+		if (CheckValid(sys_fade)  ==  false)
+			return ( true );
+		if (ProcessFadeAnime(sys_fade)  ==  "UPDATING")
+			return ( false );
+		return ( true );
+	}
+
+
+
+
+
+	// 最終フェードアウト処理設定
+	function setup_end_fade_out()
+	{
+		mode = MODE_END_FADE_OUT;
+
+		create_sys_fade( END_FADE_OUT_TIME );
+		return;
+	}
+
+
+
+
+
+
+	// TMPカウンタ処理関係
+	var		tmp_counter;
+	function set_tmp_counter( _count )
+	{
+		tmp_counter = _count;
+		return;
+	}
+	function update_tmp_counter()
+	{
+		if (tmp_counter  >  0) {
+			tmp_counter -= 1;
+			return ( false );
+		}
+
+		return ( true );
+	}
+
+
+	// メインループ
+	function proc()
+	{
+	var		ret;
+		@if (DEBUG_MODE  ==  1)
+		if (CheckValid(key_state)  ==  true) {
+		with ( key_state )
+		{
+			.UpdateState();
+			if (.GetCtrlKeyState()  ==  .KEY_FIRAST) {
+				stopAll();
+				return SCENE_RANK_NEXT;
+			}
+		}}
+		@endif
+
+		forward_slide_y.Update();
+		castle_slide_y.Update();
+
+
+		// イベント管理メインswitch処理
+		switch ( mode )
+		{
+		case MODE_NORMAL:
+			update_castle_pos();
+			update_prn_chara();
+			update_bg_ground();
+			if (update_tmp_counter()  ==  false)
+				break;
+
+			setup_end_fade_out();
+
+			mode = MODE_CLASH_CASTLE;
+			bg_castle.StartClash();
+
+			castle_slide_y.Start();
+			forward_slide_y.Start();
+
+			bg_back.StartDark();
+			break;
+
+		case MODE_CLASH_CASTLE:
+			update_castle_pos();
+			update_prn_chara();
+			update_bg_ground();
+			bg_castle.Update();
+			bg_back.Update();
+			if (bg_castle.CheckAnimeEnd()  ==  false)
+				break;
+			mode = MODE_CLASH_CASTLE_END;
+			set_tmp_counter( CLASH_CASTLE_END_WAIT );
+			break;
+
+		case MODE_CLASH_CASTLE_END:
+			update_castle_pos();
+			update_prn_chara();
+			update_bg_ground();
+			bg_castle.Update();
+			bg_back.Update();
+			if (update_tmp_counter()  ==  false)
+				break;
+			if (bg_castle.GetSmokeNum()  >  0)
+				break;
+
+
+			mode = MODE_BACK_START_DARK;
+//			bg_back.StartDark();
+			break;
+
+		case MODE_BACK_START_DARK:
+			if (bg_back.Update()  ==  true)
+				break;
+
+			mode = MODE_PRINT_STAFF_ROLL;
+			StartUpStaffRoll();
+			BgmPlay( BGM_STAFF );
+
+/*
+			castle_slide_y.Start();
+			forward_slide_y.Start();
+*/			break;
+
+
+		case MODE_PRINT_STAFF_ROLL:
+			var		i,loop,ret;
+			loop = 1;
+			if (System.getKeyState(VK_LBUTTON)  ==  true)
+				loop = SKIP_STAFF_ROLL_SPEED;
+			for (i=0;  i<loop;  i++) {
+				update_castle_pos();
+				update_prn_chara();
+				update_bg_ground();
+				UpdateStaffRoll();
+				ret = CheckStaffRollEnd();
+				if (ret  ==  true)
+					break;
+			}
+			if (ret  ==  false)
+				break;
+
+			mode = MODE_WAIT_STAR_START;
+			set_tmp_counter( WAIT_STAR_START_TIME );
+			break;
+
+		case MODE_WAIT_STAR_START:
+			update_castle_pos();
+			update_prn_chara();
+			update_bg_ground();
+
+			if (update_tmp_counter()  ==  false)
+				break;
+
+			mode = MODE_ANIME_STAR;
+			failure_obj.FadeIn();
+			star_obj.StartAnime();
+			break;
+
+		case MODE_ANIME_STAR:
+			update_castle_pos();
+			update_prn_chara();
+			update_bg_ground();
+
+			ret = false;
+			if (failure_obj.Update()  ==  true)
+				ret = true;
+			if (star_obj.Update()  ==  true)
+				ret = true;
+			if (ret  ==  true)
+				break;
+
+			mode = MODE_START_PRINT_END;
+			set_tmp_counter( START_PRINT_END_WAIT );
+			break;
+
+		case MODE_START_PRINT_END:
+			if (update_tmp_counter()  ==  false)
+				break;
+
+			mode = MODE_PRINT_END;
+			end_obj.Print();
+			set_tmp_counter( CLASH_PRINT_END_WAIT );
+			start_click_layer();
+			break;
+
+		case MODE_PRINT_END:
+			update_castle_pos();
+			update_prn_chara();
+			update_bg_ground();
+			if ((click_flag  ==  false)
+			&&	(update_tmp_counter()  ==  false))
+				break;
+
+			fadeOutAll( FRAME_PER_SEC*TIMER_INTERVAL );
+			stop_click_layer();
+			mode = MODE_PRINT_TOTAL_RANK;
+			total_rank.Print();
+			break;
+
+		case MODE_PRINT_TOTAL_RANK:
+			if (total_rank.Update()  ==  true)
+				break;
+/*
+			mode = MODE_PRINT_TOTAL_RANK_END;
+			set_tmp_counter( TOTAL_RANK_END_WAIT );
+			break;
+
+
+		case MODE_PRINT_TOTAL_RANK_END:
+			if (total_rank.Update()  ==  false)
+				break;
+*/			mode = MODE_END_FADE_OUT;
+			break;
+
+		case MODE_END_FADE_OUT:
+			total_rank.Update();
+			if (update_sys_fade()  ==  false)
+				break;
+
+			mode = MODE_END_FADE_OUT_WAIT;
+			set_tmp_counter( END_FADE_OUT_WAIT_TIME );
+			break;
+
+		case MODE_END_FADE_OUT_WAIT:
+			if (update_tmp_counter()  ==  false)
+				break;
+			return SCENE_RANK_NEXT;
+		}
+		return SCENE_DEFAULT;
+	}
+
+	function draw()
+	{
+	}
+}
+
+
+

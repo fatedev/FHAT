@@ -1,0 +1,813 @@
+/*-----------------------------------------------------------------------------/
+/	Copyright (C) 2004 TYPE-MOON All Rights Reserved.
+/		花札 - キャラクター選択プラグイン
+/-----------------------------------------------------------------------------*/
+@if(__HANAFUDASELECTPLUGIN_DEFINED__==0)
+@set(__HANAFUDASELECTPLUGIN_DEFINED__=1)
+
+Scripts.execStorage("HFMenuLayer.tjs");
+
+//-----------------------------------------------------------------------------
+//	花札キャラクター選択メニュー
+class HanafudaCharacterSelectMenuLayer extends BaseMenuLayer
+{
+	var iconpos	= [ 320, 283, 82, 82, 2 ];	//	left, ctop, xstep, ystep, xcount
+	var icondata	= [
+//		[ name, left(意味なし), top(意味なし), image, condition, member, teamno, up, down ],
+		[ hfTeamName[1],	237, 373, hfTeamMember[1][0],	true,	hfTeamMember[1],	1 ],
+		[ hfTeamName[2],	319, 373, hfTeamMember[2][0],	true,	hfTeamMember[2],	2 ],
+		[ hfTeamName[3],	401, 373, hfTeamMember[3][0],	true,	hfTeamMember[3],	3 ],
+		[ hfTeamName[4],	483, 373, hfTeamMember[4][0],	true,	hfTeamMember[4],	4 ],
+		[ hfTeamName[5],	279, 455, hfTeamMember[5][1],	true,	hfTeamMember[5],	5 ],
+		[ hfTeamName[6],	361, 455, hfTeamMember[6][0],	true,	hfTeamMember[6],	6 ],
+		[ hfTeamName[0],	279, 455, hfTeamMember[0][0],	global.tf.hanafuda_storyclear,		hfTeamMember[0],	0 ],	//	ストーリーモードクリアで出現(普通に出現する)
+		[ hfTeamName[7],	279, 455, hfTeamMember[7][0],	global.tf.hanafuda_normalclear[4],	hfTeamMember[7],	7 ],	//	ノーマルモード・イリヤクリアで出現
+		[ hfTeamName[8],	361, 455, hfTeamMember[8][0],	global.tf.hanafuda_normalclear[3],	hfTeamMember[8],	8 ]		//	ノーマルモード・桜クリアで出現
+//		[ hfTeamName[7],	279, 455, hfTeamMember[7][0],	true,	hfTeamMember[7],	7 ],	//	ノーマルモード・イリヤクリアで出現
+//		[ hfTeamName[8],	361, 455, hfTeamMember[8][0],	true,	hfTeamMember[8],	8 ]		//	ノーマルモード・桜クリアで出現
+	];
+	var selcolor	= 0xFFFFFF;
+	var selopac		= 64;
+	var namedata	= [
+//		[ name, centerleft, centertop, name0centertop, name1centertop, name2centertop ]
+		[ "player team",180, 477, 519, 544, 569 ],
+		[ "cpu team",	620, 477, 519, 544, 569 ]
+	];
+	var teamnamepos	= %[
+		top:	448,
+		lefts:	[
+			[ 60, 499 ],
+			[ 34, 473 ],
+			[ 16, 455 ],
+			[ 85, 524 ],
+			[ 20, 459 ],
+			[ 31, 470 ],
+
+			[ 45, 484 ],
+			[ 102,541 ],
+			[ 81, 520 ]
+		]
+	];
+	var btndata	= [
+//		[ name, storage, left, top, defvisible ]
+		[ "start", "hf_ps勝負ボタン", 355, 469, false ],
+		[ "return", "hf_ps戻るボタン", 366, 542, true ]
+	];
+	var fctime = 100, fcaccel = -2;
+	var tachieabsolute	= [
+		-40,
+		-20,
+		0,
+		10,
+		10,
+		-30,
+		0,
+		0,
+
+		0,
+		0,
+		0
+	];
+
+	var plugin;
+
+	var items;		//	表示しているだけのレイヤー
+	var icons;		//	アイコンボタン
+	var names;		//	チーム名
+	var focuser;	//	フォーカスを示す枠
+	var selecter;	//	選択済みのチームを示す枠
+	var tachi;		//	立ち絵
+	var buttons;	//	ボタン
+
+	var teamno;
+	var onclose;
+
+	var selcnt;		//	選択するチーム数
+
+	var defaultbgimage	= "hf_ps背景";
+	var bgimage;
+
+	function HanafudaCharacterSelectMenuLayer(win, par, plugin)
+	{
+		name	= "花札キャラクター選択メニュー";
+		this.plugin	= plugin;
+		super.BaseMenuLayer(...);
+		absolute	= 100000;
+	}
+
+	function finalize()
+	{
+		releaseArray(items);
+		releaseArray(icons);
+		releaseArray(names);
+		releaseArray(selecter);
+		releaseArray(tachi);
+		releaseDictionary(buttons);
+		release(focuser);
+
+		super.finalize(...);
+	}
+
+	//	背景用画像を指定
+	function initMenu(mode)
+	{
+		var layer, w, h, col;
+		teamno	= [];
+		names	= [];
+		tachi	= [];
+		items	= [];
+		buttons	= %[];
+		onclose	= false;
+
+		//	モードに合わせて処理
+		var count;
+		mode	= "free" if mode == void;
+		if(mode == "free")
+			selcnt	= 2;	//	プレイヤー及びCPUのチームを選ぶ
+		else
+		{
+			selcnt	= 1;	//	プレイヤーチームのみ選ぶ
+			btndata[0][1]	= "hf_ps開始ボタン";	//	勝負ボタンを開始ボタンに変更
+		}
+
+		//	背景の読み込み
+		if(bgimage == void)
+			bgimage	= "hf_ps"+HFBGImages[int(Math.random() * HFBGImages.count)];	//	ランダム
+		loadImages(bgimage);	//	指定背景を読み込む
+		setSizeToImageSize();
+		setPos(0, 0);
+		hitThreshold	= 0;	//	不透過
+//		colorRect(0, 0, width, height, 0x000000, 128);	//	暗くする
+		layer = new global.Layer(window, this);
+		layer.loadImages("hf_psアッパー");
+		operateRect(0, 0, layer, 0, 0, layer.imageWidth, layer.imageHeight, omAlpha, 255);	//	フレームを書き込む
+		invalidate layer;
+
+		//	アイコン
+		var ic = new .Layer(window, this);
+		var fr = new .Layer(window, this);
+		with(fr)
+			.loadImages("hf_psICON枠"), .setSizeToImageSize();
+		icons	= [];
+		var cnt = 0;
+		for(var i=0; i<icondata.count; i++)
+			cnt++ if icondata[i][4];
+		var bt = iconpos[1] - iconpos[3] * cnt \ (iconpos[4] * 2);
+		dm(@"${cnt}, ${iconpos[4]*2}, ${iconpos[3] * cnt}, ${iconpos[3] * cnt \ (iconpos[4] * 2)}, ${bt}");
+		cnt = 0;
+		for(var i=0; i<icondata.count; i++)
+		{
+			var id = icondata[i], icon;
+			if(!id[4])
+				continue;	//	表示不可
+			if(mode=="normal" && id[0] == hfTeamName[0])
+				continue;	//	ノーマルモードには、道場チームは出ない
+			var st = "hf_psICON"+id[3];
+			icon	= new HanafudaSelectIconButtonLayer(window, this, "");
+			ic.loadImages(st);
+			with(icon)
+			{
+				.name	= id[0] + "("+i+")";
+				var w = ic.imageWidth + 2, h = ic.imageHeight + 2;
+				.fillRect(0, 0, .width, .height, 0x00000000);
+				.setImageSize(h * 6, h);
+				.setSize(w, h);
+				var l = 1, t = 1;
+				.copyRect(l, t, ic, 0, 0, w, h);	//	0: normal
+				l	+= w;
+				.copyRect(l-1, t-1, ic, 0, 0, w, h);//	1: enter
+				l	+= w;
+				.copyRect(l+1, t+1, ic, 0, 0, w, h);//	2: press
+				l	+= w;
+				.copyRect(l, t, ic, 0, 0, w, h);	//	3: disable
+				.absolute	= 2000 + i;
+				.no	= i;
+				.bno= icons.count;
+				.teamno	= id[6];
+				.setPos(iconpos[0] + (cnt & 1) * iconpos[2], bt + (cnt \ iconpos[4]) * iconpos[3]);
+				.visible	= true;
+				.focus();
+			}
+			icons.add(icon);
+			cnt++;
+		}
+		//	アイコンのy座標を修正
+		if(icons.count > 8)
+		{
+			for(var i=0; i<icons.count; i++)
+				icons[i].top	-= 20;
+		}
+		//	アイコンの数が奇数なら、最後のアイコンを中央に移動
+		if(icons.count & 1)
+			icons[icons.count-1].left	= iconpos[0] + (iconpos[2] >> 1);
+		invalidate fr;
+		invalidate ic;
+
+		//	現在フォーカスの合っているボタンを示す枠
+		with(focuser = new .ChipLayer(window, this))
+		{
+			.name	= "iconフレーム: 現在選択中";
+			.loadImages("hf_psICON選択枠");
+			.setSize(.imageWidth >> 1, .imageHeight);
+			.setPos(icons[0].left, icons[0].top);
+			.opacity	= 0;
+			.hitThreshold= 256;
+			.visible	= true;
+			.absolute	= 3000;
+//			.type		= ltAddAlpha;
+		}
+
+		//	選択されたキャラクターを示す枠(2種類: Player/CPU)
+		selecter	= [];
+		for(var i=0; i<2; i++)
+		{
+			with(layer = new .ChipLayer(window, this))
+			{
+				.name	= "iconフレーム: "+i;
+				.loadImages("hf_psICONフレーム"+i);
+				.setSizeToImageSize();
+				.setPos(-.width, -.height);
+				.opacity	= 0;
+				.hitThreshold	= 256;	//	透過
+				.visible	= true;
+				.absolute	= 3000;
+//				.type		= ltAddAlpha;
+			}
+			selecter.add(layer);
+		}
+
+		//	プレイヤー選択枠
+		var fw = 13, fh=14, uh;
+		var stno = items.count;
+		with(layer = new .Layer(window, this))
+		{
+			.name	= "プレイヤー選択: アンダー";
+			.loadImages("hf_psアンダー");
+			.setSizeToImageSize();
+			.setPos(0, height - .height);
+			uh	= .height;
+		}
+		items.add(layer);
+		for(var i=0; i<2; i++)
+		{
+			for(var j=0; j<2; j++)
+			{
+				if(i == 0)
+				{
+					with(layer = new .Layer(window, this))
+					{
+						.name	= "プレイヤー選択: コーナー";
+						.loadImages("hf_psコーナー");
+						.setSizeToImageSize();
+						.flipUD() if i;
+						.flipLR() if j;
+						.setPos(j ? width-.width : 0, i ? height-.height : 0);
+						w	= .width if w === void;
+						h	= .height if h === void;
+						col	= .getMainPixel(1, 1) | (.getMaskPixel(1, 1) << 24) if col === void;
+					}
+					items.add(layer);
+				}
+
+				if(!(i==0 && j==1))
+				{
+					with(layer = new .Layer(window, this))
+					{
+						.name	= "プレイヤー選択: 枠";
+						.setSize(j ? width - (w<<1) : fw, j ? fh : height - (uh + h)/*(h<<1)*/);
+						.setPos(j ? w : (i ? 0 : width - fw), j ? (i ? 0 : height - fh) : h);
+						.fillRect(0, 0, .width, .height, col);
+					}
+					items.add(layer);
+				}
+			}
+		}
+		with(layer = new .Layer(window, this))
+		{
+			.name	= "プレイヤー選択: タイトル";
+			.loadImages("hf_psタイトル");
+			.setSizeToImageSize();
+//			.setPos((width - .width) >> 1, h);
+			.setPos(152, 17);
+		}
+		items.add(layer);
+		for(var i=stno; i<items.count; i++)
+		{
+			with(items[i])
+			{
+				.hitThreshold	= 256;	//	透過
+				.absolute	= 2000;
+				.visible	= true;
+			}
+		}
+
+		//	勝負、戻るボタン
+		for(var i=0; i<btndata.count; i++)
+		{
+			var b = btndata[i];
+			with(layer = new PushButtonLayer(window, this, b[1]))
+			{
+				.name	= "*"+b[0];
+				.setPos(b[2], b[3]);
+				.visible	= b[4];
+//				.move2dir	= true;
+				.absolute	= 4000 + i;
+//				.type		= ltAddAlpha;
+			}
+			buttons[b[0]]	= layer;
+		}
+
+		hfSound.bgm3	= true;	//	タイトルと同じBGMを鳴らす
+	}
+
+	function show(time=fadetime, accel=0, delay=0, mode)
+	{
+		if(showed)
+			return;
+		showed	= acceptable	= true;
+
+		lastfocus	= void;
+		var focusbutton	= initMenu(mode);
+
+		//	表示開始
+		stop("move");
+		opacity	= 1;
+		visible	= true;
+		moveTo(,, 255, time, accel, delay);
+		hfSound.メニュー出現 = true;	//	メニュー出現音再生
+
+		window.focusedLayer	= focusbutton if focusbutton != void;
+	}
+
+
+	//	状況にふさわしいボタンへフォーカスを移動する
+	function focusNextButton()
+	{
+		buttons["return"].focus();
+	}
+
+	function onMouseDown(x, y, button, shift)
+	{
+		if(!acceptable)
+			return;
+
+		if(plugin.only_vs)
+		{
+			//	トリガの送信
+			plugin.fire();
+		}
+		else if(button == mbRight)
+		{
+			//	プレイヤーキャラが選ばれているなら、
+			if(teamno.count > 0)
+			{
+				//	それをキャンセル
+				var no = teamno.count - 1;
+				selecter[no].moveTo(,, 0, 100);	//	選択枠の消去
+				with(focuser)
+					.finish(), .moveTo(,, 0, fctime, fcaccel, 0, no ? changeFocuser : changeFocuser2);
+				for(var i=1; i>=no; i--)
+					undispTeamName(i);
+
+				var mx = 50, my = 100;
+				with(tachi[no])
+					.moveTo(.left + (no ? mx : -mx), .top + my, 0, 200, 2,, .endOfMove);	//	立ち絵消去
+				teamno.erase(no);
+//				dm("teamno[0] = "+teamno[0]+" / teamno.count = "+teamno.count);
+				for(var i=0; i<icons.count; i++)
+				{
+					with(icons[i])
+					{
+						if(teamno.count > 0 && teamno[0] == .teamno)
+							continue;
+						.enabled	= true;
+
+						//	その時点でマウスがボタンに乗っているなら、Enter処理を行う
+						if(.entered)
+						{
+//							dm("entered: "+icons[i].name);
+							.onMouseLeave();	//	一度離れて
+							.onMouseEnter();	//	再度乗る
+						}
+					}
+				}
+				buttons["start"].visible	= false;
+			}
+			else
+			{
+				//	誰も選ばれていないなら、前に戻る
+				plugin.hide();
+			}
+		}
+	}
+
+	//	チーム名とメンバー名を表示
+	function dispTeamName(no, teamno, delay=0)
+	{
+		undispTeamName(no);
+
+		//	チーム名
+		names[no]	= [] if names[no] == void;
+		with(names[no][0] = new ParticleLayer(window, this))
+		{
+			.name	= namedata[no][0]+": "+icondata[teamno][0];
+			.loadImages("hf_psチーム名-"+icondata[teamno][0]);
+			.setSizeToImageSize();
+			.setPos(teamnamepos.lefts[teamno][no], teamnamepos.top);
+			.hitThreshold	= 256;	//	透過
+			.opacity	= 0;
+			.visible	= true;
+			.moveTo(,, 255, 200,, delay);
+		}
+		//	キャラクター名
+		var charas	= icondata[teamno][5];
+		for(var i=0; i<charas.count; i++)
+		{
+			with(names[no][1+i]	= new ParticleLayer(window, this))
+			{
+				.name	= namedata[no][0]+" member: "+charas[i];
+				.loadImages("hf_ps名前-"+charas[i]);
+				.setSizeToImageSize();
+				.setPos(namedata[no][1] - (.width >> 1), namedata[no][3+i] - (.height >> 1));
+				.hitThreshold	= 256;
+				.opacity	= 0;
+				.visible	= true;
+				.moveTo(,, 255, 200,, delay);
+			}
+			delay	+= 30;
+		}
+		dm("names["+no+"] = "+names[no]);
+	}
+
+	//	チーム名とメンバー名を非表示
+	function undispTeamName(no)
+	{
+		if(names[no])
+		{
+			//	今表示されているものは、閉じる
+			for(var i=0; i<names[no].count; i++)
+			{
+				with(names[no][i]) .moveTo(,, 0, 200,,, .endOfMove);
+			}
+			names.erase(no);
+		}
+	}
+
+	function dispTachie(no, teamno, delay=0, interval=100)
+	{
+		//	チーム毎にまとめて表示
+		var slidelen = 200;
+		with(tachi[no] = new ParticleLayer(window, this))
+		{
+			.name	= "立ち絵: "+icondata[teamno][0];
+			.loadImages("hf_ps立ち絵-"+icondata[teamno][0]);
+			.setSizeToImageSize();
+			.flipLR() if no;
+			.setPos(no ? width - .width + slidelen : -slidelen, height - .height);
+			.hitThreshold	= 256;
+			.opacity	= 0;
+			.visible	= true;
+			.absolute	= 1100 + tachieabsolute[teamno];
+			.moveTo(no ? width - .width : 0,, 255, 300, -2);
+		}
+	}
+
+	function onButtonEnter(btn)
+	{
+		dm("button enter: "+btn.name);
+		if(btn.name[0] != "*")
+		{
+			var no	= teamno.count;
+			if(no < selcnt)
+			{
+				//	チーム名の表示
+				dispTeamName(no, btn.no);
+
+				//	枠の表示・移動
+				with(focuser)
+					.finish(), .moveTo(btn.left, btn.top, 255, fctime, fcaccel);
+			}
+		}
+	}
+
+	function onButtonLeave(btn)
+	{
+		dm("button leave: "+btn.name);
+		if(btn.name[0] != "*")
+		{
+			var no	= teamno.count;
+			if(no < selcnt)
+			{
+				//	チーム名の消去
+				undispTeamName(no);
+
+				//	枠の消去
+				with(focuser)
+					.finish(), .moveTo(,, 0, fctime, fcaccel);
+			}
+		}
+	}
+
+	function onButtonDown(btn)
+	{
+		if(!acceptable)
+			return;
+
+		//	アイコン以外のボタン
+		if(btn.name[0] == "*")
+		{
+			switch(btn.name.substr(1))
+			{
+			case "start":
+				if(teamno.count < selcnt)
+				{
+					dm("必要な数だけチームを選んでいません。");
+					return;	//	必要なチーム数選ばれていなければ、開始できない
+				}
+				//	状態をプラグインに保存
+				plugin.teamno	= teamno;
+				acceptable	= false;
+				plugin.hide();
+
+				//	キャラ決定音
+				hfSound.キャラ決定	= true;
+				hfSound.bgm3		= false;	//	BGM停止
+				break;
+
+			case "return":
+				//	選択メニューを閉じる
+				plugin.teamno	= void;
+				acceptable	= false;
+				plugin.hide();
+				break;
+			}
+			return;
+		}
+
+//		dm("button: "+btn.name+"("+btn.no+")");
+		var no	= teamno.count;
+		if(no >= selcnt)
+			return;
+
+		//	選ばれたチーム
+		teamno[no]	= icondata[btn.no][6];
+
+		//	ボタンが押されたら(選ばれたら)、ボタンを無効にする
+		window.focusedLayer	= void;	//	フォーカスを放る
+		btn.enabled	= false;
+		hfSound.クリック	= true;
+
+		//	選択されたことを示す枠を表示する
+		with(selecter[no])
+		{
+			.setPos(btn.left - ((.width - btn.width) >> 1), btn.top - ((.height - btn.height)>>1));
+			.moveTo(,, 255, 100);
+		}
+
+		//	フォーカス枠のタイプを変更する
+		with(focuser)
+		{
+			.finish();
+//			.moveTo(,, 0, fctime, fcaccel,, (no ? void : changeFocuser));	//	そして消去
+			//	上記のとおり記述すると、第一引数に(no ? void : changeFocuser)の結果が渡されてしまう。
+/*			var func = no ? void : changeFocuser;
+			.moveTo(,, 0, fctime, fcaccel,, func);	//	これでも駄目
+*/
+			.moveTo(.left, .top, 0, fctime, fcaccel, 0, no ? void : changeFocuser);	//	これなら(省略を行わなければ)大丈夫
+		}
+
+		//	選ばれたことを示すエフェクトを表示する(立ち絵を出すならそれで)
+		dispTachie(no, btn.no);
+
+		//	チーム名が表示されていなかったら、表示する
+		dispTeamName(no, btn.no);
+
+		//	プレイヤー・CPUともに選ばれたら、選択情報を保存してメニューを閉じる
+		if(teamno.count >= selcnt)
+		{
+			//	決定(開始)ボタンを表示
+			with(buttons["start"])
+			{
+				.visible	= true;
+				.focus();	//	決定(開始)ボタンへフォーカスを移す
+			}
+
+			//	決定ボタンへカーソル移動
+			moveCursor(buttons["start"]);
+
+			//	ボタンを無効にする。
+			for(var i=0; i<icons.count; i++)
+				icons[i].enabled	= false;
+		}
+	}
+
+	function changeFocuser()
+	{//	PLAYER -> CPU
+		with(focuser)	.imageLeft	= -.width;
+	}
+
+	function changeFocuser2()
+	{//	CPU -> PLAYER
+		with(focuser)	.imageLeft	= 0;
+	}
+}
+
+class HanafudaSelectIconButtonLayer extends PushButtonLayer
+{
+	function HanafudaSelectIconButtonLayer()
+	{
+		super.PushButtonLayer(...);
+		enterse	= "hfse008.wav";
+	}
+
+	function onKeyDown(key, shift)
+	{
+		var ic = parent.icons;
+		var btn = parent.buttons;
+		if(key == VK_UP)
+		{
+			if(bno < 2)
+				btn["return"].focus();
+			else
+				ic[bno - 2].focus();
+			return;
+		}
+		else if(key == VK_DOWN)
+		{
+			if(ic.count & 1 && bno == ic.count - 2)
+				ic[bno + 1].focus();
+ 			else if(bno >= ic.count - 2)
+				btn[btn.start.visible ? "start" : "return"].focus();
+			else
+				ic[bno + 2].focus();
+			return;
+		}
+
+		return super.onKeyDown(key, shift, true);
+	}
+
+	function onMouseLeave()
+	{
+		super.onMouseLeave();
+		window.focusedLayer	= void;
+	}
+}
+
+//-----------------------------------------------------------------------------
+//	花札タイトルプラグイン
+class HanafudaSelectPlugin extends KAGPlugin
+{
+	var window;
+	var menu;
+
+	var showed;
+
+	var teamno;
+	var go = %[];
+	var ret = %[];
+	var only_vs;
+	var bgimage;
+
+	function HanafudaSelectPlugin(win)
+	{
+		super.KAGPlugin();
+		window	= win;
+	}
+
+	function finalize()
+	{
+		release(menu);
+		super.finalize(...);
+	}
+
+	function show(time, accel, bg, mode)
+	{
+		if(showed)
+			return;
+		showed	= true;
+
+		teamno	= void;
+		with(menu = new HanafudaCharacterSelectMenuLayer(window, window.fore.base, this))
+		{
+			.bgimage	= bg if bg != void;
+			.show(time, accel, 0, mode);
+			bgimage	= .bgimage;
+		}
+	}
+/*
+	function hide(time, accel)
+	{
+		if(!showed)
+			return;
+		showed	= false;
+
+		menu.hide(time, accel);
+		menu	= void;
+	}
+
+	function onLayerClosed()
+	{
+		if(menu)
+		{
+			invalidate menu;
+			menu	= void;
+		}
+
+		if(typeof global.kag != "undefined")
+		{
+			//	閉じた後の処理(ラベルジャンプなど)
+			if(teamno)
+				kag.process(go.storage, go.label);
+			else
+				kag.process(ret.storage, ret.label);
+		}
+	}
+*/
+	function hide(time, accel)
+	{
+		dm("hide: "+showed);
+		if(!showed)
+			return;
+		showed	= false;
+
+		if(typeof global.kag != "undefined")
+		{
+			//	閉じた後の処理(ラベルジャンプなど)
+			if(teamno)
+				kag.process(go.storage, go.label);
+			else
+				kag.process(ret.storage, ret.label);
+		}
+	}
+
+	function close()
+	{
+		if(menu)
+		{
+			invalidate menu;
+			menu	= void;
+		}
+	}
+
+	function fire()
+	{
+		//	表示されているかどうか
+		if(!showed)
+			return;
+		showed	= false;
+
+		//	トリガを引く
+		window.trigger("hanafuda_vschara");
+	}
+
+	function onRestore(f, clear, elm)
+	{
+		// すべての、栞を読み出すときに呼ばれる
+		close();	//	状態が復元されるので閉じる
+	}
+}
+if(typeof global.kag != "undefined")
+{
+	//	プラグインを登録
+	kag.addPlugin(global.hanafudaselect_object = new HanafudaSelectPlugin(kag));
+
+	//	呼び出しタグを追加
+	kag.tagHandlers.hanafudaselect_start	= function(elm)
+	{
+		with(hanafudaselect_object)
+		{
+			.only_vs	= void;
+			.go.storage	= elm.go_storage;
+			.go.label	= elm.go_target;
+			.ret.storage= elm.ret_storage;
+			.ret.label	= elm.ret_target;
+			.show(elm.time, elm.accel, elm.bg, elm.mode);
+		}
+		return 0;
+	} incontextof kag;
+
+	kag.tagHandlers.hanafudaselect_close	= function(elm)
+	{
+		hanafudaselect_object.close();
+		return 0;
+	} incontextof kag;
+
+	kag.tagHandlers.getselectteam	= function(elm)
+	{
+		elm.variable	= "curteam" if elm.variable === void;
+		global[elm.variable]	= hanafudaselect_object.teamno;
+		return 0;
+	} incontextof kag;
+
+	kag.tagHandlers.getselectbgimage	= function(elm)
+	{
+		elm.variable	= "bgimage" if elm.variable === void;
+		global[elm.variable]	= hanafudaselect_object.bgimage;
+		return 0;
+	} incontextof kag;
+}
+
+@endif
+/*-----------------------------------------------------------------------------/
+/	End of HanafudaSelectPlugin.tjs
+/-----------------------------------------------------------------------------*/

@@ -1,0 +1,427 @@
+/*-----------------------------------------------------------------------------/
+/	Copyright (C) 2004 TYPE-MOON All Rights Reserved.
+/		襖の開閉を行うプラグイン
+/-----------------------------------------------------------------------------*/
+@if(__FUSUMAPLUGIN_DEFINED__==0)
+@set(__FUSUMAPLUGIN_DEFINED__=1)
+
+Scripts.execStorage("HFParticleLayer.tjs");
+Scripts.execStorage("HFSound.tjs");
+
+//-----------------------------------------------------------------------------
+//	襖プラグイン
+class FusumaPlugin extends KAGPlugin
+{
+	var storages	= [
+		[ "fusuma_left01", "fusuma_left00" ],
+		[ "fusuma_right01", "fusuma_right00" ]
+	];
+	var absolute	= 99999999;
+	var triggername	= "fusuma";
+
+	var window;
+	var showed;
+	var fusuma;
+	var closeFusumas;
+	var darkness;
+
+	var deftime	= 300;
+	var defaccel= 2;
+
+	var count;
+
+	function FusumaPlugin(win)
+	{
+		super.KAGPlugin();
+		window	= win;
+	}
+
+	function finalize()
+	{
+		release(darkness);
+		releaseArray(fusuma);
+		super.finalize(...);
+	}
+
+	function show(time, accel)
+	{
+		dm("fusuma close: "+showed);
+		if(showed)
+			return false;
+		showed	= true;
+
+		time	= deftime if time === void;
+		accel	= -defaccel if accel === void;
+
+		//	襖の読み込みと閉じる指示
+		count	= 0;
+		fusuma	= [ [], [] ];
+		var par = window.fore.base;
+		var lp = [ 0, par.width ];
+		for(var j=0; j<storages.count; j++)
+		{
+			var st = storages[j];
+			var l = lp[j];
+			for(var i=0; i<st.count; i++)
+			{
+				with(fusuma[j][i] = new ParticleLayer(window, par))
+				{
+					.name	= "fusuma("+st[i]+")";
+					.loadImages(st[i]);
+					.setSizeToImageSize();
+					.setPos(j ? par.width : -.width, 0);
+					l	-= .width if j;
+					.absolute	= absolute;
+					.opacity	= 255;
+//					.moveTo(l,,, time, accel,, finishClose);
+					l	+= .width if !j;
+				}
+				count++;
+			}
+		}
+
+		//	暗くするレイヤー
+		darkness = new DarknessLayer(window, par, fusuma[0][1], fusuma[1][1], absolute-1);
+
+		//	閉じる指令
+		for(var j=0; j<fusuma.count; j++)
+		{
+			var l = lp[j];
+			for(var i=0; i<fusuma[j].count; i++)
+			{
+				with(fusuma[j][i])
+				{
+					l	-= .width if j;
+					.moveTo(l,,, time, accel,, finishClose);
+					l	+= .width if !j;
+				}
+			}
+		}
+		hfSound.ふすま移動	= false;	//	再生中だったら停止する
+		hfSound.ふすま移動	= true;
+		return true;
+	}
+
+	function hide(time, accel)
+	{
+		dm("fusuma open: "+showed);
+		if(!showed)
+			return false;
+		showed	= false;
+
+		if(fusuma == void)
+			return false;
+
+		time	= deftime if time === void;
+		accel	= defaccel if accel === void;
+
+		//	襖を開く(そして、襖レイヤーを破棄)
+		count	= 0;
+		for(var j=0; j<fusuma.count; j++)
+		{
+			var f = fusuma[j];
+			for(var i=0; i<f.count; i++)
+			{
+				with(f[i])
+				{
+					dm("close to: "+.name+"("+time+", "+accel+")");
+					.moveTo(j ? .parent.width : -.width,,, time, accel,, finishOpen);
+				}
+				count++;
+			}
+		}
+
+		//	削除する襖への参照を保存する(hideした後、襖が破棄されるまでの間にshowされるときちんと破棄されないため)
+		closeFusumas	= [] if closeFusumas == void;
+		fusuma[2]	= darkness;
+		closeFusumas.add(fusuma);
+		fusuma	= void;
+		darkness= void;
+
+		hfSound.ふすま移動	= false;	//	再生中だったら停止する
+		hfSound.ふすま移動	= true;
+		return true;
+	}
+
+	function finishClose()
+	{
+		dm("finish close");
+		count--;
+		if(count <= 0)
+		{
+			dm("fire");
+			window.trigger(triggername);
+		}
+	}
+
+	function finishOpen()
+	{
+		dm("finish open");
+		count--;
+		if(count <= 0)
+		{
+			while(closeFusumas.count)
+			{
+				var fusuma	= closeFusumas[0];
+				closeFusumas.erase(0);
+				for(var i=0; i<2; i++)
+				{
+					for(var j=0; j<2; j++)
+						fusuma[i][j].endOfMove();
+				}
+				release(fusuma[2]);	//	darkness
+			}
+
+			dm("fire");
+			window.trigger(triggername);
+		}
+	}
+
+	//	閉じた状態で襖を生成
+	function makeClosedFusuma()
+	{
+		var index	= fusuma[0][0] != void ? fusuma[0][0].absolute - 1 : absolute;
+		var par = window.fore.base;
+		var layer	= [ [], [] ];
+		for(var j=0; j<storages.count; j++)
+		{
+			var st = storages[j];
+			for(var i=0; i<st.count; i++)
+			{
+				with(layer[j][i] = new ParticleLayer(window, par))
+				{
+					.name	= "fusuma("+st[i]+")";
+					.loadImages(st[i]);
+					.setSizeToImageSize();
+					.absolute	= index;
+					.opacity	= 255;
+					if(j)
+						.setPos(i ? (par.width >> 1) : par.width - .width, 0);
+					else
+						.setPos(i ? ((par.width >> 1) - .width) : 0, 0);
+					.visible	= true;
+				}
+			}
+		}
+		return layer;
+	}
+
+	//	繰り返し開く
+	var last_fusuma;
+	var repeatOpenCount;
+	function repeatOpen(layer = makeClosedFusuma(), time=deftime, accel=defaccel)
+	{
+		//	darknessは消去
+		release(darkness);
+		darkness	= void;
+
+		//	現在の襖を開ける
+		count	= 0;
+		for(var i=0; i<fusuma.count; i++)
+		{
+			for(var j=0; j<fusuma[i].count; j++)
+			{
+				with(fusuma[i][j])
+					.moveTo(i ? .parent.width : -.width,,, time, accel,, finishRepeatOpen);
+				count++;
+			}
+		}
+
+		//	作った襖を現在の襖にする
+		last_fusuma	= fusuma;
+		fusuma	= layer;
+	}
+
+	//	襖を繰り返し開けるときの、１つの開くが終わったときの処理
+	function finishRepeatOpen()
+	{
+		count--;
+		if(count > 0)
+			return;
+
+		repeatOpenCount--;
+		if(repeatOpenCount <= 0)
+		{
+			//	終了
+			for(var i=0; i<2; i++)
+			{
+				for(var j=0; j<2; j++)
+				{
+					fusuma[i][j].endOfMove();
+					last_fusuma[i][j].endOfMove();
+				}
+			}
+
+			fusuma	= void;
+			last_fusuma	= void;
+			return;
+		}
+
+		//	暗くするレイヤーを、現在の襖に関連付ける
+/*		with(darkness)
+		{
+			.leftborder	= fusuma[0][1];
+			.rightborder= fusuma[1][1];
+		}
+*/
+		//	開け終わったレイヤーを閉じた状態にする
+		var index	= fusuma[0][0].absolute - 1;
+		var par = window.fore.base;
+		for(var j=0; j<last_fusuma.count; j++)
+		{
+			for(var i=0; i<last_fusuma[j].count; i++)
+			{
+				with(last_fusuma[j][i])
+				{
+					.absolute	= index;
+					if(j)
+						.setPos(i ? (par.width >> 1) : par.width - .width, 0);
+					else
+						.setPos(i ? ((par.width >> 1) - .width) : 0, 0);
+				}
+			}
+		}
+
+		//	襖をあける
+		repeatOpen(last_fusuma);
+	}
+
+	function changeFusuma(ind, ht)
+	{
+		for(var i=0; i<2; i++)
+		{
+			for(var j=0; j<2; j++)
+			{
+				with(fusuma[i][j])
+					.absolute		= ind, .hitThreshold	= ht;
+			}
+		}
+		with(darkness)
+			.absolute	= ind, .hitThreshold	= ht;
+	}
+
+	function onLayerClosed()
+	{
+		if(typeof global.kag != "undefined")
+		{
+			//	閉じた後の処理(ラベルジャンプなど)
+			kag.process(storage, label);
+		}
+	}
+
+	function onRestore(f, clear, elm)
+	{
+		// すべての、栞を読み出すときに呼ばれる
+		hide();	//	状態が復元されるので閉じる
+	}
+}
+if(typeof global.kag != "undefined")
+{
+	//	プラグインを登録
+	kag.addPlugin(global.fusuma_object = new FusumaPlugin(kag));
+
+	//	呼び出しタグを追加
+	//	襖を閉じる(time, accel)
+	kag.tagHandlers.fusuma_close	= function(elm)
+	{
+		with(elm)
+		{
+			if(fusuma_object.show(.time, .accel))
+				return waitTrigger(%[name:"fusuma",canskip:false]);
+			else
+				return 0;
+		}
+	} incontextof kag;
+
+	//	襖を開く(time, accel)
+	kag.tagHandlers.fusuma_open	= function(elm)
+	{
+		with(elm)
+		{
+			if(fusuma_object.hide(.time, .accel))
+				return waitTrigger(%[name:"fusuma",canskip:false]);
+			else
+				return 0;
+		}
+	} incontextof kag;
+
+	//	襖の前後位置を移動
+	kag.tagHandlers.fusuma_bottom	= function(elm)
+	{
+		global.fusuma_object.changeFusuma(999999/*テキストレイヤーより後ろ*/, 256/*全透過*/);
+		return 0;
+	} incontextof kag;
+
+	//	襖を開くのを繰り返す
+	kag.tagHandlers.fusuma_open_repeat	= function(elm)
+	{
+		with(global.fusuma_object)
+		{
+			.repeatOpenCount	= elm.count !== void ? +elm.count : 10;
+			.repeatOpen();	//	繰り返し開く
+		}
+		return 0;
+	} incontextof kag;
+
+	kag.tagHandlers.stop_fusuma_open_repeat	= function(elm)
+	{
+		with(global.fusuma_object)
+		{
+			.repeatOpenCount	= 0;	//	残り回数を0にする
+		}
+		return 0;
+	} incontextof kag;
+}
+
+//	暗くするレイヤー
+class DarknessLayer extends Layer
+{
+	var leftborder, rightborder;
+	var max;
+	var maxopacity	= 192;
+	var w;
+
+	function DarknessLayer(win, par, lb, rb, a)
+	{
+		super.Layer(...);
+		leftborder	= lb;
+		rightborder	= rb;
+		setSize(par.width, par.height);
+		w = max	= width;
+		type	= ltAddAlpha;
+		fillRect(0, 0, width, height, 0xFF000000);
+		opacity		= curopacity;
+		absolute	= a;
+		hitThreshold	= 0;
+
+		System.addContinuousHandler(handler);
+		visible		= true;
+	}
+
+	function finalize()
+	{
+		System.removeContinuousHandler(handler);
+		super.finalize(...);
+	}
+
+	property curleft	{ getter { return leftborder.left + leftborder.width; } }
+	property curright	{ getter { return rightborder.left; } }
+	property curopacity	{ getter { return int(maxopacity - maxopacity * w / max); } }
+
+	function handler()
+	{
+		var l = curleft, r = curright;
+		w = r - l;
+		if(width !== w)
+		{
+//			width	= w;
+//			left	= l;
+			opacity	= curopacity;
+		}
+	}
+}
+
+@endif
+/*-----------------------------------------------------------------------------/
+/	End of FusumaPlugin.tjs
+/-----------------------------------------------------------------------------*/

@@ -1,0 +1,2525 @@
+/*-----------------------------------------------------------------------------/
+/	Copyright (C) 2004 TYPE-MOON All Rights Reserved.
+/		花札の基本クラス
+/
+/	※ 基本用語
+/		山札, 場札, 手札, 役札(プレイヤーが取った札)
+/		ラウンド(「勝負」するまでの流れ)、ゲーム(複数回のラウンドからなる)
+/		手札役(配った時点で成立している役)
+/-----------------------------------------------------------------------------*/
+@if(__HANAFUDA_DEFINED__==0)
+@set(__HANAFUDA_DEFINED__=1)
+Scripts.execStorage("subroutine.tjs");
+
+//	trueなら、MPを常時満タンにする。
+var chargeAlways	= false;
+
+//	リプレイを有効にする
+var	enabledHanafudaReplay	= true;	//	慎二OH!で使うので常にtrue
+
+//	trueなら、プレイ履歴を記録する。
+var saveHanafudaReplay	= false;
+
+//	こいこいのルールの初期値
+var	defaultKoikoiRules	= %[
+	酒あり:true, 雨流れあり:true, 雨四光あり:true, 倍返しあり:false,
+	７文倍掛けあり:false, 二役あり:true, 手札役あり:true, 勝ち親:true, 回数戦:true,
+	宝具あり:true, 修羅モード:false
+];
+
+function num(month, number)
+{
+	return (month - 1) * 4 + number;
+}
+
+function no2month(no)
+{
+	return (no + 4) \ 4;
+}
+
+function no2num(no)
+{
+	return no % 4;
+}
+
+class Hanafuda
+{
+	var month;		//	1〜12
+	var number;		//	0〜3
+	var point;		//	20, 10, 5, 1
+	var place;		//	場所(0:山札, 1:場札, 2:プレイヤー1手札, 3:プレイヤー2手札, 4:プレイヤー1役札, 5:プレイヤー2役札, 6:引いた札)
+
+	//	戦略用データ(CPU用)
+	var status;		//	自分の合札、手札かつ場札に同月がある、手札で場札に同月が無い、
+					//	場札で手札に同月がある、山札、場札で手札に同月がない、相手の合札
+
+	function Hanafuda(m, n, p)
+	{
+		month	= m;
+		number	= n;
+		point	= p;
+	}
+
+	property no
+	{
+		getter	{ return num(month, number); }
+	}
+
+	property storage
+	{
+		getter	{ return "fuda"+(no<10 ? "0" : "")+no+".jpg"; }
+	}
+
+	property placename
+	{
+		getter
+		{
+			var pn	= [ "山", "場", "プレイヤー1手札", "プレイヤー2手札", "プレイヤー1役札", "プレイヤー2役札", "引いた札" ];
+			return pn[place];
+		}
+	}
+}
+
+class Koikoi
+{
+	var 札点数一覧	= [
+		20,	5,	1,	1,	//	1
+		10,	5,	1,	1,	//	2
+		20,	5,	1,	1,	//	3
+		10,	5,	1,	1,	//	4
+		10,	5,	1,	1,	//	5
+		10,	5,	1,	1,	//	6
+		10,	5,	1,	1,	//	7
+		20,	10,	1,	1,	//	8
+		10,	5,	1,	1,	//	9
+		10,	5,	1,	1,	//	10
+		20,	10,	5,	1,	//	11
+		20,	1,	1,	1	//	12
+	];
+	var 点数一覧	= [ 20, 10, 5, 1 ];
+	var 札名一覧	= %[ 20 => "コウ", 10 => "タネ", 5 => "タン", 1 =>"カス" ];
+	var 手札役一覧	= [
+		,	//	ダミー
+		[ "くっつき", 6 ],
+		[ "手四", 6 ]
+	];
+	var 役チェック順	= [
+		"五光", "四光", "雨四光", "三光",
+		"猪鹿蝶",
+		"赤短青短の重複", "赤短", "青短",
+		"タネ", "タン", "カス",
+		"花見酒", "月見酒"
+	];
+	var 杯札番号	= num(9, 0);
+	var 桐大判番号	= num(12, 0);
+	var 雨番号		= num(11, 0);
+	var 役一覧	= %[
+		//	0: 成立条件枚数, 1: 成立条件, 2: 得点, 3: 追加得点条件, 4: 重複不可の役, 5: 無効となる札
+		"五光" => [
+			5,								//	条件枚数(5枚以上)
+			20,								//	成立条件(20文札)
+			10,								//	得点
+			[ 5, 20, 1 ],					//	追加得点条件(五光の場合は成立しないが、判定がおかしくなるのでダミーとして設定)
+			[ "四光", "雨四光", "三光" ],	//	重複しない役
+		],
+		"四光" => [
+			4,
+			%[ num(1, 0)=>1, num(3, 0)=>1, num(8, 0)=>1, num(12, 0)=>1 ],
+			8,
+			,
+			[ "雨四光", "三光" ],
+			[ 雨番号 ]
+		],
+		"雨四光" => [
+			4,
+			20,
+			7,
+			,
+			[ "四光", "三光" ],
+		],
+		"三光" => [
+			3,
+			%[ num(1, 0)=>1, num(3, 0)=>1, num(8, 0)=>1, num(12, 0)=>1 ],
+			5,
+		],
+		"猪鹿蝶" => [
+			3,
+			%[ num(6, 0)=>1, num(7, 0)=>1, num(10, 0)=>1 ],
+			5,
+			[ 3, 10, 1 ],	//	追加得点条件(3枚より多い数の/10文(タネ)札を/1文と数える)
+			[ "タネ" ]
+		],
+		"赤短青短の重複" => [
+			6,
+			%[ num(1, 1)=>1, num(2, 1)=>1, num(3, 1)=>1, num(6, 1)=>1, num(9, 1)=>1, num(10, 1)=>1 ],
+			10,
+			[ 6, 5, 1 ],
+			[ "赤短", "青短", "タン" ]
+		],
+		"赤短" => [
+			3,
+			%[ num(1, 1)=>1, num(2, 1)=>1, num(3, 1)=>1 ],
+			5,
+			[ 3, 5, 1 ],
+			[ "赤短青短の重複", "タン" ]
+		],
+		"青短" => [
+			3, 
+			%[ num(6, 1)=>1, num(9, 1)=>1, num(10, 1)=>1 ],
+			5,
+			[ 3, 5, 1 ],
+			[ "赤短青短の重複", "タン" ]
+		],
+		"タネ" => [
+			5,
+			10,
+			1,
+			[ 5, 10, 1 ],
+			[ "猪鹿蝶" ]
+		],
+		"タン" => [
+			5,
+			5,
+			1,
+			[ 5, 5, 1 ],
+			[ "赤短青短の重複", "赤短", "青短", "タン" ]
+		],
+		"カス" => [
+			10,
+			1,
+			1,
+			[ 10, 1, 1 ],
+		],
+	];
+	var 酒役一覧 = %[
+		"花見酒" => [
+			2,
+			%[ num(3, 0)=>1, 杯札番号=>1 ],
+			3,
+		],
+		"月見酒" => [
+			2,
+			%[ num(8, 0)=>1, 杯札番号=>1 ],
+			3,
+		],
+	];
+	var 雨四光の名前	= "雨四光";
+	var 強化得点	= %[
+		"五光"	=> [ 10, 30 ],
+		"四光"	=> [ 8, 20 ],
+		"雨四光"=> [ 7, 15 ],
+		"三光"	=> [ 5, 10 ],
+	];
+	var 倍になる下限の得点	= 7;
+	var state2name	= [
+		"プレイヤー1のターン",
+		"プレイヤー2のターン",
+		"プレイヤー1の勝利",
+		"プレイヤー2の勝利",
+		"引き分け"
+	];
+	var tfkey	= "花札ルール-";	//	システム変数への保存用キー
+
+	//	宝具名
+	var invisible_air		= "インヴィジブルエア";
+	var excalibur			= "エクスカリバー";
+	var avalon				= "アヴァロン";
+	var geiborg				= "ゲイボルク";
+	var broken_fantasm		= "ブロークンファンタズム";
+	var row_aias			= "ロー・アイアス";
+	var unlimited_blade_work= "無限の剣製";
+	var bradfort_andromeda	= "ブラッドフォート・アンドロメダ";
+	var breaker_gorgon		= "ブレーカー・ゴルゴーン";
+	var berrehorn			= "ベルレフォーン";
+	var survive				= "ヘカティック・グライアー";	//	旧名: サバイブ
+	var rule_breaker		= "ルールブレイカー";
+	var godhand				= "ゴッドハンド";
+	var tsubamegaesi		= "燕返し";
+	var gate_of_babylon		= "ゲートオブバビロン";
+	var enuma_elish			= "エヌマ・エリシュ";
+	var maid_dragoon		= "メイド・ドラグーン";
+	var grass_origin		= "グラス・オリジン";
+
+	//	宝具能力
+	var excalibur_power		= 2;	//	エクスカリバーの(足すポイントの)倍率
+	var avalon_power		= 2;	//	アヴァロンの防御力(持ち点数に対して、avalon_power分の1にする)
+	var broken_fantasm_point= 2;	//	ブロークンファンタズムの文数
+	var row_aias_life		= 7;	//	ロー・アイアスの有効ポイント
+//	var unlimited_max = 4, unlimited_min = 3;	//	無限の剣製での、移動枚数上限下限(完全ランダム)
+//	var unlimited_max = 6, unlimited_min = 4;	//	無限の剣製での、移動枚数上限下限(カスのみの場合)
+	var unlimited_max = 5, unlimited_min = 3;	//	タネ・タン・カスいずれか
+	var berrehorn_point		= 3;	//	ベルレフォーンの文数
+	var godhand_life		= 11;	//	ゴッドハンドの有効ポイント
+	var tsubamegaesi_invalid= %[タネ:true, 猪鹿蝶:true];	//	燕返しでの無効化役
+	var gob_max = 2, gob_min = 1;	//	ゲートオブバビロンで変わる札の上限下限
+	var enuma_elish_point	= 10;	//	エヌマ･エリシュの追加文数
+	var grass_origin_power	= 2;	//	グラス・オリジンの倍率
+	var rule_breaker_rate	= 3;	//	ルールブレイカーの成功率(1/rule_breaker_rate)
+
+	var maid_dragoon_user	= "リズ";
+	var berrehorn_info	= [
+		"ベルレフォーン("+berrehorn_point+"文)",
+		"　宝具『ベルレフォーン』を使用すると成立。"
+	];
+
+	//	メニューから使用不可能な宝具
+	var outofmenu_treasure	= %[ rule_breaker => 1, avalon => 1, row_aias => 1, maid_dragoon => 1 ];
+
+	//	相手が勝負をかけてきたときに使用可能な宝具
+	var defensive_treasure	= %[ avalon => 1, row_aias => 1, maid_dragoon => 1 ];
+
+	//	サーヴァント情報
+	var servant	= %[
+		//	最大MP, ゲーム開始時MP, ボーナス札, 宝具
+		セイバー		:[ 20,	3,	%[ num(7, 0) => 1, num(10, 0) => 1, num(12, 0) => 2 ],
+			[
+				//	宝具名, 第1ターンのみ使用可能か, 有効ターン数, 消費MP, 使用可能回数, hint
+				[ invisible_air,	true,	-1,	3,	-1,	"相手に自分の役札を見えなくする。\n(1ターン目のみ使用可能)" ],
+				[ excalibur,		false,	1,	10,	-1,	"使用ターンであがれば、ダメージが"+(excalibur_power+1)+"倍になる。" ],
+				[ avalon,			false,	1,	15,	-1,	"最大ダメージを、残りポイントの"+avalon_power+"分の1までに制限する。" ]
+			],
+		],
+		ランサー		:[ 10,	0,	%[ num(6, 1) => 1, num(9, 1) => 1, num(10, 1) => 1, num(9, 0) => 1 ],
+			[
+				[ geiborg,	false,	0,	3,	-1,	"相手の役札を奪う。" ]
+			],
+		],
+		アーチャー		:[ 15,	0,	%[ num(1, 1) => 1, num(2, 1) => 1, num(3, 1) => 1, num(8, 0) => 1 ],
+			[
+//				[ broken_fantasm,		false,	-1,	5,	-1,	"役「赤短」であがれば、ダメージ+"+broken_fantasm_point+"ポイント。" ],
+				[ row_aias,				false,	1,	7,	-1,	row_aias_life+"ポイントまでのダメージを無効化する。" ],
+//				[ unlimited_blade_work,	false,	0,	8,	-1,	"山からカス以外の札をランダムに"+unlimited_min+"〜"+unlimited_max+"枚得る。" ]
+//				[ unlimited_blade_work,	false,	0,	8,	-1,	"山からカス札をランダムに"+unlimited_min+"〜"+unlimited_max+"枚得る。" ]
+				[ unlimited_blade_work,	false,	0,	8,	-1,	"山からタネ・タン・カスいずれかの種類の札を"+unlimited_min+"〜"+unlimited_max+"枚得る。" ]
+			],
+		],
+		ライダー		:[ 15,	-3,	%[ num(3, 0) => 1, num(11, 0) => 1 ],
+			[
+				[ bradfort_andromeda,	false,	-1,	6,	-1,	"自分が「こいこい」している間、1ターン毎に相手に1ポイントの\nダメージを与え、かつ自分のMPが1ポイント回復する。" ],
+//				[ breaker_gorgon,		false,	2,	3,	-1,	"1ターンの間、相手が札を取れなくする。" ],	//	相手のターンに有効になるので、2ターンを指定
+				[ breaker_gorgon,		false,	1,	5,	-1,	"相手を1ターン休みにする。" ],
+				[ berrehorn,			false,	-1,	10,	-1,	"役「ベルレフォーン」が出来る。" ]
+			],
+		],
+		キャスター		:[ 30,	10,	%[],
+			[
+				[ survive,		false,	-1,	5,	-1,	"役「カス」のポイントが2倍になる。" ],
+//				[ rule_breaker,	false,	-1,	20,	-1,	"対戦相手のみ、"+rule_breaker_min+"〜"+rule_breaker_max+"種類の役を無効にする。" ]
+				[ rule_breaker,	false,	-1,	20,	-1,	"1/"+rule_breaker_rate+"の確率で、「負け」を「勝ち」に変える。\n(負けたときに消費MP分残っていれば発動)" ]
+			],
+		],
+		バーサーカー	:[ 0,	0,	%[ num(7, 0) => 1 ],
+			[
+				[ godhand,	true,	-1,	0,	1,	godhand_life+"ポイントまで、ダメージを無効にする。" ]	//	ゴッドハンドのみ常時発動
+			],
+		],
+		アサシン		:[ 3,	0,	%[ num(11, 1) => 3 ],
+			[
+				[ tsubamegaesi,	false,	-1,	3,	-1,	"相手のみ、役「タネ」「猪鹿蝶」を無効にする。" ]
+			],
+		],
+		ギルガメッシュ	:[ 35,	5,
+			%[
+				num(1, 0) => 1, num(2, 0) => 1, num(3, 0) => 1, num(4, 0) => 1, num(5, 0) => 1,
+				num(6, 0) => 1, num(7, 0) => 1, num(8, 0) => 1, num(8, 1) => 1, num(9, 0) => 1,
+				num(10, 0) => 1, num(11, 0) => 1, num(11, 1) => 1, num(12, 0) => 1
+			],
+			[
+				[ gate_of_babylon,	true,	0,	5,	-1,	gob_min+"〜"+gob_max+"枚のカス札をコウ札に変える。\n(同月でコウ札が山の中にあるときのみ)" ],
+				[ enuma_elish,		false,	1,	20,	-1,	"使用ターンであがれば、ダメージ+"+enuma_elish_point+"ポイント。" ]
+			]
+		],
+		maid_dragoon_user	=> [	5,	0,
+			%[],
+			[
+				[ maid_dragoon,	false,	0,	5,	-1,	"“勝負”をキャンセルさせる。" ]
+			]
+		],
+		ブルマイリヤ	:[	20,	0,
+			%[ num(1, 0) => 1, num(2, 0) => 1, num(4, 0) => 1, num(7, 0) => 1, num(8, 1) => 1, num(10, 0) => 1, num(12, 0) => 1 ],
+			[
+				[ grass_origin,	false,	0,	8,	-1,	"後一枚で成立する役の中で、最も点数の高い役に必要な札を山から引ける。\n(山に含まれている場合のみ/なければ次点の役)" ]
+			]
+		]
+	];
+
+	var	MPBurst	= 1;	//	MPバースト
+
+	var cpuname, playername;
+	var playerpoint	= [];	//	総合得点
+	var round;				//	回戦(ラウンド)
+	var maxround = 12;		//	対戦回数
+	var minimumpoint = [ 50, 50 ];	//	勝つ為に必要なポイント
+
+	var allfuda;		//	すべての札への参照
+	var yamafuda;		//	山札
+	var bafuda;			//	場札
+	var tefuda	= [];	//	手札
+	var yakufuda= [];	//	役札
+	var oya_no	= 0;	//	親プレイヤー番号
+	var turnup;			//	山札から引いた札
+	var curYaku = [];	//	現在の役とその点数
+	var	curYakuTmp	= [];//	現在の役とその点数(宝具役、こいこいで倍などは除く/あがれるかどうかを判定する為にだけ存在する)
+	var curPoint = [];	//	役のみの得点(七文倍、こいこい倍を除く)
+	var _koikoi	= [];	//	こいこいしたか？
+	var turn;			//	ターン番号
+	var state;			//	ラウンドの状態(0,1:各プレイヤーのターン, 2,3:ラウンド終了、勝者決定, 4:ラウンド終了、引き分け)
+	var rg;				//	ランダム
+	var totalPoint;		//	直前に役ができたプレイヤーの総得点
+	var lastYakuString = [];	//	直前までの役状態
+	var turndisplacement;	//	ターンのズレ(「ブレイカー・ゴルゴーン」を使うと生じる)
+
+	var replay	= false;//	再生
+	var history	= [];	//	プレイ履歴データ
+	var replayDataLocation;
+
+	var playerServant	= [
+		[],	//	複数登録可 この配列に[サーヴァント名, 現在MP, MP変化フラグ, [宝具発動フラグ且つ有効ターン], [使用回数], サーヴァント毎の宝具変数 ]がサーヴァントの数分追加される
+		[]
+	];
+
+	//	ルールフラグ
+	var _酒あり, _雨流れあり, _雨四光あり, _修羅モード;
+	var 倍返しあり, ７文倍掛けあり, 二役あり, 手札役あり, 勝ち親, 回数戦;
+	var 宝具あり;
+	var rules	= [
+		"酒あり", "雨流れあり", "雨四光あり", "倍返しあり",
+		"７文倍掛けあり", "二役あり", "手札役あり", "勝ち親", "回数戦", "宝具あり", "修羅モード"
+	];
+	var defaultstorage	= "../koikoirules.cfg";
+
+	function Koikoi(cpuname, playername)
+	{
+		//	基本ルールを設定
+		for(var i=0; i<rules.count; i++)
+			this[rules[i]]	= true;
+
+		//	札作成
+		allfuda	= [];
+		for(var i=0; i<48; i++)
+			allfuda[i]	= new Hanafuda(i\4+1, i%4, 札点数一覧[i]);
+
+		//	役『ベルレフォーン』を追加
+		役一覧[berrehorn]	= [ 255, 255, berrehorn_point ];
+
+		this.cpuname	= cpuname;
+		this.playername	= playername;
+
+		replayDataLocation	= kag.saveDataLocation+"/replay/";
+	}
+
+	function finalize()
+	{
+		//	履歴の保存
+		saveHistory();
+
+		release(curYaku);
+		release(yamafuda);
+		release(bafuda);
+		release(tefuda);
+		release(yakufuda);
+		release(allfuda);
+	}
+
+	//	現在のルールを保存する
+	function saveRules(storage=defaultstorage)
+	{
+		if(typeof .kag != "undefined")
+		{
+			//	チケット変数へ保存
+			for(var i=0; i<rules.count; i++)
+				tf[tfkey+rules[i]]	= this[rules[i]] if this[rules[i]] !== void;
+		}
+		else
+		{
+			//	フラグ読み出し
+			var ruleflags	= %[];
+			for(var i=0; i<rules.count; i++)
+				ruleflags[rules[i]]	= this[rules[i]];
+
+			//	保存
+			(Dictionary.save incontextof ruleflags)(storage);
+		}
+	}
+
+	//	ルールフラグを読み込む
+	function loadRules(storage=defaultstorage)
+	{
+		if(typeof .kag != "undefined")
+		{
+			for(var i=0; i<rules.count; i++)
+			{
+				if(tf[tfkey+rules[i]] !== void)
+					this[rules[i]]	= tf[tfkey+rules[i]];
+				else
+					this[rules[i]]	= defaultKoikoiRules[rules[i]];
+			}
+		}
+		else
+		{
+			//	読み込み
+			var ruleflags;
+			ruleflags	= Scripts.evalStorage(storage) if Storages.isExistentStorage(storage);
+			ruleflags	= %[] if ruleflags == void;
+
+			//	フラグ設定
+			if(ruleflags !== void)
+			{
+				for(var i=0; i<rules.count; i++)
+				{
+					if(ruleflags[rules[i]] !== void)
+						this[rules[i]]	= ruleflags[rules[i]];
+					else
+						this[rules[i]]	= defaultKoikoiRules[rules[i]];
+				}
+			}
+		}
+	}
+
+	//	一連のゲームの開始
+	function init(oya, seed)
+	{
+		dm("ゲーム開始");
+		playerpoint[0] = playerpoint[1] = 0;
+		round	= 0;
+
+		dm("--- ルール ---");
+		for(var i=0; i<rules.count; i++)
+			dm("  "+rules[i]+": "+(this[rules[i]] ? "true" : "false"));
+
+		if(seed != void)
+			rg	= new Math.RandomGenerator(seed);
+		else
+			rg	= new Math.RandomGenerator();
+		seed	= rg.serialize();
+
+		if(oya !== void)
+			oya_no	= oya;	//	任意に親を決定
+		else
+			oya_no	= int(rg.random() * 2);	//	乱数で親決定
+
+		//	プレイ履歴の再生と記録
+		if(replay)
+		{
+			var	tmp	= popHistory();
+			rg.randomize(tmp[1]);
+			tmp	= popHistory();
+			oya_no	= tmp[1];
+		}
+		else
+		{
+			history.clear();
+			history.add(["serialize", rg.serialize()]);
+			history.add(["oya", oya_no]);
+		}
+
+		return seed;	//	同じゲームを進行させる為の情報
+	}
+
+	//	山札から4枚ずつ配る
+	function distribute(fudas, place)
+	{
+		for(var i=0; i<4; i++)
+		{
+			fudas.add(yamafuda[0]);
+			yamafuda[0].place	= place;
+			yamafuda.erase(0);
+		}
+	}
+
+	//	山札を作成する
+	var shuffled;
+	function shuffleYamafuda()
+	{
+		if(shuffled)
+			return;
+
+		var redist;
+		do
+		{
+			dm("shuffleYamafuda");
+			redist	= false;
+
+			//	山を作成
+			var choiced	= [];
+			if(yamafuda)	yamafuda.clear();
+			else		yamafuda	= [];
+			var start = 0;
+
+			//	手四を発生させる
+/*			start	= 8;	//	4なら片方、8なら両方に発生
+			for(var i=0; i<start; i++)
+			{
+				yamafuda.add(allfuda[i]);
+				allfuda[i].place	= i \ 4;
+				choiced[i]	= true;
+			}
+*/
+			for(var i=start; i<札点数一覧.count-1; i++)
+			{
+				var no;
+				do {
+					no = int(rg.random() * 札点数一覧.count);
+				} while(choiced[no]);
+				choiced[no]	= true;
+
+				yamafuda.add(allfuda[no]);
+				allfuda[no].place	= 0;
+			}
+			for(var i=0; i<札点数一覧.count; i++)
+			{
+				if(!choiced[i])
+				{
+					yamafuda.add(allfuda[i]);
+					allfuda[i].place	= 0;
+					break;
+				}
+			}
+
+			//	仮に配る
+			var ba = [], te = [ [], [] ], cnt = 0;
+			for(var i=0; i<2; i++)
+			{
+				for(var j=0; j<4; j++)
+				{
+					te[0].add(yamafuda[cnt]);
+					te[1].add(yamafuda[cnt+4]);
+					ba.add(yamafuda[cnt+8]);
+					cnt++;
+				}
+				cnt	+= 8;
+			}
+
+			//	手札、場札のチェック
+			var checkfunc = function(fudas, cnt)
+			{
+				var mon = [];
+				for(var i=0; i<fudas.count; i++)
+					mon[fudas[i].month]++;
+				for(var i=1; i<=12; i++)
+				{
+					if(mon[i] == cnt)
+					{
+						return true;
+					}
+				}
+				return false;
+			};
+			redist	|= checkfunc(ba, 4);	//	場札に同じ月が4枚見つかったら、配りなおし
+			redist	|= checkfunc(te[0], 3);	//	手札に同じ月が3枚見つかったら、配りなおし
+			redist	|= checkfunc(te[1], 3);
+		}
+		while(redist);
+		shuffled	= true;
+	}
+
+	//	指定の札を配る
+	function distributeIt(player, fudano)
+	{
+		dm(@"${fudano\4+1}月の${fudano%4+1}番目");
+		for(var i=0; i<yamafuda.count; i++)
+		{
+			if(yamafuda[i].no == fudano)
+			{
+				tefuda[player].add(yamafuda[i]);
+				yamafuda[i].place	= player + 2;
+				yamafuda.erase(i);
+				dm(@"山札${i} => プレイヤー${player+1}の${tefuda[player].count}番目");
+				return true;
+			}
+		}
+		return false;
+	}
+
+	//	プレイヤーに配る(1回のゲームの開始)
+	function startRound()
+	{
+		dm(@"第${round+1}回戦開始(親はプレイヤー${oya_no+1})");
+
+		//	ターンのズレはリセット
+		turndisplacement	= 0;
+
+		//	山札が作られていないなら、作る
+		shuffleYamafuda();
+		release(bafuda);	bafuda		= [];
+		release(tefuda[0]);	tefuda[0]	= [];
+		release(tefuda[1]);	tefuda[1]	= [];
+		shuffled= false;
+
+		//	プレイヤーと場に配る
+		for(var i=0; i<2; i++)
+		{
+			distribute(tefuda[(oya_no+1) & 1], 2 + ((oya_no+1) & 1));
+			distribute(tefuda[oya_no], 2 + oya_no);
+			distribute(bafuda, 1);
+		}
+/*
+		{//	手札の0番にコウ札の月のカス札を配置
+			//	山札の中にあるコウ札を探し、その月をリストする
+			var iskou	= function(fuda)
+			{
+				return 札点数一覧[fuda.no] == 20;
+			} incontextof this;
+			var mons	= [];
+			for(var i=0; i<yamafuda.count; i++)
+			{
+				if(iskou(yamafuda[i]))
+					mons[yamafuda[i].month]	= true;
+			}
+
+			//	リストされた月のカス札があれば、その札を先頭へ移動させる
+			for(var i=0; i<tefuda[1].count; i++)
+			{
+				if(mons[tefuda[1][i].month] && 札点数一覧[tefuda[1][i].no] == 1)
+				{
+					tefuda[1][i] <-> tefuda[1][0];
+					break;
+				}
+			}
+		}
+*/
+		//	役札は空にする
+		release(yakufuda[0]);	yakufuda[0]	= [];
+		release(yakufuda[1]);	yakufuda[1]	= [];
+
+		//	直前のポイントを0に
+		totalPoint = curPoint[0] = curPoint[1]	= 0;
+		release(curYaku[0]);
+		release(curYaku[1]);
+		release(curYakuTmp[0]);
+		release(curYakuTmp[1]);
+		lastYakuString[0] = lastYakuString[1] = "";
+
+		//	フラグを初期化
+		_koikoi[0] = _koikoi[1] = 0;
+//		agari	= void;
+		state	= oya_no;
+
+		turn	= 0;
+		return true;
+	}
+
+	//	手札役になっているか？
+	function isTefudaYaku(fudas)
+	{
+		var m2c	= [];
+		for(var i=0; i<fudas.count; i++)
+			m2c[fudas[i].month]++;	//	各月の枚数を数える
+
+		var p2 = 0, p4 = void;
+		for(var i=1; i<=12; i++)
+		{
+			dm(i+"月 "+m2c[i]+"枚");
+			if(m2c[i] == 2)
+				p2++;
+			if(m2c[i] == 4)
+				p4	= i;
+		}
+
+		if(p2 == 4)
+		{
+			dm("くっつき完成");
+			return [ [ "くっつき", 6 ] ];	//	くっつき(同じ月が2枚ずつ4組ある)
+		}
+		else if(p4 !== void)
+		{
+			dm("手四完成");
+			return [ [ "手四", 6,  p4] ];	//	手四(同じ月が4枚ある)
+		}
+
+		return [];	//	手札役なし
+	}
+
+	//	手札役が完成しているか？
+	function checkTefudaYaku()
+	{
+		if(手札役あり)
+		{
+			curYaku[0]	= isTefudaYaku(tefuda[0]);
+			curYaku[1]	= isTefudaYaku(tefuda[1]);
+			curYakuTmp[0] = [];
+			curYakuTmp[1] = [];
+			curYakuTmp[0].assignStruct(curYaku[0]);	//	コピーする
+			curYakuTmp[1].assignStruct(curYaku[1]);
+			//	どちらかに手札役があれば、このラウンドは終了
+			var winner	= curYaku[0].count ? 0 : (curYaku[1].count ? 1 : void);
+			if(winner === void)
+				return false;
+			state	= winner | 2;
+
+			var point = curYaku[winner][0][1];
+			var loser = (winner + 1) & 1;
+			if(isValidTreasure(godhand, loser))
+			{//	相手がゴッドハンド発動中
+				var sv = getPlayerServant(loser, "バーサーカー");
+				var rest= sv[5];
+				var use	= Math.min(point, rest);	//	ゴッドハンドのストックか、文数の小さい方
+				curYaku[winner].add([godhand, -use]);			//	役名「ゴッドハンド」
+				point	-= use;
+			}
+			totalPoint	= point;
+			return true;
+		}
+		return false;	//	手札役はできてないので、ラウンド継続
+	}
+
+	//	場に同じ月の札が3枚あるか？
+	function checkBafuda()
+	{
+		var ba = bafuda;
+		var mon = [];
+		for(var i=0; i<ba.count; i++)
+		{
+			var m = ba[i].month;
+			mon[m]	= [] if mon[m] == void;
+			mon[m].add(i);
+		}
+		var same = [];
+		for(var i=1; i<=12; i++)
+		{
+			if(mon[i] !== void && mon[i].count == 3)
+				same.add(mon[i]);
+		}
+		return same;
+	}
+
+	//	指定のポイントの札か？
+	function isEqualPointFuda(point, fuda)
+	{
+		return point == fuda.point ||	//	役に必要な点数の札か、
+			((fuda.no == 杯札番号 || fuda.no == 桐大判番号) && point == 1 && 二役あり);	//	杯札で、カス札を探していて、杯札をカスとするルールであれば、減らす
+	}
+
+	//	役が更新されたかをチェック
+	function isUpdateYakus(oldyaku, newyaku)
+	{
+		//	役の減少は無視して、役が増加したか・文数が増加したかで判断する
+		var old = %[];
+		dm("old yaku = "+oldyaku);
+		if(oldyaku)
+		{
+			for(var i=0; i<oldyaku.count; i++)
+			{
+				dm("元の役: "+oldyaku[i][0]+"("+oldyaku[i][1]+"文)");
+				old[oldyaku[i][0]] = oldyaku[i][1];
+			}
+		}
+		for(var i=0; i<newyaku.count; i++)
+		{
+			var yaku = newyaku[i];
+			dm("新しい役: "+yaku[0]+"("+yaku[1]+"文)");
+			if(	old[yaku[0]] === void ||	//	以前には存在しなかった役
+				old[yaku[0]] < yaku[1])		//	もしくは、文数が増加した役
+			{
+				dm(yaku[0]+"が"+(old[yaku[0]]===void ? "追加された" : ("文数が増加("+old[yaku[0]]+"→"+yaku[1]+")した"))+"のであがれる。");
+				return true;	//	更新された
+			}
+		}
+		return false;	//	更新されてない
+	}
+
+	//	あがれるかどうかチェックする
+	function checkAgari(player=currentPlayer)
+	{
+		dm("プレイヤー"+player+"の現在の役");
+		var yakus	= decisionYaku(yakufuda[player],, player);
+		var point= 0;
+		var yakustring	= "";
+		for(var i=0; i<yakus.count; i++)
+		{
+			point	+= yakus[i][1];
+			yakustring	+= yakus[i][0]+yakus[i][1];
+			dm("    "+yakus[i][0]+": "+yakus[i][1]+"文");
+		}
+		regenerateMPfromYaku(curYaku[player], yakus);	//	役が揃ったらMP増加
+		var	agari	= isUpdateYakus(curYakuTmp[player], yakus);
+		if(curYakuTmp[player])
+			curYakuTmp[player].clear();
+		else
+			curYakuTmp[player]	= [];
+		curYakuTmp[player].assign(yakus);	//	役をコピーする
+/*		{
+			var	oldyaku	= curYakuTmp[player];
+			for(var i=0; i<oldyaku.count; i++)
+				dm("現在の役: "+oldyaku[i][0]+"("+oldyaku[i][1]+"文)");
+		}
+*/		if(agari)
+		{
+			//	前回よりポイントが上がっているなら、あがれる→ポイントが下がってもあがれる状態になることがあるので×
+			//	役状態を文字列化しておき、その比較で変化したかチェックする
+			curPoint[player]	= point;
+			state	= player + 2;
+
+			if(isValidTreasure(enuma_elish))
+			{//	エヌマ・エリシュ発動中
+				yakus.add([enuma_elish, enuma_elish_point]);
+				point	+= enuma_elish_point;
+			}
+			if(isValidTreasure(broken_fantasm))
+			{//	ブロークンファンタズム発動中
+				for(var i=0; i<yakus.count; i++)
+				{
+					if(yakus[i][0].indexOf("赤短") >= 0)
+					{//	赤短、赤短青短の重複があれば、効果をもつ
+						yakus.add([broken_fantasm, broken_fantasm_point]);
+						point	+= broken_fantasm_point;
+						break;
+					}
+				}
+			}
+			if(isValidTreasure(survive))
+			{//	サバイブ発動中
+				for(var i=0; i<yakus.count; i++)
+				{
+					if(yakus[i][0] == "カス")
+					{//	カスがあれば、その点数を倍にする
+						yakus.add([survive, yakus[i][1]]);
+						point	+= yakus[i][1];
+						break;
+					}
+				}
+			}
+			if(isValidTreasure(excalibur))
+			{//	エクスカリバー発動中
+				var ep = int(point * excalibur_power);	//	ダメージをX倍
+				yakus.add([excalibur, ep]);
+				point	+= ep;
+			}
+			if(７文倍掛けあり && point >= 倍になる下限の得点)
+			{
+				//	7文以上で点数を倍
+//				yakus.add(["７文以上で点数２倍", point]);
+				yakus.add(["七文以上で倍", point]);
+				point	+= point;
+			}
+			if(倍返しあり && _koikoi[currentOpponent])
+			{
+				//	「こいこい」の倍返し
+//				yakus.add(["「こいこい」の倍返し", point]);
+				yakus.add(["こいこいで倍", point]);
+				point	+= point;
+			}
+			if(isValidTreasure(godhand, currentOpponent))
+			{//	相手がゴッドハンド発動中
+				var sv = getPlayerServant(currentOpponent, "バーサーカー");
+				var rest= sv[5];
+				var use	= Math.min(point, rest);	//	ゴッドハンドのストックか、文数の小さい方
+				yakus.add([godhand, -use]);			//	役名「ゴッドハンド」
+				point	-= use;
+			}
+
+			curYaku[player]	= yakus;
+			totalPoint		= point;
+
+			lastYakuString[player]	= yakustring;
+			dm("あがれます。");
+			return true;
+		}
+		dm("役がないか、「こいこい」しているためあがれません。");
+		return false;
+	}
+
+	function calcTotalYakuPoint(player=currentPlayer)
+	{
+		var yakus	= curYaku[player];
+		var point	= totalPoint;
+
+		//	最終的なポイントの計算
+		if(isValidTreasure(row_aias, currentOpponent))
+		{//	相手がロー･アイアス発動中
+			var use	= Math.min(point, row_aias_life);	//	ローアイアスの能力か、文数の小さい方
+			yakus.add([row_aias, -use]);	//	役名「ロー･アイアス」
+			point	-= use;
+		}
+		if(isValidTreasure(avalon, currentOpponent))
+		{//	相手がアヴァロン発動中
+			var rest = getRestPoint(currentOpponent) \ avalon_power;	//	相手の残り点数の半分
+			dm("avalon: "+rest+" : "+point);
+			if(rest < point)
+			{	//	残り点数がダメージより小さいとき
+				yakus.add([avalon, -(point - rest)]);
+				point	= rest;		//	ダメージを残り点数の半分に制限する
+			}
+		}
+		totalPoint		= point;
+	}
+
+	//	勝負を掛けることが出来るか
+	function checkShoubu()
+	{
+		//	相手がメイド・ドラグーンを使用していれば、“勝負”できない。
+		if(isValidTreasure(maid_dragoon, currentOpponent))
+		{
+			//	1度チェックされたら、効果がなくなる
+			var ps	= playerServant[currentOpponent];
+			for(var i=0; i<ps.count; i++)
+			{
+				if(ps[i][0] == maid_dragoon_user)
+					ps[i][3][0] = 1;	//	時間切れ直前(次のcheckTreasureEffectで消える)
+			}
+			state	= 4;	//	引き分け状態
+			return false;
+		}
+
+		return true;
+	}
+
+	//	既に取られている札のポイントが0の点数一覧
+	function getPointList(player=currentPlayer)
+	{
+		var list	= [];
+		var oppo	= (player + 1) & 1;
+		list.assign(札点数一覧);
+		var yaku = [];
+		yaku.add(yakufuda[player]);
+		if(!isValidTreasure(invisible_air, oppo))
+		{//	相手がインヴィジブルエアを発動していなければ、相手の役札がわかる
+			yaku.add(yakufuda[oppo]);
+		}
+		for(var i=0; i<yaku.count; i++)
+		{
+			for(var j=0; j<yaku[i].count; j++)
+				list[yaku[i][j].no]	= 0;
+		}
+		return list;
+	}
+
+	//	リーチ状態にある役を返す(wcnt: 通常の役の残枚数, kcnt: カスの残枚数)
+	function getLastOneYaku(player=currentPlayer, wcnt=1, kcnt=2, min=0, mediate=false)
+	{
+		var yakus	= decisionYaku(yakufuda[player], true, player);
+		var keys	= [];
+		keys.assign(yakus);
+		var tempaiyakus	= [];	//	[役名称, [必要な札,...], 残枚数]
+		var list	= getPointList(player);
+		for(var i=0; i<keys.count; i+=2)
+		{
+			var name	= keys[i];
+			var yaku	= yakus[name];
+			var last	= yaku[0];	//	残り枚数
+			//	あがっていないか、あがっていても追加できる役で、
+			//	残り枚数がwcnt枚("カス"の場合はkcnt枚)以下の役を対象とする
+			if((last > min || 役一覧[name][3] != void) && (last <= wcnt || (name == "カス" && last <= kcnt)))
+			{//	残り枚数で判断
+				if(typeof yaku[1] == "Integer")
+				{//	点札であがる
+					var fudas	= [];
+					for(var i=0; i<list.count; i++)
+					{
+						if(list[i] == yaku[1])
+							fudas.add(i);
+					}
+					if((fudas.count > 0) ||	//	必要な点札が残っていて、
+						(mediate && last <= 0))		//	成立している役を無条件で受け入れるとき
+					{
+						tempaiyakus.add([name, fudas, last]);	//	リーチ状態
+					}
+				}
+				else
+				{//	特定の札であがる
+					var needs	= [];
+					needs.assign(yaku[1]);	//	yaku[1]は辞書配列(役名 => 1)
+					var fudas	= [];
+					for(var j=0; j<needs.count; j+=2)
+					{
+						dm("list["+needs[j]+"] = "+list[needs[j]]);
+						fudas.add(needs[j]) if list[needs[j]] > 0;
+					}
+					if((fudas.count >= last) ||		//	必要な札がまだ残っているとき
+						(mediate && last <= 0))		//	成立している役を無条件で受け入れるとき
+					{
+						tempaiyakus.add([name, fudas, last]);	//	リーチ状態
+					}
+				}
+			}
+		}
+		invalidate yakus;
+		return tempaiyakus;
+	}
+
+	//	役の判定(第2引数は、役の状態を返すか出来ている役を返すかの違い)
+	function decisionYaku(fudas, getstate=false, player)
+	{
+		if(fudas === void)
+		{//	札の指定がないときは、現在のプレイヤーの役札を出す
+			fudas	= currentYakufuda;
+		}
+		if(player === void)
+		{//	上記と同様に、現在のプレイヤーを示す
+			player	= currentPlayer;
+		}
+
+		var yakus		= %[];	//	役の、現在の状態
+		var invalid_yaku= %[];
+		var maked_yakus	= [];
+		(Dictionary.assignStruct incontextof yakus)(役一覧);
+//		var keys		= 役チェック順;
+		var keys		= getValidYakuNames(player);
+//		var opponent	= (player + 1) & 1;
+		for(var i=0; i<keys.count; i++)
+		{
+			var yaku_name	= keys[i];
+			if(invalid_yaku[yaku_name])
+				continue;	//	重複不可の役であったので、回避
+
+			var yaku	= yakus[yaku_name];
+			if(yaku == void)
+				continue;	//	無効な役であったので、回避
+
+			//	必要な枚数揃っているか？
+//			var count	= yaku[0];	//	必要な枚数
+			if(typeof yaku[1] == "Integer")
+			{//	札の点数で判断
+				for(var j=0; j<fudas.count; j++)
+					yaku[0]-- if isEqualPointFuda(yaku[1], fudas[j]);
+			}
+			else
+			{//	札の番号で判断
+				for(var j=0; j<fudas.count; j++)
+				{
+					if(yaku[1][fudas[j].no])	//	役に必要な札であれば、
+					{
+						yaku[0]--;				//	必要枚数を減らす
+						delete yaku[1][fudas[j].no];	//	既にある札を削除
+					}
+				}
+			}
+
+			//	手元に役を無効にする札が無いかチェック
+			if(yaku[5] != void)
+			{
+				var invalid_fudas	= yaku[5];
+				var invalid_fuda_dic= %[];
+				for(var j=0; j<invalid_fudas.count; j++)
+					invalid_fuda_dic[invalid_fudas[j]]	= true;
+				for(var j=0; j<fudas.count; j++)
+				{
+					if(invalid_fuda_dic[fudas[j].no])
+					{//	無効にする札が見つかったら、役はご破算
+						yaku[0]	+= 256;	//	絶対成立しない
+						break;
+					}
+				}
+			}
+
+			//	雨四光が有効か？
+			if(yaku_name == 雨四光の名前)
+			{
+				if(!雨四光あり)
+				{
+					yaku[0]	+= 256;	//	成立しない
+				}
+				else if(yaku[0] < 2)
+				{//	必要な札が残り1枚のとき
+					var existAme	= false;
+					for(var i=0; i<fudas.count; i++)
+					{
+						if(fudas[i].no == 雨番号)
+						{
+							existAme	= true;
+							break;
+						}
+					}
+					if(!existAme)
+					{//	手元に雨札がなければ、対象となるのは雨札のみになる
+						yaku[1]	= %[ 雨番号 => 1 ];
+					}
+				}
+			}
+
+			//	役が成立するか？
+			if(yaku[0] <= 0)
+			{
+				var maked	= [ yaku_name, yaku[2] ];	//	役名、点数
+
+				//	追加条件があれば、ポイントをチェックする
+				var cond = yaku[3];
+				if(cond != void)
+				{
+					var count	= -cond[0];	//	最低限必要な枚数(あるはずではある)
+					for(var j=0; j<fudas.count; j++)
+						count++ if isEqualPointFuda(cond[1], fudas[j]);	//	枚数を数える
+					maked[1]	+= count * cond[2];	//	余分の枚数分とポイントを掛けたものを足す
+				}
+
+				if(maked != void)
+				{
+					maked_yakus.add(maked);	//	ご破算にならなければ、出来た役に追加
+
+					//	この役が成立したことで成立しなくなる役を登録
+					var invy = yaku[4];
+					if(invy)
+					{
+						for(var i=0; i<invy.count; i++)
+							invalid_yaku[invy[i]]	= true;
+					}
+
+					//	雨四光が成立すると四光はリーチできない
+					if(yaku_name ==  雨四光の名前 && yakus["四光"] != void)
+						delete yakus["四光"];
+				}
+			}
+		}
+		if(isValidTreasure(berrehorn, player))
+		{//	ベルレフォーン発動中なら
+			//	成立役にベルレフォーンを追加
+			maked_yakus.add([berrehorn, berrehorn_point]);	//	発動直後=あがれる/その後=あがれば+ポイント
+			yakus[berrehorn] = [0, 0, berrehorn_point];
+		}
+		if(getstate)
+			return yakus;
+		else
+			return maked_yakus;
+	}
+
+	//	合札のチェック
+	function searchAifuda(fudas=currentTefuda)
+	{
+		var samemonth	= [];
+		for(var i=0; i<bafuda.count; i++)
+		{
+			var ba = bafuda[i];
+			for(var j=0; j<fudas.count; j++)
+			{
+				if(ba.month == fudas[j].month)
+				{
+					dm(@"${j}番目の手札(${fudas[j].month}, ${fudas[j].number})が場札(${ba.month}, ${ba.number})と合札");
+					samemonth.add([i, j]);
+				}
+			}
+		}
+		return samemonth;
+	}
+
+	//	現在の札状態を取得(0:持ってる, 1:持ってない, 2:相手が持ってる)
+	function getFudaState(player)
+	{
+		var state = [];
+		for(var i=0; i<allfuda.count; i++)
+			state[i]	= 1;
+		var yas = [ yakufuda[player], yakufuda[(player + 1) & 1] ];
+		var signal = [ 0, 2 ];
+		for(var p=0; p<2; p++)
+		{
+			var ya	= yas[p];
+			if(ya != void)
+			{
+				var sig	= signal[p];
+				for(var i=0; i<ya.count; i++)
+					state[ya[i].no]	= sig;
+			}
+		}
+		return state;
+	}
+
+	//	指定の札が絡む、役のリストとその状態
+	function getRelatedYakus(player, fuda_or_yaku)
+	{
+		var state	= getFudaState(player);	//	札の状態を取得
+		var keys	= [];
+		var point;
+
+		//	札か役か
+		var fuda, point, fudano;
+		if(typeof fuda_or_yaku == "Object")
+		{
+			//	札指定で検索
+			fuda	= fuda_or_yaku;
+//			keys.assign(役チェック順);
+			keys.assign(getValidYakuNames(player));
+
+			//	11月のコウ札なら四光を、それ以外のコウ札なら雨四光を取り除く
+			if(fuda.point == 20)
+			{
+				var erasename	= fuda.no == 雨番号 ? "四光" : "雨四光";
+				for(var i=0; i<keys.count; i++)
+				{
+					if(keys[i] == erasename)
+					{
+						keys.erase(i);
+						break;
+					}
+				}
+			}
+			point	= fuda.point;
+			fudano	= fuda.no;
+		}
+		else
+		{
+			//	役指定で検索
+			keys.add(fuda_or_yaku);
+			var yaku = 役一覧[fuda_or_yaku];
+			if(yaku == void)
+				return void;
+			if(typeof yaku[1] == "Integer")
+				point	= yaku[1];
+			else
+			{
+				var fudas = [];
+				fudas.assign(yaku[1]);
+				fudano	= fudas[0];
+			}
+		}
+
+		//	それぞれの札をチェック
+		var yakus	= [];
+		for(var i=0; i<keys.count; i++)
+		{
+			var name = keys[i];
+			var yaku = 役一覧[name];
+			if(yaku == void)	continue;	//	実体のない役はスキップ
+			var text;
+			dm("check: "+name);
+			if(name == berrehorn)
+			{
+				yakus.add([ berrehorn_info, [] ]);
+			}
+			else if(typeof yaku[1] == "Integer")
+			{//	点数で対応
+				if(二役あり && (fudano == 杯札番号 || fudano == 桐大判番号) && yaku[1] == 1)
+					point	= 1;
+				if(yaku[1] == point)
+				{//	含まれる
+					dm("ok   : "+name);
+					//	表示テキスト
+					text	= [ name+"("+yaku[2]+"文)" ];
+					if(name == "雨四光")
+						text.add("  11月のコウ札と、いずれかのコウ札を3枚集める。");
+					else
+						text.add("  "+札名一覧[yaku[1]]+"札を"+yaku[0]+"枚集める。");
+					text.add("  (1枚増える毎に点数が1文あがる)") if yaku[3] != void && name != "五光";
+
+					//	表示札
+					var target = [];
+					for(var j=0; j<allfuda.count; j++)
+					{
+						if(allfuda[j].point == point)
+							target.add([allfuda[j].no, state[allfuda[j].no]]);
+					}
+					target.sort(function(a, b) { return a[1] < b[1]; }, true);
+
+					yakus.add([ text, target ]);	//	表示リストへ追加
+				}
+			}
+			else
+			{//	番号で対応
+				if(yaku[1][fudano])// || (雨四光あり && fuda.no == num(11, 0) && name == "四光"))
+				{//	含まれる
+					dm("ok   : "+name);
+					//	表示テキスト
+					var fudas = [];
+					fudas.assign(yaku[1]);
+					text	= [ name+"("+yaku[2]+"文)", "  下記の札を"+(yaku[0] == (fudas.count>>1) ? "すべて" : yaku[0]+"枚")+"集める" ];
+					if(name == "四光" && 雨四光あり)
+					{
+						text.add("  (いずれかの代わりに11月のコウ札が入ると、");
+						text.add("  \"雨四光\"となり"+役一覧["雨四光"][2]+"文)");
+					}
+					text.add("  (他の"+札名一覧[yaku[3][1]]+"札が1枚増える毎に点数が1文あがる)") if yaku[3] != void;
+
+					//	表示札
+					var target = [];
+					for(var j=0; j<fudas.count; j+=2)
+						target.add([fudas[j], state[fudas[j]]]);
+					target.sort(function(a, b) { return a[0] < b[0]; });
+					target.sort(function(a, b) { return a[1] < b[1]; }, true);
+
+					yakus.add([ text, target ]);	//	表示リストへ追加
+				}
+			}
+		}
+
+		return yakus;
+	}
+
+	//	札を場に出す(手札から、山札から引いた札)
+	function playFuda(tefuda_no_or_turnup, bafuda_no)
+	{
+		//	記録
+		if(!replay)
+			history.add(["play", tefuda_no_or_turnup, bafuda_no]);
+
+		var player	= currentPlayer;
+		var te	= tefuda[player];
+		var fuda;
+		//	ブレイカーゴルゴーンの能力を単純な1回休み(相手の番を飛ばす)に変更
+		var gorgon_on	= false;//isValidTreasure(breaker_gorgon, currentOpponent);
+		if(tefuda_no_or_turnup !== void)
+		{
+			fuda	= te[tefuda_no_or_turnup];
+/*			//	札移動の順序と関連性があるため、ここで出す札を変更すると不具合が生じてしまう
+			if(gorgon_on)
+			{//	出す札がランダムになる
+				var no = int(rg.random() * te.count);
+				fuda	= te[no];
+			}
+*/		}
+		else
+			fuda	= turnup;
+		bafuda_no	= -1 if bafuda_no === void;
+
+		if(bafuda_no < 0)
+		{//	指定が無いので、合札を探して重ねる。
+			var aifuda	= searchAifuda([fuda]);
+			if(aifuda.count > 0)
+				bafuda_no	= aifuda[0][0];
+			else
+				bafuda_no	= 0;	//	合札がないときは捨てる
+		}
+//		dm(@"札(${fuda.month}, ${fuda.number})と場札(No.${bafuda_no}: ${bafuda[bafuda_no].month}, ${bafuda[bafuda_no].number})をあわせる");
+
+		if(gorgon_on)	//	ブレイカー・ゴルゴーンが有効だと、強制的に捨て札する
+			bafuda_no	= 255;
+
+		var move	= [];	//	[[src, dest, 札], ...] src, dest = 0:場, 1:手, 2:役
+		if(bafuda.count > bafuda_no && fuda.month == bafuda[bafuda_no].month)
+		{//	指定の場札が確かに合札であるとき
+			//	場札に同じ月が3枚あるか？
+			var same = [];
+			var getfudas	= [];
+			for(var i=0; i<bafuda.count; i++)
+			{
+				if(bafuda[i].month == fuda.month)
+					same.add(i);
+			}
+
+			//	手札、場札から、出したプレイヤーの手元へ移動させる
+			if(same.count == 3)
+			{
+				//	3枚とも取れる
+				dm(@"札(${fuda.month}, ${fuda.number})を出して、場札(${bafuda[same[0]].month}, ${bafuda[same[0]].number}), (${bafuda[same[1]].month}, ${bafuda[same[1]].number}), (${bafuda[same[2]].month}, ${bafuda[same[2]].number})を取得");
+				with(yakufuda[player])
+				{
+					move.add([1, 2, fuda]);		//	手札から役札への移動記録
+					.add(fuda);	//	手札を役札へ
+			getfudas.add(fuda);
+					fuda.place	= 4 + player;
+					for(var i=same.count-1; i>=0; i--)
+					{
+						move.add([0, 2, bafuda[same[i]]]);	//	場札から役札への移動記録
+						.add(bafuda[same[i]]);	//	場札を役札へ
+				getfudas.add(bafuda[same[i]]);
+						bafuda[same[i]].place	= 4 + player;
+						bafuda.erase(same[i]);	//	その分削除
+					}
+				}
+			}
+			else
+			{
+				dm(@"札(${fuda.month}, ${fuda.number})を出して、場札(${bafuda[bafuda_no].month}, ${bafuda[bafuda_no].number})を取得");
+				with(yakufuda[player])
+				{
+					move.add([1, 2, fuda]);		//	手札から役札への移動記録
+					.add(fuda);
+			getfudas.add(fuda);
+					fuda.place	= 4 + player;
+					move.add([0, 2, bafuda[bafuda_no]]);	//	場札から役札への移動記録
+					bafuda[bafuda_no].place	= 4 + player;
+					.add(bafuda[bafuda_no]);
+			getfudas.add(bafuda[bafuda_no]);
+				}
+				bafuda.erase(bafuda_no);	//	合札の場札を削除
+			}
+			sortYakufuda(player);	//	役札をソート
+
+			regenerateMPfromFuda(getfudas);	//	MPが回復する札かをチェック
+		}
+		else
+		{
+			//	捨て札する
+			dm(@"捨て札(${fuda.month}, ${fuda.number})する。");
+			bafuda.add(fuda);	//	場札に出した札を加える
+			fuda.place	= 1;
+			move.add([1, 0, fuda]);	//	手札から場札への移動記録
+		}
+
+		//	札の処理
+		if(tefuda_no_or_turnup !== void)
+		{
+			te.erase(tefuda_no_or_turnup);	//	手札から出した札を削除
+
+			//	手札を出したとき、山札を一枚引いて、返す
+			turnup	= yamafuda[0];
+			turnup.place	= 6 + player;
+			yamafuda.erase(0);
+			dm(@"札(${turnup.month}, ${turnup.number})を引いた。");
+		}
+		else
+			turnup	= void;
+
+		return move;	//	札の移動リスト
+	}
+
+	//	役札のソート
+	function sortYakufuda(player)
+	{
+		//	ポイント昇順、月降順で並べなおす
+		var cmp	= function (a, b)
+		{
+			return (4 - a.number) + (12 - a.month) * 8 + a.point * 128 > (4 - b.number) + (12 - b.month) * 8 + b.point * 128;
+		};
+		shellsort(yakufuda[player], cmp);
+	}
+
+	//	勝負する
+	function shoubu(player=currentPlayer)
+	{
+		dm("プレイヤー"+(player+1)+"「勝負！」");
+
+		//	記録
+		if(!replay)
+			history.add("shoubu");
+
+		//	結果表示
+		var yakus = curYaku[player];
+		var point	= 0;
+		for(var i=0; i<yakus.count; i++)
+		{
+			dm("  "+yakus[i][0]+": "+yakus[i][1]+"文");
+			point	+= yakus[i][1];
+		}
+		dm("--------------------");
+		dm("  合計: "+point+"文");
+	}
+
+	//	こいこいする
+	function koikoi(player=currentPlayer)
+	{
+		//	記録
+		if(!replay)
+			history.add("koikoi");
+
+		dm("プレイヤー"+(player+1)+"「こいこい！」");
+		_koikoi[player]++;
+	}
+
+	//	次のターン
+	function nextTurn()
+	{
+		dm("==== ターン交代: "+currentPlayer+"→"+currentOpponent+" ====");
+
+		if(_koikoi[currentPlayer] && isValidTreasure(bradfort_andromeda, currentPlayer))
+		{//	こいこい状態でブラッドフォート・アンドロメダが発動中
+			//	相手にダメージ(=自分に加点)
+			if(getRestPoint(currentOpponent)>2)	//	ブラッドフォートは致死ではない
+				playerpoint[currentPlayer]++;
+
+			//	自分のMP回復
+			var sv = getPlayerServant(currentPlayer, "ライダー");
+			if(sv[1] < servant["ライダー"][0])
+			{//	最大MP以下なら
+				var	last	= sv[1];
+				sv[1]	+= 1 * MPBurst;
+				dm(sv[0]+".MP: "+last+" → "+sv[1]+"(nextTurn)");
+				sv[2]	= true;
+			}
+		}
+
+		//	「ブレーカー・ゴルゴーン」が使われていたら、順番にズレが生じる
+		if(isValidTreasure(breaker_gorgon))// && tefuda[currentPlayer].count >= 2)
+			turndisplacement--;
+		dm("turn displacement = "+turndisplacement);
+
+		turn++;
+		dm("==== 次のターン: Player"+currentPlayer+" ====");
+
+		//	次のプレイヤーが手札を持っていなければ、更にターンが変わる
+		if(tefuda[currentPlayer].count == 0)
+			turn++;
+
+		//	宝具の効果継続チェック
+		checkTreasureEffect(0);
+		checkTreasureEffect(1);
+
+		//	点数チェック
+		if(getRestPoint(0) < 1)
+		{
+			state	= 3;	//	PLAYER1の勝ち
+			return false;
+		}
+		if(getRestPoint(1) < 1)
+		{
+			state	= 2;	//	PLAYER0の勝ち
+			return false;
+		}
+
+		//	手札枚数チェック
+		if(tefuda[0].count + tefuda[1].count < 1)
+		{
+			//	どちらも手札がなくなった
+			state	= 4;	//	引き分け
+			return false;
+		}
+
+		return true;	//	ラウンド継続可能
+	}
+
+	//	次のラウンド
+	function nextRound()
+	{
+//		dm("nextRound();");
+		//	得点
+		if(state & 2)
+		{//	引き分け以外のとき、点数計算
+			var winner	= state & 1;
+			var yaku	= curYaku[winner];
+			var point	= 0;
+			for(var i=0; i<yaku.count; i++)
+			{
+				point	+= yaku[i][1];
+
+				//	ゴッドハンドを使っていたら
+				if(yaku[i][0] == godhand)
+				{
+					var sv = getPlayerServant((winner+1) & 1, "バーサーカー");
+					sv[5]	+= yaku[i][1];	//	使った分だけ減らす
+					if(sv[5] == 0)			//	ゴッドハンドのストックがなくなったので
+						sv[3][0]	= 0;	//	ゴッドハンド無効
+				}
+			}
+			playerpoint[winner]	+= point;
+			dm("プレイヤー1の点数: "+playerpoint[0]+"文 / プレイヤー2の点数: "+playerpoint[1]+"文");
+		}
+
+		//	継続チェック
+		round++;
+		if(回数戦)
+		{
+			if(round >= maxround)
+			{
+				dm("規程対戦数を消化した為、試合終了");
+				return false;	//	ゲーム終了
+			}
+		}
+		else
+		{
+			if(playerpoint[0] >= minimumpoint[1] || playerpoint[1] >= minimumpoint[0])
+			{
+				dm("規程のポイントに達した為、試合終了");
+				return false;	//	ゲーム終了
+			}
+		}
+
+		//	親決定
+		if(勝ち親 && state != 4)
+			oya_no	= state & 1;
+		else
+			oya_no	= (oya_no + 1) & 1;
+
+		//	宝具情報のリセット
+		resetTreasure();
+
+		return true;	//	ゲーム終了条件を満たしていない為、ゲーム継続
+	}
+
+	//	ルール設定
+	property 酒あり
+	{
+		setter(f)
+		{
+			_酒あり	= f;
+			var keys	= [];
+			keys.assign(酒役一覧);
+			if(f)
+			{//	酒役の追加
+				for(var i=0; i<keys.count; i+=2)
+					役一覧[keys[i]]	= 酒役一覧[keys[i]];
+			}
+			else
+			{//	削除
+				for(var i=0; i<keys.count; i+=2)
+					delete 役一覧[keys[i]] if 役一覧[keys[i]] != void;
+			}
+			雨流れあり	= _雨流れあり;	//	「酒あり」が変わったら、雨流れありを再設定する必要あり
+		}
+		getter	{ return _酒あり; }
+	}
+
+	property 雨流れあり
+	{
+		setter(f)
+		{
+			_雨流れあり	= f;
+			var keys	= [];
+			keys.assign(酒役一覧);
+			if(f)
+			{//	流れ札の追加
+				var nagare	= [ 雨番号 ];
+				for(var i=0; i<keys.count; i+=2)
+				{
+					酒役一覧[keys[i]][5]= nagare;
+					役一覧[keys[i]][5]	= nagare if(役一覧[keys[i]] != void);
+				}
+			}
+			else
+			{//	削除
+				for(var i=0; i<keys.count; i+=2)
+				{
+					酒役一覧[keys[i]][5]= void;
+					役一覧[keys[i]][5]	= void if(役一覧[keys[i]] != void);
+				}
+			}
+		}
+		getter	{ return _雨流れあり; }
+	}
+
+	property 雨四光あり
+	{
+		setter(f)
+		{
+			if(f)
+			{//	「雨に小野道風」があるとき、三光は無効
+				役一覧["三光"][5]	= [ num(11, 0) ];
+			}
+			else
+			{//	削除
+				役一覧["三光"][5]	= void;
+			}
+			_雨四光あり	= f;
+		}
+		getter	{ return _雨四光あり; }
+	}
+
+	property 修羅モード
+	{
+		setter(f)
+		{
+			if(f)
+				MPBurst	= 2;
+			else
+				MPBurst	= 1;
+			_修羅モード	= f;
+		}
+		getter	{ return _修羅モード; }
+	}
+
+	//	現在の
+	property currentPlayer	{	getter	{ return (oya_no + turndisplacement + turn) & 1; }	}
+	property currentTefuda	{	getter	{ return tefuda[currentPlayer]; }	}
+	property currentYakufuda{	getter	{ return yakufuda[currentPlayer]; }	}
+	property currentPoint	{	getter	{ return curPoint[currentPlayer]; }	}
+	property currentKoikoiCount	{ getter	{ return _koikoi[currentPlayer]; } }
+	property currentOpponent{	getter	{ return (currentPlayer + 1) & 1; }	}
+	property opponentYakufuda{	getter	{ return yakufuda[currentOpponent]; }	}
+	property opponentPoint	{	getter	{ return curPoint[currentOpponent]; }	}
+	property opponentKoikoiCount	{ getter	{ return _koikoi[currentOpponent]; } }
+	property ko_no			{	getter	{ return (oya_no + 1) & 1; }	}
+
+	//-	思考ルーチンサポート --------------------------------------------------
+	//	役札のなかの、各月の枚数
+	function existMonthInYakufuda()
+	{
+		var mcnt	= [];
+		var yaku	= [ currentYakufuda ];
+		if(!isValidTreasure(invisible_air, currentOpponent))
+		{//	相手がインヴィジブルエアを発動していなければ、相手の役札がわかる
+			yaku.add(opponentYakufuda);
+		}
+		for(var i=0; i<yaku.count; i++)
+		{
+			for(var j=0; j>yaku[i].count; j++)
+				mcnt[yaku[i][j].month]++;
+		}
+		return mcnt;
+	}
+
+	//	現在出来上がっている役の点数
+	function getCurrentYakuPoint(player=currentPlayer)
+	{
+		var yakus = curYaku[player];
+		var pt = 0;
+		for(var i=0; i<yakus.count; i++)
+		{
+			if(yakus[i][0] != "七文以上で倍" && yakus[i][0] != "こいこいで倍")
+				pt	+= yakus[i][1];
+		}
+		return pt;
+	}
+
+	//	残り持ち点
+	function getRestPoint(player=currentPlayer)
+	{
+		return minimumpoint[player] - playerpoint[(player + 1) & 1];
+	}
+
+	//	指定の役で上がったときの点数(getLastOneYakuの返り値を使う)
+	function calcLastOneYakuPoint(player, yaku)
+	{
+		var	pt	= 役一覧[yaku[0]][2];//	基本点数
+		var cond= 役一覧[yaku[0]][3];	//	追加点数条件
+		if(cond != void)
+		{
+			var count	= -cond[0];	//	最低限必要な枚数(あるはずではある)
+			var fudas	= yakufuda[player];
+			for(var j=0; j<fudas.count; j++)
+				count++ if isEqualPointFuda(cond[1], fudas[j]);	//	枚数を数える
+			pt	+= count * cond[2];	//	追加点数
+		}
+		return pt;
+	}
+
+	//	ルールにあわせて、最終的な予測のポイントを計算する
+	function calcFinalPoint(pt, player)
+	{
+		pt	*= 2 if ７文倍掛けあり && pt >= 7;
+		pt	*= 2 if 倍返しあり && _koikoi[(player + 1) & 1];
+		return pt;
+	}
+
+	//	履歴の保存
+	function saveHistory()
+	{
+		if(global.saveHanafudaReplay)
+		{
+			if(!replay && history.count > 0)
+			{
+				var fname;
+//				var dir	= System.exePath+"replay/";
+				var dir	= replayDataLocation;
+				Plugins.link("util.dll");
+				try
+				{
+					CreateDirectory(dir) if !ExistDirectory(dir);
+				}
+				catch(e)
+				{
+					return false;
+				}
+				Plugins.unlink("util.dll");
+				with(new Date())
+					fname	= playername+"vs"+cpuname+"[%02d%02d%02d-%02d%02d%02d].ksc".sprintf(.getYear()%100, .getMonth()+1, .getDate(), .getHours(), .getMinutes(), .getSeconds());
+				history.saveStruct(dir+fname);
+			}
+		}
+	}
+
+	//	履歴の読み込みとリプレイの開始
+	function loadHistory(fname)
+	{
+		if(global.enabledHanafudaReplay)
+		{
+			if(fname == void)
+			{
+				var elm	= %[initialDir:replayDataLocation,filter:"kscファイル(*.ksc)|*.ksc",title:"リプレイデータの選択",defaultExt:"ksc"];
+				if(!Storages.selectFile(elm))
+					return false;
+				dm("elm.fname = "+elm.name);
+				fname	= elm.name;
+			}
+			if(Storages.isExistentStorage(fname))
+			{
+				try
+				{
+					history	= Scripts.evalStorage(fname);
+					if(history != void)
+						replay	= true;	//	リプレイ開始
+					else
+						history	= [];
+					return true;
+				}
+				catch(e)
+				{
+					System.inform("履歴の読み込みに失敗しました。: "+e.message);
+				}
+			}
+		}
+		return false;
+	}
+
+	//	履歴情報から取り出す
+	function popHistory()
+	{
+		if(history.count > 0)
+		{
+			var tmp	= history[0];
+			history.erase(0);
+			if(history.count == 0)
+				replay	= false;	//	履歴がなくなったので、リプレイ停止
+			return tmp;
+		}
+		else
+			return void;
+	}
+
+	//-	宝具関連 --------------------------------------------------------------
+	//	サーヴァント指定
+	function addServant(pno, name, disclosure=false)
+	{
+		if(!宝具あり)
+			return;
+		if(servant[name] == void)
+			return;
+
+		var flag = [];
+		var value;
+		switch(name)
+		{
+		case "バーサーカー":
+			flag[0]	= -1;			//	バーサーカーのゴッドハンドは常時発動
+			value	= godhand_life;	//	ゴッドハンドのバッファ初期値
+			with(global.tf)
+			{
+				.hanafuda_usedTreasure	= %[] if .hanafuda_usedTreasure == void;
+				.hanafuda_usedTreasure[godhand]++;	//	ゴッドハンドを使ったので、回数を増やす
+			}
+			break;
+		case "キャスター":
+			value	= %[];
+			break;
+		}
+		playerServant[pno].add([name, servant[name][1], false, flag, [], value]);
+
+		//	宝具情報を公開する
+		if(disclosure)
+		{
+			var	treasures	= servant[name][3];
+			with(global.tf)
+			{
+				.hanafuda_usedTreasure	= %[] if .hanafuda_usedTreasure == void;
+				for(var i=0; i<treasures.count; i++)
+					.hanafuda_usedTreasure[treasures[i][0]]	= 0 if .hanafuda_usedTreasure[treasures[i][0]] === void;
+			}
+		}
+	}
+
+	//	サーヴァントの現在パラメータ取得
+	function getServantParam(pno, sno=void)
+	{
+		if(sno === void)
+			return playerServant[pno];
+		else if(pno < playerServant.count)
+			return playerServant[pno][sno];
+		else
+			return void;
+	}
+
+	//	サーヴァントの基礎情報取得
+	function getServantInfo(pno, sno)
+	{
+		var	array	= [];
+		array.assign(servant[playerServant[pno][sno][0]]);
+		array[0]	*= MPBurst;
+		return array;
+	}
+
+	//	ラウンド終了時のリセット
+	function resetTreasure()
+	{
+		if(!宝具あり)
+			return;
+
+		dm("resetTreasure();");
+		for(var i=0; i<2; i++)
+		{
+			var ps = playerServant[i];
+			for(var j=0; j<ps.count; j++)
+			{
+				var sv = ps[j];
+				sv[2]	= false;	//	MP変化フラグ
+				switch(sv[0])
+				{
+				case "バーサーカー":
+					if(sv[5] == 0)		//	ゴッドハンドが切れたら
+					{
+//						dm(sv[0]+": 宝具リセット");
+						sv[3].clear();	//	発動フラグをOFF
+					}
+					break;
+
+				case "キャスター":
+					(Dictionary.clear incontextof sv[5])();	//	ルールブレイカーで無効になった役をリセット
+					sv[3].clear();	//	発動フラグをOFF
+//					dm(sv[0]+": 宝具リセット");
+					break;
+
+				default:
+					sv[3].clear();	//	発動フラグをOFF
+//					dm(sv[0]+": 宝具リセット");
+					break;
+				}
+			}
+		}
+	}
+
+	//	札によるサーヴァントMPの増加
+	function regenerateMPfromFuda(fudas)
+	{
+		if(!宝具あり)
+			return;
+
+		var ps = playerServant[currentPlayer];
+		for(var i=0; i<ps.count; i++)
+		{
+			var sv = ps[i];
+			var svinfo = servant[sv[0]];
+
+			//	札毎にチェック
+			for(var j=0; j<fudas.count; j++)
+			{
+				var fuda	= fudas[j];
+				if(札点数一覧[fuda.no] == 20)
+				{
+					var	last	= sv[1];
+					sv[1]	+= 1 * MPBurst;	//	コウ札でMP+1
+					dm(sv[0]+".MP: "+last+" → "+sv[1]+"(regenerateMPfromFuda1)");
+					sv[2]	= true;
+				}
+				if(svinfo[2][fuda.no] !== void)
+				{
+					var	last	= sv[1];
+					sv[1]	+= svinfo[2][fuda.no] * MPBurst;	//	サーヴァント固有の札でMP+
+					dm(sv[0]+".MP: "+last+" → "+sv[1]+"(regenerateMPfromFuda2)");
+					sv[2]	= true;
+				}
+			}
+			sv[1]	+= 100 if chargeAlways;	//	常に満タンにする
+			var	max	= svinfo[0] * MPBurst;
+			var	last	= sv[1];
+			if(sv[1] > max)
+				sv[1]	= max;	//	最大値を超えない
+			dm(sv[0]+".MP: "+last+" → "+sv[1]+"(regenerateMPfromFuda3)");
+		}
+	}
+
+	//	役によるサーヴァントMPの増加
+	function regenerateMPfromYaku(last, cur)
+	{
+		return;	//	役によるサーヴァントMP変化を無効化
+
+		if(!宝具あり)
+			return;
+
+		var ps = playerServant[currentPlayer];
+		var lastyakus = %[];
+		for(var i=0; i<last.count; i++)
+			lastyakus[last[i][0]]	= true;
+		for(var i=0; i<ps.count; i++)
+		{
+			var sv = ps[i];
+			var svinfo = servant[sv[0]];
+
+			//	得た役
+			for(var j=0; j<cur.count; j++)
+			{
+				var yaku	= cur[j];
+				if(!lastyakus[yaku[0]])
+				{
+					switch(yaku[0])
+					{
+					case "カス":
+						var	last	= sv[1];
+						sv[1]	+= 1 * MPBurst;	//	カスが揃ったときにMP+1
+						dm(sv[0]+".MP: "+last+" → "+sv[1]+"(regenerateMPfromYaku1)");
+						sv[2]	= true;
+						break;
+					}
+				}
+			}
+			var	max	= svinfo[0] * MPBurst;
+			var	last	= sv[1];
+			if(sv[1] > max)
+				sv[1]	= max;	//	最大値を超えない
+			dm(sv[0]+".MP: "+last+" → "+sv[1]+"(regenerateMPfromYaku2)");
+		}
+	}
+
+	//	現在のMPを取得(プレイヤー)
+	function getCurrentMP(pno=currentPlayer)
+	{
+		var ps = playerServant[pno];
+		var mp = [];
+		for(var i=0; i<ps.count; i++)
+		{
+			mp[i]	= ps[i][1];	//	現在MP
+			ps[i][2]= false;
+		}
+		return mp;
+	}
+
+	//	使用可能な宝具の一覧
+	function availableTreasure(pno=currentPlayer)
+	{
+		var sv = playerServant[pno];
+		var ts = [];
+		for(var i=0; i<sv.count; i++)
+		{
+			var sname	= sv[i][0];	//	サーヴァント名
+			var smp		= sv[i][1];	//	現在MP
+			var scnt	= sv[i][4];	//	宝具ごとの使用回数
+			var treasures	= servant[sname][3];	//	宝具情報
+			for(var j=0; j<treasures.count; j++)
+			{
+				var treasure	= treasures[j];
+				dm(@"必要MP: ${treasure[3]} / 現在MP: ${smp}");
+				var available	= true;
+				if(treasure[0] == godhand)
+					continue;				//	ゴッドハンドは自動発動
+				else if(turn >= 2 && treasure[1])
+					available	= false;	//	プレイヤーの第一ターンのみ使用可能な宝具
+				else if(treasure[3] > smp)
+					available	= false;	//	消費MPより現在MPが少ない
+				else if(treasure[4] >= 0 && scnt[j] >= treasure[4])
+					available	= false;	//	使用回数の制限があり、使用可能回数分使っていた
+				else if(isValidTreasure(treasure[0], pno))
+					available	= false;	//	既に発動中
+				//	ゲートオブバビロンの場合、使って意味があるときのみ使用可能
+				//	手元にコウ札と同月のカス札があり、自分の手札・場札にそのコウ札がないとき
+				else if(treasure[0] == gate_of_babylon)
+				{
+					var te = tefuda[pno];
+					var ba = bafuda;
+					available	= false;	//	とりあえず無効にしておく
+					for(var i=0; i<te.count; i++)
+					{
+						if(te[i].point == 1 && 札点数一覧[(te[i].month-1)*4] == 20)
+						{
+							var m = te[i].month;
+							var non = true;
+							for(var i=0; i<te.count; i++)
+							{
+								if(te[i].month == m && te[i].number == 0)
+									non	= false;
+							}
+							for(var i=0; i<ba.count; i++)
+							{
+								if(ba[i].month == m && ba[i].number == 0)
+									non	= false;
+							}
+							if(non)
+							{
+								//	可能性のある札が見つかった
+								available	= true;	//	有効にする
+								break;
+							}
+						}
+					}
+				}
+				//	グラス・オリジンの場合、使って意味があるときのみ使用可能
+				//	テンパイしている役に必要な札が、手札又は場札にないとき
+				else if(treasure[0] == grass_origin)
+				{
+					available	= false;	//	とりあえず無効にしておく
+
+					//	手札、場札リスト
+					var fuda = [], cnt = 1;
+					for(var i=0; i<currentTefuda.count; i++)
+					{
+//						dm("手札: "+currentTefuda[i].month+"月"+currentTefuda[i].number+"番");
+						fuda[currentTefuda[i].no]	= cnt++;
+					}
+					for(var i=0; i<bafuda.count; i++)
+					{
+//						dm("場札: "+bafuda[i].month+"月"+bafuda[i].number+"番");
+						fuda[bafuda[i].no]	= cnt++;
+					}
+
+					//	全てのテンパイ役をチェック
+					var list	= getLastOneYaku(, 1, 1);
+					for(var i=0; i<list.count; i++)
+					{
+						var yaku	= list[i];
+//						dm(yaku[0]+": 残"+yaku[1].count+"枚");
+						for(var j=0; j<yaku[1].count; j++)
+						{
+//							dm("待ち札: "+(yaku[1][j]/4+1)+"月"+(yaku[1][j]%4)+"番 => "+fuda[yaku[1][j]]);
+							if(fuda[ yaku[1][j] ] == void)
+							{
+								available	= true;	//	有効にする
+								i	= list.count;
+								break;
+							}
+						}
+					}
+				}
+				//	無限の剣製の場合、山札の枚数が(最大取得可能枚数＋相手の手札＋自分の手札)より多ければ使用可能
+				else if(treasure[0] == unlimited_blade_work)
+				{
+					available	= yamafuda.count > unlimited_max + tefuda[0].count + tefuda[1].count;
+				}
+
+				ts.add([available, i, j, sname, treasure[0]]);	//	有効か？, サーヴァント番号, 宝具番号, サーヴァント名, 宝具名
+			}
+		}
+		return ts;
+	}
+
+	//	メニューから使用可能な宝具の一覧
+	function availableTreasureInMenu(pno=currentPlayer)
+	{
+		var available	= availableTreasure(pno);
+		for(var i=0; i<available.count; i++)
+		{
+			if(outofmenu_treasure[available[i][4]])
+				available[i][0]	= false;	//	メニューからは使用不可
+		}
+		return available;
+	}
+
+	//	宝具使用(サーヴァント, 宝具)
+	function useTreasure(sno, tno, player=currentPlayer)
+	{
+		var sv = playerServant[player][sno];
+		var treasure = servant[sv[0]][3][tno];
+		var chgs = [];
+
+		//	記録
+		history.add(["treasure", sno, tno]);
+
+		//	宝具使用フラグ
+		with(global.tf)
+		{
+			.hanafuda_usedTreasure	= %[] if .hanafuda_usedTreasure == void;
+			.hanafuda_usedTreasure[treasure[0]]++;
+		}
+
+		var	last	= sv[1];
+		sv[1]	-= treasure[3];	//	MP消費
+		dm(sv[0]+".MP: "+last+" → "+sv[1]+"(useTreasure)");
+		sv[2]	= true;			//	MP変化
+		if(treasure[2] == 0)
+		{
+			//	有効ターン数が無い = 即時効果
+			switch(treasure[0])
+			{
+			case geiborg:	//	相手の役札から、ランダムで一枚ゲット。
+				if(opponentYakufuda.count > 0)
+				{
+					//	決定
+					var no = int(rg.random() * opponentYakufuda.count);
+					//	移動
+					var fuda;
+					currentYakufuda.add(fuda = opponentYakufuda[no]);
+					fuda.place	= 4 + player;
+					opponentYakufuda.erase(no);
+					//	ソート
+					sortYakufuda(0);
+					sortYakufuda(1);
+					//	札を奪われたことでの、相手の役の変化を記録
+					var	yakus	= decisionYaku(yakufuda[currentOpponent],, currentOpponent);
+					with(curYakuTmp[currentOpponent])
+					{
+						.clear();
+						.assign(yakus);
+					}
+					//	花札レイヤーでの処理(役札の移動、役札の並べ替え)
+					chgs.add([ "moveYakufuda", fuda.no ]);
+				}
+				//	札が無ければ不発
+				break;
+
+			case unlimited_blade_work:	//	使用すると山からカス札が役へ移動する
+				//	札リスト取り出し
+				var flist	= [];
+//				var ftype	= 1;	//	カス札
+				var ftype	= 点数一覧[int(rg.random() * (点数一覧.count-1))+1];	//	タネ・タン・カスいずれか
+				for(var i=0; i<yamafuda.count; i++)
+				{
+					if(札点数一覧[yamafuda[i].no] == ftype)
+						flist.add(yamafuda[i]);
+				}
+				//	枚数決定
+				var cnt = int(rg.random() * (unlimited_max - unlimited_min + 1)) + unlimited_min;
+				cnt	= flist.count if cnt > flist.count;
+				dm("unlimited count: "+cnt);
+				for(var i=0; i<cnt && yamafuda.count>0; i++)
+				{
+					//	札の決定
+					var no = int(rg.random() * flist.count);
+					var fuda = flist[no];
+					flist.erase(no);
+					for(var i=0; i<yamafuda.count; i++)
+					{
+						if(fuda == yamafuda[i])
+						{
+							no	= i;
+							break;
+						}
+					}
+					dm(no+": "+yamafuda[no].no);
+					//	札の移動
+					var fuda;
+					currentYakufuda.add(fuda = yamafuda[no]);
+					fuda.place	= 4 + player;
+					yamafuda.erase(no);
+					//	ソート
+					sortYakufuda(player);
+					//	花札レイヤーでの処理(札の移動、山札の並び替え)
+					chgs.add([ "moveYakufuda", fuda.no ]);
+				}
+				break;
+
+			case gate_of_babylon:	//	ランダムに1〜2枚、カス札がコウ札に変わる
+				//	枚数決定
+				var cnt = int(rg.random() * (gob_max - gob_min)) + gob_min;
+				var pl = 札点数一覧;
+				var te = currentTefuda;
+				for(var i=0; i<te.count; i++)
+				{
+					var no = te[i].no, trg = no \ 4 * 4;
+					//	カス札か？/コウ札になる札か？
+					if(pl[no] != 1 || pl[trg] != 20)
+						continue;
+
+					//	目的の札が山札に存在するか？
+					var ok = false;
+					for(var j=0; j<yamafuda.count; j++)
+					{
+						if(yamafuda[j].no == trg)
+						{
+							//	札を入れ替え
+							te[i].place	= 0;
+							yamafuda[j].place	= 2 + player;
+							yamafuda[j] <-> te[i];
+							chgs.add([ "turn", player, no, trg, i, j ]);	//	no札が裏返し→noとtrgを位置入れ替え→trg札が表に
+							ok	= true;
+							break;
+						}
+					}
+					if(ok)
+					{//	見つかった
+						cnt--;		//	入れ替え枚数を減ずる
+						if(cnt == 0)//	十分な数入れ替えたら
+							break;	//	終了
+					}
+				}
+				break;
+
+			case grass_origin:	//	必要な札が山札の先頭に移動する
+				//	山の中にある札
+				var yama	= [];
+				for(var i=0; i<yamafuda.count; i++)
+					yama[yamafuda[i].no]	= i;
+
+				//	テンパイ中の役
+				var list	= getLastOneYaku(, 1, 1);
+				for(var i=0; i<list.count; i++)
+					list[i][3]	= 役一覧[ list[i][0] ][2];	//	点数
+				shellsort(list, function(a,b){ return a[3]>b[3]; });	//	点数の降順で並び替え
+				for(var i=0; i<list.count; i++)
+				{
+					var yaku	= list[i];
+					for(var j=0; j<yaku[1].count; j++)
+					{//	必要な札それぞれ
+						var pos;
+						if((pos = yama[yaku[1][j]]) !== void)
+						{//	山のなかに見つかった
+							yamafuda[pos] <-> yamafuda[0];	//	先頭と必要な札を入れ替える
+							chgs.add( [ "exchange yamafuda", yamafuda[0].no, yamafuda[pos].no ] );	//	見た目も入れ替える
+							i	= list.count;	//	外側からも抜けるため
+							break;	//	内側のループを抜ける
+						}
+					}
+				}
+				chgs.add( [ "turn yamafuda" ] );	//	一番上の山札を表にする
+				break;
+			}
+		}
+		else
+		{
+			sv[3][tno]	= treasure[2];	//	有効ターン数を記録
+/*			if(treasure[0] == rule_breaker)
+			{
+				//	ルールブレイカーの場合、無効にする役を決定する
+				var cnt = int(rg.random() * (rule_breaker_max - rule_breaker_min)) + rule_breaker_min;
+				var keys = []; keys.assign(役一覧);
+				for(var i=0; i<cnt; i++)
+				{
+					//	役の決定
+					var no = int(rg.random() * (keys.count >> 1));
+					var yaku = keys[no << 1];
+					sv[5][yaku]	= true;	//	選ばれた役を無効化
+					dm("無効化: "+yaku);
+					chgs.add(["invalid", currentOpponent, yaku]);	//	無効化された役がテンパイ・成立していたら、アイコンを消す
+				}
+			}
+			else*/ if(treasure[0] == tsubamegaesi)
+			{
+				var keys = []; keys.assign(tsubamegaesi_invalid);
+				for(var i=0; i<keys.count; i+=2)
+					chgs.add(["invalid", currentOpponent, keys[i]]);	//	無効化された役がテンパイ・成立していたら、アイコンを消す
+			}
+		}
+		sv[4][tno]++;	//	使用回数
+
+		return chgs;
+	}
+
+	//	宝具が発動中かどうか
+	function isValidTreasure(tname, pno=currentPlayer)
+	{
+		if(!宝具あり)
+			return false;
+
+//		dm("check: "+pno+", "+tname);
+		var ps = playerServant[pno];
+		for(var i=0; i<ps.count; i++)
+		{
+			var treasures	= servant[ps[i][0]][3];
+			for(var j=0; j<treasures.count; j++)
+			{
+//				dm(treasures[j][0]+".count = "+ps[i][3][j]);
+				if(treasures[j][0] == tname && ps[i][3][j] != 0)
+				{
+//					dm(@"player${pno}.${tname} 発動中");
+					return true;	//	発動中
+				}
+			}
+		}
+		return false;	//	指定の宝具を持っていない
+	}
+
+	//	発動している宝具の一覧を取得
+	function getValidTreasure(pno)
+	{
+		if(!宝具あり)
+			return void;
+
+		var ps = playerServant[pno];
+		var list	= [];
+		for(var i=0; i<ps.count; i++)
+		{
+			var treasures	= servant[ps[i][0]][3];
+			for(var j=0; j<treasures.count; j++)
+			{
+//				dm(treasures[j][0]+" = "+ps[i][3][j]);
+				list.add(treasures[j][0]) if ps[i][3][j] != 0;
+			}
+		}
+		return list;	//	発動中の宝具名
+	}
+
+	//	宝具の効果が持続できるか(ターン終了毎)
+	function checkTreasureEffect(pno=currentPlayer)
+	{
+		if(!宝具あり)
+			return;
+
+		var ps = playerServant[pno];
+		for(var i=0; i<ps.count; i++)
+		{
+			var turns = ps[i][3];
+			for(var j=0; j<turns.count; j++)
+				turns[j]-- if turns[j] > 0;
+		}
+	}
+
+	//	指定のプレイヤーの、指定の名前のサーヴァントを取得
+	function getPlayerServant(pno, sname)
+	{
+		var ps = playerServant[pno];
+		for(var i=0; i<ps.count; i++)
+		{
+			if(ps[i][0] == sname)
+				return ps[i];
+		}
+		return void;
+	}
+
+	//	指定チームの宝具名一覧を取得
+	function getTeamTreasure(tno)
+	{
+//		var ps	= playerServant[tno];
+		var member	= hfTeamMember[tno];
+		var list	= [];
+		for(var i=0; i<member.count; i++)
+		{
+			var name		= member[i];
+			if(servant[name] != void)
+			{
+				var treasures	= servant[name][3];
+				for(var j=0; j<treasures.count; j++)
+					list.add([name, treasures[j][0]]);
+			}
+		}
+		return list;
+	}
+
+	//	現在有効な役のリストを返す
+	function getValidYakuNames(player=currentPlayer)
+	{
+		//	役一覧をコピー
+		var yakus	= [];
+		yakus.assign(役チェック順);
+
+		//	無効になる役を削除していく
+		var opponent	= (player + 1) & 1;
+		if(isValidTreasure(tsubamegaesi, opponent))
+		{//	相手が燕返しを発動中
+			var keys = []; keys.assign(tsubamegaesi_invalid);
+			for(var i=0; i<keys.count; i+=2)
+			{
+				var yakuname	= keys[i];
+				for(var j=0; j<yakus.count; j++)
+				{
+					if(yakuname == yakus[j])
+					{
+						yakus.erase(j);
+						break;
+					}
+				}
+			}
+		}
+		if(!酒あり)
+		{
+			for(var i=0; i<yakus.count; i++)
+			{
+				if(酒役一覧[yakus[i]] != void)
+				{
+					yakus.erase(i);
+					i--;
+				}
+			}
+		}
+
+		//	現在有効な役を返す
+		return yakus;
+	}
+
+	//	宝具のhintを得る
+	function getTreasureHint(tname)
+	{
+		var keys = []; keys.assign(servant);
+		for(var i=0; i<keys.count; i+=2)
+		{
+			var ts = keys[i+1][3];
+			for(var j=0; j<ts.count; j++)
+			{
+				if(ts[j][0] == tname)
+					return ts[j][5] + "\n[消費MP: "+ts[j][3]+"]";
+			}
+		}
+		return void;
+	}
+
+	//	現在のMPを返す
+	function getCurrentMP()
+	{
+		var ps = playerServant;
+		var mp = %[];
+		for(var i=0; i<ps.count; i++)
+		{
+			var ss = ps[i];
+			for(var i=0; i<ss.count; i++)
+				mp[ ss[i][0] ]	= ss[i][1];	//	サーヴァント名に現在MPを関連付け
+		}
+		return mp;
+	}
+
+	//	現在のMPを設定する
+	function setCurrentMP(lastmp)
+	{
+		var ps = playerServant;
+		for(var i=0; i<ps.count; i++)
+		{
+			var ss = ps[i];
+			for(var i=0; i<ss.count; i++)
+				ss[i][1] = lastmp[ ss[i][0] ] if lastmp[ ss[i][0] ] !== void;	//	名前があるときだけ
+//				ss[i][1] = lastmp[ ss[i][0] ] if lastmp[ ss[i][0] ] > ss[i][1];	//	MPが大きいときだけ
+		}
+	}
+}
+
+@endif
+/*-----------------------------------------------------------------------------/
+/	End of Hanafuda.tjs
+/-----------------------------------------------------------------------------*/

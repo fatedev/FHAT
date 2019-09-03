@@ -1,0 +1,2990 @@
+@set (記録を見る時に記録されていない所は見ないようにする = 1)
+
+
+Scripts.execStorage( "ir_title_cg_view.tjs" );
+Scripts.execStorage( "ir_title_itemviewer.tjs" );
+
+
+var		RESULTVIEW_MODE_TIME			=0;
+var		RESULTVIEW_MODE_SCORE			=1;
+
+var		RESULTVIEW_ID_TOTAL_RANK		=0;
+var		RESULTVIEW_ID_STAGE_RANK		=1;
+var		RESULTVIEW_ID_SERVANT_RANK		=2;
+var		MAX_RESULTVIEW_ID				=3;
+
+
+
+
+class CiriyaCharaPrint
+{
+var		parWin,parLayer;
+
+	function CiriyaCharaPrint( _pr_win, _pr_layer )
+	{
+		parWin   = _pr_win;
+		parLayer = _pr_layer;
+
+		init_buffer();
+	}
+	function finalize()
+	{
+		Release();
+	}
+
+	var	ANIME_NORMAL	= 0;
+	var	ANIME_WIN		= 1;
+
+
+
+
+
+	var		chara_id;
+	var		anime_no,page_no,time,anime_time;
+
+
+	var		visible_flag;
+	var		layer_offset;
+	var		base_px,base_py;
+	var		muki;
+
+	var		prn_layer;
+	var		file_name;
+
+	function init_buffer()
+	{
+		time  = 0;
+
+		layer_offset = 0;
+
+		base_px = 0;
+		base_py = 0;;
+
+		prn_layer = void;
+		file_name = void;
+		visible_flag = false;
+		return;
+	}
+	function Release()
+	{
+		DeleteArrayObject( file_name, 1 );
+		file_name = void;
+
+		DeleteArrayObject( prn_layer, 1 );
+		prn_layer = void;
+		return;
+	}
+
+
+	function Init( _chara_id, _type, _muki, _layer_offset )
+	{
+		chara_id = _chara_id;
+
+		anime_no = _type;
+		page_no  = 0;
+		muki = _muki;
+
+		layer_offset = _layer_offset;
+
+
+		load_cg();
+
+		change_anime();
+		return;
+	}
+	function load_cg()
+	{
+	var		_image_id;
+	var		i;
+	var		_file_name,_layer;
+		switch ( anime_no )
+		{
+		case ANIME_NORMAL:
+			anime_time = 2;
+			_image_id = IMAGEID_STAND;
+			break;
+		case ANIME_WIN:
+			anime_time = 2;
+			_image_id = IMAGEID_WIN;
+			break;
+		default:
+			break;
+		}
+
+		file_name = new Array();
+		prn_layer = new Array();
+
+		for (i=0;  ;  i++) {
+			_file_name = getCharacterImageFileInfo( chara_id, _image_id|i, muki );
+			_layer = GetLoadCharaData( _file_name, parWin,parLayer, 0,0 );
+			if (CheckValid(_layer)  ==  false) {
+				invalidate _file_name;
+				break;
+			}
+
+			if (muki  ==  MUKI_LEFT) {
+				_file_name.centerX = (_layer.imageWidth/2) - (_file_name.centerX-_layer.imageWidth/2);
+			}
+
+
+			_layer.setPriority( layer_offset );
+			file_name[i] = _file_name;
+			prn_layer[i] = _layer;
+		}
+		return;
+	}
+	function change_anime()
+	{
+		if (page_no  >=  prn_layer.count)
+			page_no = 0;
+		time = anime_time;
+		prn_layer[page_no].visible = visible_flag;
+		SetPosition( base_px, base_py );
+		return;
+	}
+	function SetPosition( _px, _py )
+	{
+		base_px = _px;
+		base_py = _py;
+		prn_layer[page_no].setPos( base_px-file_name[page_no].centerX, base_py-file_name[page_no].centerY );
+		return;
+	}
+
+	function UpdateChara()
+	{
+		if (time  >  0) {
+			time -= 1;
+			return;
+		}
+
+		prn_layer[page_no].visible = false;
+		page_no += 1;
+		change_anime();
+		return;
+	}
+	function Print()
+	{
+		visible_flag = true;
+		prn_layer[page_no].visible = true;
+		return;
+	}
+	function Close()
+	{
+		visible_flag = false;
+		prn_layer[page_no].visible = false;
+		return;
+	}
+}
+
+
+
+class CIriyaResultViewRank
+{
+var		parWin,parLayer;
+
+	function CIriyaResultViewRank( _pr_win, _pr_layer )
+	{
+		parWin   = _pr_win;
+		parLayer = _pr_layer;
+
+		init_buffer();
+	}
+	function finalize()
+	{
+		Release();
+	}
+
+	var		leyer_offset;
+	var		rank_no;
+	var		mode;
+	var		type;
+
+	var		prn_rank;
+	var		prn_time;
+	var		prn_score;
+	var		prn_name_bar;
+	var		prn_name_sv;
+	var		prn_name_ms;
+
+	var		frame_in_delay;
+	var		frame_in_data;
+
+	var		frame_in_se_name;
+
+	var		chara_sv,chara_ms;
+
+	function init_buffer()
+	{
+		prn_rank = void;
+
+		prn_time = void;
+		prn_score = void;
+
+		prn_name_bar = void;
+		prn_name_sv = void;
+		prn_name_ms = void;
+
+		frame_in_data = void;
+
+		frame_in_se_name = void;
+
+		chara_sv = void;
+		chara_ms = void;
+		return;
+	}
+	function Release()
+	{
+		EasyObjectInvalidate( chara_sv );
+		chara_sv = void;
+		EasyObjectInvalidate( chara_ms );
+		chara_ms = void;
+
+		EasyObjectInvalidate( frame_in_data );
+		frame_in_data = void;
+
+
+		EasyReleaseLayer( prn_rank );
+		prn_rank = void;
+
+		EasyObjectInvalidate( prn_time );
+		prn_time = void;
+		EasyObjectInvalidate( prn_score );
+		prn_score = void;
+
+
+		EasyReleaseLayer( prn_name_bar );
+		prn_name_bar = void;
+		EasyReleaseLayer( prn_name_sv );
+		prn_name_sv = void;
+		EasyReleaseLayer( prn_name_ms );
+		prn_name_ms = void;
+		return;
+	}
+
+
+
+	function Init( _mode, _type, _rank_no, _data, _sv_id, _ms_id, _cg, _ex_cg, _leyer_offset )
+	{
+	var		_file_name;
+
+		rank_no = _rank_no;
+		leyer_offset = _leyer_offset;
+
+		mode = _mode;
+		type = _type;
+
+		with ( frame_in_data = new CSinAnime() )
+		{
+			.SetAnimeParam( 0, 0, 0, 1,1 );
+			.Start();
+		}
+
+		if (mode  ==  RESULTVIEW_MODE_TIME) {
+			with (prn_time = new CIriyaPrintTimeCG(parWin, parLayer) )
+			{
+				.Init( _cg, _ex_cg, , 0 );
+				.SetTimeCG( _data );
+				.SetBasePriority( leyer_offset );
+			}
+		} else {
+			with (prn_score = new CIrScoreEx( void, parWin, parLayer) )
+			{
+				.SetPrintScore( _data );
+				.onDraw();
+				.SetPriority( leyer_offset );
+			}
+		}
+
+		with ( chara_sv = new CiriyaCharaPrint( parWin,parLayer ) )
+		{
+			if (rank_no  ==  0)
+					.Init( _sv_id, .ANIME_WIN, MUKI_RIGHT, leyer_offset );
+			else	.Init( _sv_id, .ANIME_NORMAL, MUKI_RIGHT, leyer_offset );
+		}
+		switch ( _sv_id )
+		{
+		case CHARA_ID_SABER:
+			_file_name = "ir_rank_namebar_saber";
+			break;
+		case CHARA_ID_ARCHER:
+			_file_name = "ir_rank_namebar_archer";
+			break;
+		case CHARA_ID_RIDER:
+			_file_name = "ir_rank_namebar_rider";
+			break;
+		case CHARA_ID_LANCER:
+			_file_name = "ir_rank_namebar_lancer";
+			break;
+		case CHARA_ID_CASTER:
+			_file_name = "ir_rank_namebar_caster";
+			break;
+		}
+		prn_name_sv = EasyCreateLayerObject( parWin,parLayer, _file_name, clNone, false, 0,0, leyer_offset );
+
+		with ( chara_ms = new CiriyaCharaPrint(parWin,parLayer) )
+		{
+			if (rank_no  ==  0)
+					.Init( _ms_id, .ANIME_WIN, MUKI_LEFT, leyer_offset );
+			else	.Init( _ms_id, .ANIME_NORMAL, MUKI_LEFT, leyer_offset );
+		}
+
+		switch ( _ms_id )
+		{
+		case CHARA_ID_RIN:
+			_file_name = "ir_rank_namebar_rin";
+			break;
+		case CHARA_ID_SAKURA:
+			_file_name = "ir_rank_namebar_sakura";
+			break;
+		case CHARA_ID_SHIROU:
+			_file_name = "ir_rank_namebar_shir_rankou";
+			break;
+		}
+		prn_name_ms = EasyCreateLayerObject( parWin,parLayer, _file_name, clNone, false, 0,0, leyer_offset );
+
+		switch ( type )
+		{
+		case RESULTVIEW_ID_TOTAL_RANK:
+		case RESULTVIEW_ID_STAGE_RANK:
+			_file_name = "ir_rank_namebar00";
+			break;
+		case RESULTVIEW_ID_SERVANT_RANK:
+			_file_name = "ir_rank_namebar01";
+			break;
+		}
+		prn_name_bar = EasyCreateLayerObject( parWin,parLayer, _file_name, clNone, false, 0,0, leyer_offset );
+
+
+		prn_rank = EasyCreateLayerObject( parWin,parLayer, "ir_goal_rank"+(1+rank_no), clNone, false, 0,0, leyer_offset );
+		return;
+	}
+
+
+	function Print()
+	{
+
+		prn_rank.visible = true;
+		prn_name_bar.visible = true;
+		prn_name_ms.visible = true;
+		if (CheckValid(prn_time)  ==  true)
+			prn_time.Print();
+		if (CheckValid(prn_score)  ==  true)
+			prn_score.Print();
+
+		chara_ms.Print();
+		switch ( type )
+		{
+		case RESULTVIEW_ID_TOTAL_RANK:
+		case RESULTVIEW_ID_STAGE_RANK:
+			prn_name_sv.visible = true;
+			chara_sv.Print();
+			break;
+		case RESULTVIEW_ID_SERVANT_RANK:
+			prn_name_sv.visible = false;
+			chara_sv.Close();
+			break;
+		}
+
+		SetPos();
+		return;
+	}
+
+
+	function SetPos()
+	{
+	var		base_x,base_y;
+
+		base_x = 112 + frame_in_data.GetNowNum();
+		base_y = 168 + rank_no*72;
+		switch ( type )
+		{
+		case RESULTVIEW_ID_STAGE_RANK:
+			break;
+		case RESULTVIEW_ID_TOTAL_RANK:
+			break;
+		case RESULTVIEW_ID_SERVANT_RANK:
+			base_y += 56;
+			break;
+		}
+
+		prn_rank.setPos( base_x, base_y );
+		switch ( type )
+		{
+		case RESULTVIEW_ID_TOTAL_RANK:
+		case RESULTVIEW_ID_STAGE_RANK:
+			prn_name_bar.setPos( base_x+168, base_y-12 );
+			prn_name_sv.setPos( base_x+292, base_y-12 );
+			prn_name_ms.setPos( base_x+402, base_y-12 );
+			if (CheckValid(prn_time)  ==  true)
+				prn_time.SetBasePosition( base_x+232, base_y+4 );
+			if (CheckValid(prn_score)  ==  true)
+				prn_score.SetBasePosition( base_x+232, base_y+4 );
+
+			chara_sv.SetPosition( base_x+128, base_y+38 );
+			chara_ms.SetPosition( base_x+188, base_y+38 );
+			break;
+		case RESULTVIEW_ID_SERVANT_RANK:
+			prn_name_bar.setPos( base_x+240, base_y-12 );
+			prn_name_ms.setPos( base_x+352, base_y-12 );
+			if (CheckValid(prn_time)  ==  true)
+				prn_time.SetBasePosition( base_x+128, base_y+4 );
+			if (CheckValid(prn_score)  ==  true)
+				prn_score.SetBasePosition( base_x+128, base_y+4 );
+			chara_ms.SetPosition( base_x+488, base_y+38 );
+			break;
+		}
+		return;
+	}
+
+
+	function StartScroll( _dir, ex_flag=0, _frame_in_se_name=void )
+	{
+	var		start,end;
+		frame_in_delay = rank_no * 2;
+		if (ex_flag  ==  0) {
+			start = 0;
+			end   = SCREEN_SIZE_W*(-1*_dir);
+		} else
+		if (ex_flag  ==  1) {
+			start = SCREEN_SIZE_W*(_dir);
+			end   = 0;
+		}
+
+		with ( frame_in_data )
+		{
+			.SetAnimeParam( start, end, 0, DEF_FRAME_IN_OBJ_TIME\2,DEF_FRAME_IN_OBJ_TIME\2 );
+			.Start();
+		}
+
+		frame_in_se_name = _frame_in_se_name;
+
+		SetPos();
+		return;
+	}
+	function Scroll()
+	{
+		Update();
+
+
+		if (frame_in_delay  >  0) {
+			frame_in_delay -= 1;
+			return ( true );
+		} else
+		if (frame_in_delay  ==  0) {
+			PlaySE( frame_in_se_name );
+			frame_in_se_name = void;
+			frame_in_delay -= 1;
+		}
+
+
+		with ( frame_in_data )
+		{
+			if (.CheckUpdateState()  !=  "UPDATE")
+				return ( false );
+			.Update();
+		}
+		SetPos();
+		return ( true );
+	}
+	function Update()
+	{
+		chara_sv.UpdateChara();
+		chara_ms.UpdateChara();
+		return;
+	}
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// ページ変更関係ウィンドウ
+class CIriyaResultViewerPageWindow
+{
+var		parWin,parLayer;
+
+	function CIriyaResultViewerPageWindow( _par_win, _par_layer )
+	{
+		parWin   = _par_win;
+		parLayer = _par_layer;
+
+		init_buffer();
+	}
+	function finalize()
+	{
+		Release();
+	}
+
+	var		LAYER_PAGE_BUTTON	= 10;
+	var		LAYER_PAGE_CG		= 0;
+
+	var		type;
+	var		page;
+	var		layer_offset;
+
+	var		push_btn_callback;
+	var		cancel_call_back;
+	var		page_num;
+
+
+	var	PRN_CHARA_OFFSET_X=128;
+	var	PRN_CHARA_OFFSET_Y=96;
+
+
+	var	MAX_RESULT_SCORE_STAGE_NUM=4;
+
+	var	BTN_PAGE_NEXT=0;
+	var	BTN_PAGE_PREV=1;
+	var	MAX_BTN_PAGE=2;
+
+
+	function init_buffer()
+	{
+		type = RESULTVIEW_ID_TOTAL_RANK;
+		page = 0;
+
+
+		init_frame_in();
+		init_page_cg();
+		init_page_change_button();
+		init_page_change_anime();
+		return;
+	}
+	function Release()
+	{
+		release_frame_in();
+		release_page_cg();
+		release_page_change_button();
+		release_page_change_anime();
+		return;
+	}
+
+	function Init( _page_num, _page, _type, _layer_offset, _push_btn_callback, _cancel_call_back )
+	{
+		page_num = _page_num;
+		page = _page;
+		type = _type;
+		layer_offset = _layer_offset;
+
+		push_btn_callback = _push_btn_callback;
+		cancel_call_back  = _cancel_call_back;
+
+
+		if (type  ==  RESULTVIEW_ID_TOTAL_RANK)
+			return;
+
+
+		create_frame_in();
+		load_page_cg(page);
+		create_page_change_button();
+		create_page_change_anime();
+		return;
+	}
+
+
+
+	var		frame_in_data;
+	function init_frame_in()
+	{
+		frame_in_data = void;
+		return;
+	}
+	function create_frame_in()
+	{
+		frame_in_data = new CSinAnime();
+		return;
+	}
+	function release_frame_in()
+	{
+		EasyObjectInvalidate( frame_in_data );
+		frame_in_data = void;
+	}
+	function get_print_src_y()
+	{
+		if (type  ==  RESULTVIEW_ID_STAGE_RANK)
+				return ( SCREEN_SIZE_H );
+		else	return ( -now_back.height );
+	}
+	function get_print_dst_y()
+	{
+		if (type  ==  RESULTVIEW_ID_STAGE_RANK)
+				return ( SCREEN_SIZE_H-now_back.height-16 );
+		else	return ( 64 );
+	}
+	function FrameIn()
+	{
+		if (type  ==  RESULTVIEW_ID_TOTAL_RANK)
+			return;
+
+		with ( frame_in_data )
+		{
+			.SetAnimeParam( get_print_src_y(), get_print_dst_y(), 0, DEF_FRAME_IN_OBJ_TIME,DEF_FRAME_IN_OBJ_TIME );
+			.Start();
+			now_back.top = .GetNowNum();
+
+		}
+		now_back.visible = true;
+
+		update_page_button_cg();
+		Print();
+
+		if (CheckValid(now_char)  ==  true) {
+			now_char.Print();
+			now_char.SetPosition(now_back.left + PRN_CHARA_OFFSET_X, now_back.top  + PRN_CHARA_OFFSET_Y);
+		}
+		return;
+	}
+	function UpdateFrameIn()
+	{
+		if (type  ==  RESULTVIEW_ID_TOTAL_RANK)
+			return ( false );
+
+		with ( frame_in_data )
+		{
+			if (.CheckUpdateState()  !=  "UPDATE")
+				return ( false );
+			.Update();
+			now_back.top = .GetNowNum();
+		}
+
+		if (CheckValid(now_char)  ==  true) {
+			now_char.SetPosition(now_back.left + PRN_CHARA_OFFSET_X, now_back.top  + PRN_CHARA_OFFSET_Y);
+		}
+		update_page_button_cg();
+		return ( true );
+	}
+
+
+
+
+	function Print()
+	{
+		if (CheckValid(page_button)  ==  false)
+			return;
+		page_button[BTN_PAGE_NEXT].Print();
+		page_button[BTN_PAGE_PREV].Print();
+		return;
+	}
+	function Start()
+	{
+		if (CheckValid(page_button)  ==  false)
+			return;
+		page_button[BTN_PAGE_NEXT].Start();
+		page_button[BTN_PAGE_PREV].Start();
+		return;
+	}
+	function Stop()
+	{
+		if (CheckValid(page_button)  ==  false)
+			return;
+		page_button[BTN_PAGE_NEXT].Stop();
+		page_button[BTN_PAGE_PREV].Stop();
+		return;
+	}
+
+
+
+	var		now_char;
+	var		old_char;
+
+	var		now_back;
+	var		old_back;
+	function init_page_cg()
+	{
+		now_back = void;
+		old_back = void;
+
+		now_char = void;
+		old_char = void;
+		return;
+	}
+	function release_page_cg()
+	{
+		EasyReleaseLayer( now_back );
+		now_back = void;
+		EasyReleaseLayer( old_back );
+		old_back = void;
+
+		EasyObjectInvalidate( now_char );
+		now_char = void;
+		EasyObjectInvalidate( old_char );
+		old_char = void;
+		return;
+	}
+	function load_page_cg( _page )
+	{
+	var		file_name;
+
+		switch ( type )
+		{
+		case RESULTVIEW_ID_STAGE_RANK:
+			file_name = "ir_rank_stagebg%02d".sprintf( _page+1 );
+			break;
+		case RESULTVIEW_ID_SERVANT_RANK:
+			with (now_char = new CiriyaCharaPrint(parWin, parLayer))
+			{
+				.Init( ConvertServantNotoServantCharaID(_page), .ANIME_NORMAL, MUKI_RIGHT, layer_offset+LAYER_PAGE_CG );
+			}
+
+			switch ( ConvertServantNotoServantCharaID(_page) )
+			{
+			case CHARA_ID_SABER:
+				file_name = "ir_rank_svname_saber";
+				break;
+			case CHARA_ID_ARCHER:
+				file_name = "ir_rank_svname_archer";
+				break;
+			case CHARA_ID_RIDER:
+				file_name = "ir_rank_svname_rider";
+				break;
+			case CHARA_ID_LANCER:
+				file_name = "ir_rank_svname_lancer";
+				break;
+			case CHARA_ID_CASTER:
+				file_name = "ir_rank_svname_caster";
+				break;
+			}
+			break;
+		}
+		now_back = EasyCreateLayerObject( parWin,parLayer, file_name,
+						clNone, false, 0,0, layer_offset+LAYER_PAGE_CG );
+		return;
+	}
+
+
+
+	var page_button;
+	function init_page_change_button()
+	{
+		page_button = void;
+		return;
+	}
+	function release_page_change_button()
+	{
+		DeleteArrayObject( page_button, 1 );
+		return;
+	}
+	function create_page_change_button()
+	{
+	var		i;
+		if (page_num  ==  1)
+			return;
+		page_button = new Array();
+		for (i=0;  i<MAX_BTN_PAGE;  i++) {
+			with (page_button[i] = new CIriyaNormalButton(parWin,parLayer))
+			{
+				.Init();
+				.SetLayerPriority( layer_offset+LAYER_PAGE_BUTTON );
+				.LoadUnFocusCG( "ir_rank_arrow00_%02d".sprintf(i) );
+				.LoadFocusCG( "ir_rank_arrow01_%02d".sprintf(i) );
+				.SetClickCallbackFunc( push_btn_callback, i );
+				.SetCancelCallback( cancel_call_back );
+				.SetFocusSEPlayFile( SE_RESULTVIEW_MAIN_FOCUS );
+				.SetClickSEPlayFile( SE_RESULTVIEW_MAIN_SELECT );
+			}
+		}
+		return;
+	}
+	function update_page_button_cg()
+	{
+		if (CheckValid(page_button)  ==  false)
+			return;
+
+		with ( page_button[BTN_PAGE_NEXT] )
+		{
+			.SetLayerPosition( SCREEN_SIZE_W-16-.GetButtonSizeWidth(),
+							now_back.top+(now_back.height-.GetButtonSizeHeight())/2+16 -16 );
+		}
+		with ( page_button[BTN_PAGE_PREV] )
+		{
+			.SetLayerPosition( 16,
+							now_back.top+(now_back.height-.GetButtonSizeHeight())/2+16 -16 );
+		}
+		return;
+	}
+
+/*
+	var	MAX_RESULT_SCORE_STAGE_NUM=4;
+	function change_print_page( dir )
+	{
+		while (1) {
+			switch ( type )
+			{
+			case RESULTVIEW_ID_STAGE_RANK:
+				page = (page + dir + MAX_RESULT_SCORE_STAGE_NUM) % MAX_RESULT_SCORE_STAGE_NUM;
+				@if (記録を見る時に記録されていない所は見ないようにする  ==  0)
+					return;
+				@endif
+				if (page)
+					return;
+				break;
+			case RESULTVIEW_ID_SERVANT_RANK:
+				page = (page + dir + DEF_SERVANT_CHARA_NUM) % DEF_SERVANT_CHARA_NUM;
+				break;
+			}
+		}
+		return;
+	}
+*/
+
+	var		page_change_old,page_change_next;
+	function init_page_change_anime()
+	{
+		page_change_old  = void;
+		page_change_next = void;
+		return;
+	}
+	function release_page_change_anime()
+	{
+		EasyObjectInvalidate( page_change_old  );
+		page_change_old = void;
+		EasyObjectInvalidate( page_change_next );
+		page_change_next = void;
+		return;
+	}
+	function create_page_change_anime()
+	{
+		page_change_old  = new CSinAnime();
+		page_change_next = new CSinAnime();
+		return;
+	}
+	function ChangePrevPage( _page )
+	{
+//		change_print_page( -1 );
+/*		switch ( type )
+		{
+		case RESULTVIEW_ID_STAGE_RANK:
+			page = (page - 1 + MAX_RESULT_SCORE_STAGE_NUM) % MAX_RESULT_SCORE_STAGE_NUM;
+			break;
+		case RESULTVIEW_ID_SERVANT_RANK:
+			page = (page - 1 + DEF_SERVANT_CHARA_NUM) % DEF_SERVANT_CHARA_NUM;
+			break;
+		}
+*/
+		page = _page;
+		old_back = now_back;
+		old_char = now_char;
+		load_page_cg( page );
+
+		page_change_old.SetAnimeParam( old_back.left, -(old_back.left+old_back.width), 0, DEF_FRAME_IN_OBJ_TIME,DEF_FRAME_IN_OBJ_TIME );
+
+		now_back.visible = true;
+		now_back.left = (old_back.left + old_back.width);
+		now_back.top  = old_back.top;
+		page_change_next.SetAnimeParam( now_back.left, now_back.left-now_back.width, 0, DEF_FRAME_IN_OBJ_TIME,DEF_FRAME_IN_OBJ_TIME );
+		page_change_old.Start();
+		page_change_next.Start();
+
+		if (CheckValid(now_char)  ==  true) {
+			now_char.Print();
+			now_char.SetPosition(now_back.left + PRN_CHARA_OFFSET_X, now_back.top  + PRN_CHARA_OFFSET_Y);
+		}
+		return;
+	}
+	function ChangeNextPage( _page )
+	{
+//		change_print_page( 1 );
+/*		switch ( type )
+		{
+		case RESULTVIEW_ID_STAGE_RANK:
+			page = (page + 1) % MAX_RESULT_SCORE_STAGE_NUM;
+			break;
+		case RESULTVIEW_ID_SERVANT_RANK:
+			page = (page + 1) % DEF_SERVANT_CHARA_NUM;
+			break;
+		}
+*/		page = _page;
+		old_back = now_back;
+		old_char = now_char;
+		load_page_cg( page );
+
+		now_back.visible = true;
+		page_change_old.SetAnimeParam( old_back.left, old_back.left+old_back.width, 0, DEF_FRAME_IN_OBJ_TIME,DEF_FRAME_IN_OBJ_TIME );
+
+
+		now_back.left = -(old_back.left + old_back.width);
+		now_back.top  = old_back.top;
+		page_change_next.SetAnimeParam( now_back.left, now_back.left+now_back.width, 0, DEF_FRAME_IN_OBJ_TIME,DEF_FRAME_IN_OBJ_TIME );
+		page_change_old.Start();
+		page_change_next.Start();
+
+
+		if (CheckValid(now_char)  ==  true) {
+			now_char.SetPosition(now_back.left + PRN_CHARA_OFFSET_X, now_back.top  + PRN_CHARA_OFFSET_Y);
+			now_char.Print();
+		}
+		return;
+	}
+	function GetNowPage()
+	{
+		return ( page );
+	}
+
+
+	function UpdatePageChagne()
+	{
+	var		ret = false;
+
+		with ( page_change_old )
+		{
+			if (.CheckUpdateState()  ==  "UPDATE") {
+				ret = true;
+				.Update();
+				old_back.left = .GetNowNum();
+				if (CheckValid(old_char)  ==  true) {
+					old_char.SetPosition(old_back.left + PRN_CHARA_OFFSET_X, old_back.top  + PRN_CHARA_OFFSET_Y);
+				}
+			}
+		}
+		with ( page_change_next )
+		{
+			if (.CheckUpdateState()  ==  "UPDATE") {
+				ret = true;
+				.Update();
+				now_back.left = .GetNowNum();
+				if (CheckValid(now_char)  ==  true) {
+					now_char.SetPosition(now_back.left + PRN_CHARA_OFFSET_X, now_back.top  + PRN_CHARA_OFFSET_Y);
+				}
+			}
+		}
+
+		if (ret  ==  false) {
+			EasyReleaseLayer( old_back );
+			old_back = void;
+
+			EasyReleaseLayer( old_char );
+			old_char = void;
+		}
+
+		return ( ret );
+	}
+
+
+	function Update()
+	{
+		if (CheckValid(now_char)  ==  true)
+			now_char.UpdateChara();
+		if (CheckValid(old_char)  ==  true)
+			old_char.UpdateChara();
+		return;
+	}
+}
+
+
+
+
+
+
+
+
+
+
+// リザルトビューアー
+class CIriyaResultViewer
+{
+var		parWin,parLayer;
+
+	var		NORMAL_FADE_TIME	=12;
+
+
+	function CIriyaResultViewer( _par_win, _par_layer )
+	{
+		parWin   = _par_win;
+		parLayer = _par_layer;
+
+		init_buffer();
+	}
+	function finalize()
+	{
+		Release();
+	}
+
+	var		LAYER_LOCAL_TITLE		=1000;
+
+	var		LAYER_RANK_INFO			=100;
+
+	var		LAYER_PAGE_CG			=90;
+
+	var		LAYER_VIEW_BASE			=0;
+	var		LAYER_BACK				=-1;
+
+	var		PRN_TITLE_PY			= 8;
+
+
+
+
+	var		prn_view;
+
+
+	var		view_mode;
+
+
+	var		view_type;
+
+	var		prn_layer_offset;
+	var		prn_px,prn_py;
+
+	var		mode;
+		var		MODE_NONE			=0;
+		var		MODE_FRAME_IN		=10;
+		var		MODE_FRAME_IN_OBJ	=20;
+		var		MODE_NORMAL_WAIT	=30;
+		var		MODE_FADE_OUT		=40;
+		var		MDOE_PAGE_CHANGE	=50;
+		var		MODE_END			=100;
+
+	function init_buffer()
+	{
+		mode = MODE_NONE;
+		prn_layer_offset = 0;
+		prn_px = 0;
+		prn_py = 0;
+
+		view_type = 0;
+		view_mode = 0;
+
+		prn_view = void;
+		init_title();
+		init_page_button();
+		init_rank_data();
+		return;
+	}
+
+	function Release()
+	{
+		release_title();
+		release_page_button();
+		release_rank_data();
+
+
+		if (CheckValid(prn_view)  ==  true) {
+			ReleaseFadeAnime( prn_view );
+			EasyReleaseLayer( prn_view );
+			prn_view = void;
+		}
+		return;
+	}
+	function Init()
+	{
+	var		i;
+		Release();
+		// 表示用レイヤ作成
+		with (prn_view = new CSpriteLayer(parWin, parLayer))
+		{
+			.setPriority( prn_layer_offset+LAYER_VIEW_BASE );
+			.setPos( prn_px, prn_py );
+			.setSize( 0, 0 );
+			.loadImages( "ir_rank_bg00", clNone );
+		}
+		return;
+	}
+
+	function InitResultViewer( _view_mode, _view_type )
+	{
+		view_mode = _view_mode;
+		view_type = _view_type;
+
+		init_now_page();
+
+		create_title();
+		create_page_button();
+		create_rank_data();
+		return;
+	}
+
+	// 表示レイヤの表示優先度オフセット位置を指定する
+	function SetPriorityOffset( _offset )
+	{
+		prn_layer_offset = _offset;
+		if (CheckValid(prn_view)  ==  true)
+			prn_view.setPriority( prn_layer_offset+LAYER_VIEW_BASE );
+		return;
+	}
+	function SetBasePosition( _px, _py )
+	{
+		prn_px = _px;
+		prn_py = _py;
+		if (CheckValid(prn_view)  ==  true)
+			prn_view.setPos( prn_px, prn_py );
+		return;
+	}
+
+
+
+
+	function start()
+	{
+		with ( prn_view )
+		{
+			.setMouseDownCallback( back_button_hit );
+			.setHitCheckAlphaLimit( "ALL" );
+		}
+		page_button_start();
+
+		mode = MODE_NORMAL_WAIT;
+		UpdateCursorPos2( parLayer );
+		return;
+	}
+	function stop()
+	{
+		with ( prn_view )
+		{
+			.setMouseDownCallback( void );
+			.setHitCheckAlphaLimit( "NONE" );
+		}
+		page_button_stop();
+		return;
+	}
+	function back_button_hit( _layer, _x,_y, _button,_shift )
+	{
+		if (_button  ==  mbRight)
+			cancel_call_back();
+		return;
+	}
+	// キャンセル
+	function cancel_call_back()
+	{
+		stop();
+
+		stopSound( ,, );
+		PlaySE( SE_RESULTVIEW_MAIN_CANCEL );
+
+		mode = MODE_FADE_OUT;
+		EasyStartFadeAnime( prn_view, 255,0, NORMAL_FADE_TIME );
+		return;
+	}
+
+
+
+	function SetUp()
+	{
+	var		i;
+		if (CheckValid(prn_view)  ==  false)
+			return;
+
+		// 親レイヤの設定
+		prn_view.visible = false;
+		prn_view.setSize( SCREEN_SIZE_W, SCREEN_SIZE_W );
+		EasyStartFadeAnime( prn_view, 0,255, NORMAL_FADE_TIME );
+
+		mode = MODE_FRAME_IN;
+		return;
+	}
+
+	function Print()
+	{
+		prn_view.visible = true;
+		return;
+	}
+
+
+	function setup_frame_in_obj()
+	{
+		mode = MODE_FRAME_IN_OBJ;
+		frame_in_title();
+		frame_in_page_button();
+		return;
+	}
+	function process_frame_in_anime()
+	{
+	var		ret=false;
+
+		ret |= update_title_in();
+		ret |= update_page_button_in();
+		return ( ret );
+	}
+
+	function update_frame_in_data( _p_data )
+	{
+		with ( _p_data )
+		{
+			if (.CheckUpdateState()  !=  "UPDATE")
+				return ( false );
+			.Update();
+		}
+		return ( true );
+	}
+	function get_frame_in_data( _p_data )
+	{
+		return ( _p_data.GetNowNum() );
+	}
+	function update_fade_object( _layer )
+	{
+		if (CheckValid(_layer)  ==  true) {
+			if (ProcessFadeAnime(_layer)  ==  "UPDATING")
+				return ( true );
+		}
+		return ( false );
+	}
+	function process_fade_anime()
+	{
+	var		ret;
+		ret = false;
+
+		ret |= update_fade_object( prn_view );
+
+		return ( ret );
+	}
+	function Update()
+	{
+		switch ( mode )
+		{
+		case MODE_NONE:
+			break;
+
+		case MODE_FRAME_IN:
+			if (process_fade_anime()  ==  true)
+				break;
+			setup_frame_in_obj();
+			break;
+		case MODE_FRAME_IN_OBJ:
+			var	ret=false;
+			if (process_frame_in_anime()  ==  true)
+				ret = true;
+			if (scroll_rank_data()  ==  true)
+				ret = true;
+			if (ret  ==  true)
+				break;
+			start();
+			break;
+
+		case MODE_NORMAL_WAIT:
+			update_chara();
+			update_page_anime();
+			break;
+
+		case MODE_FADE_OUT:
+			if (process_fade_anime()  ==  true)
+				break;
+			mode = MODE_END;
+			break;
+
+		case MDOE_PAGE_CHANGE:
+			var	ret=false;
+			if (process_change_page_anime()  ==  true)
+				ret = true;
+			if (scroll_rank_data()  ==  true)
+				ret = true;
+			if (ret  ==  true)
+				break;
+			start();
+			break;
+		}
+
+		return;
+	}
+
+
+
+
+
+
+	//"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+	//
+	//
+	//		Title関係
+	//
+	//
+	//"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+	var		prn_title;
+	var		title_frame_in;
+	function init_title()
+	{
+		prn_title = void;
+		title_frame_in = void;
+		return;
+	}
+	function release_title()
+	{
+		if (CheckValid(prn_title)  ==  true) {
+			EasyReleaseLayer( prn_title );
+			prn_title = void;
+		}
+
+		EasyObjectInvalidate( title_frame_in );
+		title_frame_in = void;
+		return;
+	}
+	function create_title()
+	{
+	var		file_name=["ir_rank_allstage00","ir_rank_stage00","ir_rank_sarvant00",];
+		release_title();
+
+		title_frame_in = new CSinAnime();
+		with ( prn_title = EasyCreateLayerObject(parWin,prn_view, file_name[view_type], clNone, false, 0,0, LAYER_LOCAL_TITLE) )
+		{
+			.setPos( (SCREEN_SIZE_W-.width)/2, -.height );
+		}
+		return;
+	}
+	function frame_in_title()
+	{
+		prn_title.visible = true;
+		with ( title_frame_in )
+		{
+			.SetAnimeParam( -prn_title.height, PRN_TITLE_PY, 0, DEF_FRAME_IN_OBJ_TIME,DEF_FRAME_IN_OBJ_TIME );
+			.Start();
+		}
+		return;
+	}
+	function update_title_in()
+	{
+		if (update_frame_in_data(title_frame_in)  ==  false)
+			return ( false );
+
+		prn_title.top = title_frame_in.GetNowNum();
+		return ( true );
+	}
+
+
+	var	MAX_RESULT_SCORE_STAGE_NUM=4;
+	var		stage_id_teble=
+	[
+		SCENE_STAGE1,SCENE_STAGE2,SCENE_STAGE3,SCENE_BOSS,
+	];
+	function check_look_stege_num()
+	{
+	var		i,num;
+
+		num = 0;
+		for (i=0;  i<MAX_RESULT_SCORE_STAGE_NUM;  i++) {
+			@if (記録を見る時に記録されていない所は見ないようにする  ==  1)
+			if (parLayer.CheckLook(stage_id_teble[i])  ==  false)
+				continue;
+			@endif
+				num += 1;
+		}
+		return ( num );
+	}
+	var		now_page;
+	function init_now_page()
+	{
+		now_page = -1;
+		change_print_page( 1 );
+		return;
+	}
+	function get_now_page()
+	{
+		return ( now_page );
+	}
+	function change_print_page( dir )
+	{
+		while (1) {
+			switch ( view_type )
+			{
+			case RESULTVIEW_ID_STAGE_RANK:
+				now_page = (now_page + dir + MAX_RESULT_SCORE_STAGE_NUM) % MAX_RESULT_SCORE_STAGE_NUM;
+				@if (記録を見る時に記録されていない所は見ないようにする  ==  0)
+					return;
+				@endif
+				if (parLayer.CheckLook(stage_id_teble[now_page])  ==  true)
+					return;
+				break;
+			case RESULTVIEW_ID_SERVANT_RANK:
+				now_page = (now_page + dir + DEF_SERVANT_CHARA_NUM) % DEF_SERVANT_CHARA_NUM;
+				return;
+			case RESULTVIEW_ID_TOTAL_RANK:
+				now_page = 0;
+				return;
+			}
+		}
+		return;
+	}
+
+
+
+
+	//"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+	//
+	//
+	//		Page変更関係
+	//
+	//
+	//"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+	var		page_button;
+	function init_page_button()
+	{
+		page_button = void;
+		return;
+	}
+	function release_page_button()
+	{
+		EasyObjectInvalidate( page_button );
+		page_button = void;
+		return;
+	}
+	function create_page_button()
+	{
+
+		with ( page_button = new CIriyaResultViewerPageWindow(parWin, prn_view) )
+		{
+			.Init( check_look_stege_num(), get_now_page(), view_type, LAYER_PAGE_CG, change_page_callback, cancel_call_back );
+		}
+		return;
+	}
+	function frame_in_page_button()
+	{
+		if (CheckValid(page_button)  ==  true)
+			page_button.FrameIn();
+		return;
+	}
+	function update_page_button_in()
+	{
+		if (CheckValid(page_button)  ==  false)
+			return ( false );
+		return ( page_button.UpdateFrameIn() );
+	}
+	function page_button_start()
+	{
+		if (CheckValid(page_button)  ==  true)
+			page_button.Start();
+		return;
+	}
+	function page_button_stop()
+	{
+		if (CheckValid(page_button)  ==  false)
+			return;
+		page_button.Stop();
+		page_button.Print();
+		return;
+	}
+
+
+	function change_page_callback( _id )
+	{
+		page_button_stop();
+
+		with ( page_button )
+		{
+			if (_id  ==  .BTN_PAGE_NEXT) {
+				change_print_page( 1 );
+				.ChangeNextPage( get_now_page() );
+				change_next_rank_data( -1,0 );
+			} else {
+				change_print_page( -1 );
+				.ChangePrevPage( get_now_page() );
+				change_next_rank_data(  1,0 );
+			}
+		}
+
+		mode = MDOE_PAGE_CHANGE;
+		return;
+	}
+
+
+
+	function process_change_page_anime()
+	{
+		if (page_button.UpdatePageChagne()  ==  true)
+			return ( true );
+
+		return ( false );
+	}
+
+	function update_page_anime()
+	{
+		if (CheckValid(page_button)  ==  true)
+			page_button.Update();
+		return;
+	}
+
+
+
+
+
+
+
+	var		now_rank_data,old_rank_data;
+	var		time_cg,ex_time_cg;
+	var		time_convert;
+
+	function init_rank_data()
+	{
+		now_rank_data = void;
+		old_rank_data = void;
+
+		time_cg = void;
+		ex_time_cg = void;
+		time_convert = void;
+		return;
+	}
+	function release_rank_data()
+	{
+		release_now_rank_data();
+		release_old_rank_data();
+
+		EasyReleaseLayer( time_cg );
+		time_cg = void;
+		EasyReleaseLayer( ex_time_cg );
+		ex_time_cg = void;
+
+		EasyObjectInvalidate( time_convert );
+		time_convert = void;
+		return;
+	}
+	function release_now_rank_data()
+	{
+		DeleteArrayObject( now_rank_data, 1 );
+		now_rank_data = void;
+		return;
+	}
+	function release_old_rank_data()
+	{
+		DeleteArrayObject( old_rank_data, 1 );
+		old_rank_data = void;
+		return;
+	}
+	function create_rank_data()
+	{
+		time_convert = new CIriyaStageTimeConvert();
+
+		time_cg    = EasyCreateLayerObject( parWin,parLayer, "ir_info_time", clNone, false, 0,0, 0 );
+		ex_time_cg = EasyCreateLayerObject( parWin,parLayer, "ir_info_time2", clNone, false, 0,0, 0 );
+
+
+		change_next_rank_data( 1,1 );
+		return;
+	}
+
+	function create_new_rank_data( _page )
+	{
+	var		i;
+	var		sv_id,ms_id,_data;
+
+		now_rank_data = new Array();
+		for (i=MAX_CLEAR_TIME_NUM-1;  i>=0;  i--) {
+			now_rank_data[i] = new CIriyaResultViewRank( parWin, prn_view );
+			if (view_mode  ==  RESULTVIEW_MODE_TIME) {
+				time_convert.Reset();
+				switch ( view_type )
+				{
+				case RESULTVIEW_ID_TOTAL_RANK:
+					@if (DEBUG_MODE)
+					dm("@@@@@@@@@@@@@Total Time:"+parLayer.getTotalStageClearTime(i));;
+					@endif;
+					time_convert.SetTimeCode(parLayer.getTotalStageClearTime(i) );
+					sv_id = parLayer.getTotalStageClearTimeServant( i );
+					ms_id = parLayer.getTotalStageClearTimeMaster( i );
+					break;
+				case RESULTVIEW_ID_STAGE_RANK:
+					time_convert.SetTimeCode(parLayer.getStageClearTime(stage_id_teble[_page],i) );
+					sv_id = parLayer.getStageClearTimeServant( stage_id_teble[_page],i );
+					ms_id = parLayer.getStageClearTimeMaster( stage_id_teble[_page],i );
+					break;
+				case RESULTVIEW_ID_SERVANT_RANK:
+					time_convert.SetTimeCode(parLayer.getTotalStageClearSVTime(ConvertServantNotoServantCharaID(_page),i) );
+					sv_id = parLayer.getTotalStageClearSVTimeServant( ConvertServantNotoServantCharaID(_page),i );
+					ms_id = parLayer.getTotalStageClearSVTimeMaster( ConvertServantNotoServantCharaID(_page),i );
+					break;
+				}
+				_data = time_convert;
+			} else {
+				time_convert.Reset();
+				switch ( view_type )
+				{
+				case RESULTVIEW_ID_TOTAL_RANK:
+					_data = parLayer.getTotalStageClearScore( i );
+					sv_id = parLayer.getTotalStageClearScoreServant( i );
+					ms_id = parLayer.getTotalStageClearScoreMaster( i );
+					break;
+				case RESULTVIEW_ID_STAGE_RANK:
+					_data = parLayer.getStageClearScore( stage_id_teble[_page],i );
+					sv_id = parLayer.getStageClearScoreServant( stage_id_teble[_page],i );
+					ms_id = parLayer.getStageClearScoreMaster( stage_id_teble[_page],i );
+					@if (DEBUG_MODE)
+					dm("-----------------"+(i+1)+"位@@@@sv_id:"+ GetCharaIDtoCharaName( sv_id ) );
+					dm("-----------------"+(i+1)+"位@@@@ms_id:"+ GetCharaIDtoCharaName( ms_id ) );
+					@endif
+					break;
+				case RESULTVIEW_ID_SERVANT_RANK:
+					_data = parLayer.getTotalStageClearSVScore( ConvertServantNotoServantCharaID(_page),i );
+					sv_id = parLayer.getTotalStageClearSVScoreServant( ConvertServantNotoServantCharaID(_page),i );
+					ms_id = parLayer.getTotalStageClearSVScoreMaster( ConvertServantNotoServantCharaID(_page),i );
+					break;
+				}
+			}
+			now_rank_data[i].Init( view_mode, view_type, i, _data, sv_id, ms_id, time_cg, ex_time_cg, LAYER_RANK_INFO );
+			now_rank_data[i].Print();
+		}
+
+		return;
+	}
+	function change_next_rank_data( _dir, _ex_flag )
+	{
+	var		i;
+	var		in_type_now,in_type_old;
+		if (CheckValid(now_rank_data)  ==  false) {
+			in_type_now = _ex_flag;
+			in_type_old = 0;
+		} else {
+			in_type_now = (_ex_flag+1)%2;
+			in_type_old = _ex_flag;
+		}
+
+		old_rank_data = now_rank_data;
+		if (CheckValid(old_rank_data)  ==  true) {
+			for (i=0;  i<MAX_CLEAR_TIME_NUM;  i++)
+				old_rank_data[i].StartScroll( _dir, in_type_old );
+		}
+
+		create_new_rank_data( get_now_page() );
+		for (i=0;  i<MAX_CLEAR_TIME_NUM;  i++)
+			now_rank_data[i].StartScroll( _dir, in_type_now, SE_RESULTVIEW_MAIN_FRAME_IN );
+
+		return;
+	}
+	function scroll_rank_data()
+	{
+	var		i;
+	var		ret=false;
+
+		for (i=0;  i<MAX_CLEAR_TIME_NUM;  i++)
+			if (now_rank_data[i].Scroll()  ==  true)
+				ret = true;
+		if (CheckValid(old_rank_data)  ==  true) {
+			for (i=0;  i<MAX_CLEAR_TIME_NUM;  i++)
+				if (old_rank_data[i].Scroll()  ==  true)
+					ret = true;
+		}
+
+
+		if (ret  ==  false)
+			release_old_rank_data();
+		return ( ret );
+	}
+
+
+	function update_chara()
+	{
+	var		i;
+		for (i=0;  i<MAX_CLEAR_TIME_NUM;  i++)
+			now_rank_data[i].Update();
+		return;
+	}
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// リザルトタイプセレクトメニュー
+class CIriyaResultViewModeMenu
+{
+var		parWin,parLayer;
+
+	function CIriyaResultViewModeMenu( _pr_win, _pr_layer )
+	{
+		parWin   = _pr_win;
+		parLayer = _pr_layer;
+
+		init_buffer();
+	}
+	function finalize()
+	{
+		Release();
+	}
+
+	var		MAX_BACK_FADE_ALHA=214;		// 背景輝度ダウンアルファ値
+	var		BACK_FADE_OUT_TIME=(int)(6);
+
+	var		LAYER_RESULT		=0;
+	var		LAYER_MENU_CG		=-1;
+	var		LAYER_BACK			=-2;
+
+
+	var		LAYER_LOCAL_BUTTON	=0;
+	var		LAYER_LOCAL_BACK	=0;
+
+
+
+	var		prn_menu;
+	var		menu_cg;
+	var		menu_back;
+
+	var		prn_back;
+
+
+	var		prn_layer_offset;
+	var		prn_px,prn_py;
+
+	var		select_id;
+
+	var		result;
+
+	var		view_mode;
+
+	var		mode;
+	var		MODE_NONE		=-1;
+	var		MODE_FADE_IN	= 0;
+	var		MODE_FADE_IN_END= 1;
+	var		MODE_SELECT		= 10;
+	var		MODE_FADE_OUT	= 20;
+	var		MODE_RESULT		= 30;
+	var		MODE_CANCEL		= 40;
+	var		MODE_END		= 50;
+
+	function init_buffer()
+	{
+		mode = MODE_NONE;
+
+
+		prn_layer_offset = 0;
+		prn_px = 0;
+		prn_py = 0;
+
+		Reset();
+
+		prn_menu = void;
+		menu_cg  = void;
+		menu_back  = void;
+
+		prn_back = void;
+
+		result = void;
+		return;
+	}
+	function Release()
+	{
+	var		i;
+
+		Stop();
+
+		if (CheckValid(menu_cg)  ==  true) {
+			for (i=0;  i<menu_cg.count;  i++) {
+				menu_cg[i].Release();
+				EasyObjectInvalidate( menu_cg[i] );
+				menu_cg[i] = void;
+			}
+			EasyObjectInvalidate( menu_cg );
+			menu_cg = void;
+		}
+		if (CheckValid(menu_back)  ==  true) {
+			for (i=0;  i<menu_back.count;  i++) {
+				EasyReleaseLayer( menu_back[i] );
+				menu_back[i] = void;
+			}
+			EasyObjectInvalidate( menu_back );
+			menu_back = void;
+		}
+
+
+		if (CheckValid(prn_back)  ==  true) {
+			ReleaseFadeAnime( prn_back );
+			EasyReleaseLayer( prn_back );
+			prn_back = void;
+		}
+
+		if (CheckValid(prn_menu)  ==  true) {
+			ReleaseFadeAnime( prn_menu );
+			EasyReleaseLayer( prn_menu );
+			prn_menu = void;
+		}
+
+		release_result();
+		return;
+	}
+
+
+
+
+	function Init( _view_mode  )
+	{
+	var		i;
+	var		_scene_id;
+	var		look_list;
+
+		view_mode = _view_mode;
+
+		Release();
+
+
+		with (prn_menu = new CSpriteLayer(parWin,parLayer))
+		{
+			.setPriority( prn_layer_offset+LAYER_MENU_CG );
+			.setPos( prn_px, prn_py );
+			.setSize( 0, 0 );
+		}
+
+		with (prn_back = new CSpriteLayer(parWin, parLayer))
+		{
+			.setPriority( prn_layer_offset+LAYER_BACK );
+			.layerImageFromFill( 0,0, SCREEN_SIZE_W, SCREEN_SIZE_H, RGBA_MAKE(0,0,0,0), false );
+		}
+
+
+		menu_back = new Array();
+		menu_cg = new Array();
+
+
+		add_menu_back( "TOP" );
+
+
+		look_list = new Array();
+@if (記録を見る時に記録されていない所は見ないようにする  ==  1)
+		for (i=0;  i<MAX_RESULTVIEW_ID;  i++)
+			look_list[i] = false;
+		if (parLayer.CheckLook(SCENE_RANK)  ==  true) {
+			look_list[RESULTVIEW_ID_TOTAL_RANK] = true;
+			look_list[RESULTVIEW_ID_SERVANT_RANK] = true;
+		}
+		if ((parLayer.CheckLook(SCENE_STAGE1)  ==  true)
+		||	(parLayer.CheckLook(SCENE_STAGE2)  ==  true)
+		||	(parLayer.CheckLook(SCENE_STAGE3)  ==  true)
+		||	(parLayer.CheckLook(SCENE_BOSS)  ==  true)) {
+			look_list[RESULTVIEW_ID_STAGE_RANK] = true;
+		}
+@endif
+@if (記録を見る時に記録されていない所は見ないようにする  ==  0)
+		for (i=0;  i<MAX_RESULTVIEW_ID;  i++)
+			look_list[i] = true;
+@endif
+		for (i=0;  i<MAX_RESULTVIEW_ID;  i++) {
+			if (look_list[i]  ==  false)
+				continue;
+			add_menu( i, "ir_score01_%02d".sprintf(i), "ir_score02_%02d".sprintf(i), void,SE_RESULTVIEW_MENU_FOCUS );
+		}
+		add_menu( MAX_RESULTVIEW_ID, "ir_tutorial01_05", "ir_tutorial02_05", void,SE_RESULTVIEW_MENU_FOCUS  );
+		add_menu_back( "BOTTOM" );
+
+		invalidate look_list;
+		return;
+	}
+
+
+	function add_menu( _id, _unfocus_name, _focus_name, _click_play_name, _focus_play_name )
+	{
+	var		menu_page;
+
+		menu_page = menu_cg.count;
+		with (menu_cg[menu_page] = new CIriyaNormalButton(parWin,prn_menu))
+		{
+			.Init();
+			.SetLayerPriority( LAYER_LOCAL_BUTTON );
+			.LoadUnFocusCG( _unfocus_name );
+			.LoadFocusCG( _focus_name );
+			.SetLayerPosition( 32, prn_menu.height );
+			.SetClickCallbackFunc( push_btn_callback, _id );
+			.SetCancelCallback( cancel_call_back );
+			.SetFocusSEPlayFile( _focus_play_name );
+			.SetClickSEPlayFile( _click_play_name );
+			.Print();
+		}
+
+		add_menu_back( "NORMAL" );
+		return;
+	}
+	function add_menu_back( add_type )
+	{
+	var		now_page;
+	var		file_name;
+		switch ( add_type )
+		{
+		case "TOP":
+			if (view_mode  ==  RESULTVIEW_MODE_TIME)
+					file_name = "ir_time00_00";
+			else	file_name = "ir_score00_00";
+			break;
+		case "NORMAL":
+			file_name = "ir_tutorial00_01";
+			break;
+		case "BOTTOM":
+			file_name = "ir_tutorial00_02";
+			break;
+		}
+
+		now_page = menu_back.count;
+		menu_back[now_page] = EasyCreateLayerObject( parWin,prn_menu, file_name,
+							clNone, true, 0,prn_menu.height, LAYER_LOCAL_BACK );
+
+		with ( prn_menu )
+		{
+			.setSize( menu_back[now_page].imageWidth, .height+menu_back[now_page].imageHeight );
+		}
+		return;
+	}
+
+
+
+	// 表示レイヤの表示優先度オフセット位置を指定する
+	function SetPriorityOffset( _offset )
+	{
+		prn_layer_offset = _offset;
+		if (CheckValid(prn_menu)  ==  true) {
+			prn_menu.setPriority( prn_layer_offset+LAYER_MENU_CG );
+			prn_back.setPriority( prn_layer_offset+LAYER_BACK );
+		}
+		return;
+	}
+
+	function SetBasePosition( _px, _py )
+	{
+		prn_px = _px;
+		prn_py = _py;
+		if (CheckValid(prn_menu)  ==  true)
+			prn_menu.setPos( prn_px, prn_py );
+		return;
+	}
+	function SetAutoBasePosition()
+	{
+	var	prn_x;
+		prn_x = (SCREEN_SIZE_W-prn_menu.width) / 2;
+		SetBasePosition( prn_x, OPTION_MENU_PRINT_POS_Y );
+		return;
+	}
+
+	function Reset()
+	{
+		select_id = -1;
+		return;
+	}
+	function Print()
+	{
+		if (CheckValid(prn_menu)  ==  true)
+			prn_menu.visible = true;
+		if (CheckValid(prn_back)  ==  true)
+			prn_back.visible = true;
+		return;
+	}
+	function FadeIn()
+	{
+		mode = MODE_FADE_IN;
+
+		if (CheckValid(prn_menu)  ==  true)
+			EasyStartFadeAnime( prn_menu, 0, 255, BACK_FADE_OUT_TIME );
+		if (CheckValid(prn_back)  ==  true)
+			EasyStartFadeAnime( prn_back, 0, MAX_BACK_FADE_ALHA, BACK_FADE_OUT_TIME );
+		return;
+	}
+	function FadeOut()
+	{
+		mode = MODE_FADE_OUT;
+		if (CheckValid(prn_menu)  ==  true)
+			EasyStartFadeAnime( prn_menu, 255, 0, BACK_FADE_OUT_TIME );
+		if (CheckValid(prn_back)  ==  true)
+			EasyStartFadeAnime( prn_back, MAX_BACK_FADE_ALHA, 0, BACK_FADE_OUT_TIME );
+		return;
+	}
+	function fade_anime()
+	{
+	var		ret;
+		ret = false;
+
+		if (ProcessFadeAnime(prn_menu)  ==  "UPDATING")
+			ret = true;
+		if (ProcessFadeAnime(prn_back)  ==  "UPDATING")
+			ret = true;
+		return ( ret );
+	}
+
+
+	function reset_select_menu()
+	{
+	var		i;
+		if (CheckValid(menu_cg)  ==  false)
+			return;
+		for (i=0;  i<menu_cg.count;  i++)
+			menu_cg[i].Print();
+		return;
+	}
+
+
+
+	function change_result()
+	{
+		Stop();
+
+		create_result();
+
+		mode = MODE_RESULT;
+		reset_select_menu();
+		return;
+	}
+	function create_result()
+	{
+		with (result = new CIriyaResultViewer(parWin, parLayer) )
+		{
+			.Init();
+			.SetPriorityOffset(prn_layer_offset+LAYER_RESULT);
+			.SetBasePosition( 0,0 );
+			.InitResultViewer( view_mode, GetSelectID() );
+			.SetUp();
+			.Print();
+		}
+		return;
+	}
+	function release_result()
+	{
+		EasyObjectInvalidate( result );
+		result = void;
+		return;
+	}
+	function process_resultl()
+	{
+		if (CheckValid(result)  ==  false)
+			return ( false );
+
+
+		with ( result )
+		{
+			.Update();
+			if (.mode  !=  .MODE_END)
+				return ( true );
+		}
+
+		release_result();	// オプションメニューを開放
+		Start();
+		return ( false );
+	}
+
+
+	function StartSelect()
+	{
+		mode = MODE_SELECT;
+		Start();
+		return;
+	}
+
+
+	function Update()
+	{
+		switch ( mode )
+		{
+		case MODE_NONE:
+			break;
+
+		case MODE_SELECT:
+			break;
+		case MODE_RESULT:
+			if (process_resultl()  ==  true)
+				break;
+			break;
+
+		case MODE_FADE_IN:
+			if (fade_anime()  ==  true)
+				break;
+			mode = MODE_FADE_IN_END;
+			break;
+		case MODE_FADE_OUT:
+			if (fade_anime()  ==  true)
+				break;
+			mode = MODE_END;
+			break;
+
+		case MODE_CANCEL:
+			break;
+		case MODE_FADE_IN_END:
+			break;
+
+		case MODE_END:
+			break;
+		}
+		return;
+	}
+
+	function Start()
+	{
+	var		i;
+		Reset();
+
+		if (CheckValid(menu_cg)  ==  true) {
+			for (i=0;  i<menu_cg.count;  i++)
+				menu_cg[i].Start();
+		}
+		if (CheckValid(prn_back)  ==  true) {
+			with ( prn_back )
+			{
+				.setMouseDownCallback( back_button_hit );
+				.setHitCheckAlphaLimit( "ALL" );
+			}
+		}
+		UpdateCursorPos2( parLayer );
+		return;
+	}
+	function Stop()
+	{
+	var		i;
+		if (CheckValid(menu_cg)  ==  true) {
+			for (i=0;  i<menu_cg.count;  i++) {
+				menu_cg[i].Stop();
+				menu_cg[i].Print();
+			}
+		}
+		if (CheckValid(prn_back)  ==  true) {
+			with ( prn_back )
+			{
+				.setMouseDownCallback( void );
+				.setHitCheckAlphaLimit( "NONE" );
+			}
+		}
+		return;
+	}
+
+	function GetSelectID()
+	{
+		return ( select_id );
+	}
+
+
+	// ボタン上でのプッシュ割り込み
+	function push_btn_callback( _id )
+	{
+		select_id = _id;
+		if (select_id  ==  MAX_RESULTVIEW_ID) {
+			cancel_call_back();
+			return;
+		}
+
+		stopSound( ,, );
+		PlaySE( SE_RESULTVIEW_MENU_SELECT2 );
+
+		change_result();
+		return;
+	}
+	function back_button_hit( _layer, _x,_y, _button,_shift )
+	{
+		if (_button  ==  mbRight)
+			cancel_call_back();
+		return;
+	}
+	// ボタン上でのキャンセル
+	function cancel_call_back()
+	{
+		select_id  = -1;
+		Stop();
+
+		stopSound( ,, );
+		PlaySE( SE_RESULTVIEW_MENU_CANCEL );
+
+
+		reset_select_menu();
+//		FadeOut();
+		mode = MODE_CANCEL;
+		return;
+	}
+
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// リザルトセレクトメニュー
+class CIriyaResultViewMenu
+{
+var		parWin,parLayer;
+
+
+	function CIriyaResultViewMenu( _pr_win, _pr_layer )
+	{
+		parWin   = _pr_win;
+		parLayer = _pr_layer;
+
+		init_buffer();
+	}
+	function finalize()
+	{
+		Release();
+	}
+
+	var		MENU_ID_TIME_RANKING	=0;
+	var		MENU_ID_SCORE_RKING		=1;
+	var		MENU_ID_CORRECTION		=2;
+	var		MENU_ID_GOHOUBI_CG1		=3;
+	var		MENU_ID_GOHOUBI_CG2		=4;
+	var		MAX_MENU_ID				=5;
+
+
+	var		MAX_BACK_FADE_ALHA=214;		// 背景輝度ダウンアルファ値
+	var		BACK_FADE_OUT_TIME=(int)(6);
+
+	var		LAYER_RESULT_SUB	=10;
+	var		LAYER_RESULT		=0;
+	var		LAYER_MENU_CG		=-1;
+	var		LAYER_BACK			=-2;
+
+
+	var		LAYER_LOCAL_BUTTON	=0;
+	var		LAYER_LOCAL_BACK	=0;
+
+
+
+	var		prn_menu;
+	var		menu_cg;
+	var		menu_back;
+
+	var		prn_back;
+
+
+	var		prn_layer_offset;
+	var		prn_px,prn_py;
+
+	var		select_id;
+
+	var		result;
+
+	var		item_viewer;
+	var		goboubi_cg_viewer;
+	var		result_mode;
+
+	var		mode;
+	var		MODE_NONE		=-1;
+	var		MODE_FADE_IN	= 0;
+	var		MODE_SELECT		= 10;
+	var		MODE_FADE_OUT	= 20;
+	var		MODE_RESULT		= 30;
+	var		MODE_RESULT_MODE= 35;
+	var		MODE_ITEM		= 40;
+	var		MODE_GOHOUBI_CG	= 45;
+	var		MODE_END		= 50;
+
+	function init_buffer()
+	{
+		mode = MODE_NONE;
+
+
+		prn_layer_offset = 0;
+		prn_px = 0;
+		prn_py = 0;
+
+		Reset();
+
+		prn_menu = void;
+		menu_cg  = void;
+		menu_back  = void;
+
+		prn_back = void;
+
+		result = void;
+
+		item_viewer = void;
+		goboubi_cg_viewer = void;
+		result_mode = void;
+		return;
+	}
+	function Release()
+	{
+	var		i;
+
+		Stop();
+
+		release_result();
+		release_result_mode();
+		release_item_viewer();
+		release_goboubi_cg_viewer();
+
+
+		if (CheckValid(menu_cg)  ==  true) {
+			for (i=0;  i<menu_cg.count;  i++) {
+				menu_cg[i].Release();
+				EasyObjectInvalidate( menu_cg[i] );
+				menu_cg[i] = void;
+			}
+			EasyObjectInvalidate( menu_cg );
+			menu_cg = void;
+		}
+		if (CheckValid(menu_back)  ==  true) {
+			for (i=0;  i<menu_back.count;  i++) {
+				EasyReleaseLayer( menu_back[i] );
+				menu_back[i] = void;
+			}
+			EasyObjectInvalidate( menu_back );
+			menu_back = void;
+		}
+
+
+		if (CheckValid(prn_back)  ==  true) {
+			ReleaseFadeAnime( prn_back );
+			EasyReleaseLayer( prn_back );
+			prn_back = void;
+		}
+
+		if (CheckValid(prn_menu)  ==  true) {
+			ReleaseFadeAnime( prn_menu );
+			EasyReleaseLayer( prn_menu );
+			prn_menu = void;
+		}
+
+		return;
+	}
+
+
+
+
+	function Init()
+	{
+	var		i;
+	var		_scene_id;
+
+
+		Release();
+
+
+		with (prn_menu = new CSpriteLayer(parWin,parLayer))
+		{
+			.setPriority( prn_layer_offset+LAYER_MENU_CG );
+			.setPos( prn_px, prn_py );
+			.setSize( 0, 0 );
+		}
+
+		with (prn_back = new CSpriteLayer(parWin, parLayer))
+		{
+			.setPriority( prn_layer_offset+LAYER_BACK );
+			.layerImageFromFill( 0,0, SCREEN_SIZE_W, SCREEN_SIZE_H, RGBA_MAKE(0,0,0,255), false );
+		}
+
+
+		menu_back = new Array();
+		menu_cg = new Array();
+
+
+		add_menu_back( "TOP" );
+
+		for (i=0;  i<MAX_MENU_ID;  i++) {
+			switch ( i )
+			{
+			case MENU_ID_GOHOUBI_CG1:
+				if (parLayer.getGohoubiCG(parLayer.ご褒美CG_クリア)  ==  false)
+					continue;
+				break;
+			case MENU_ID_GOHOUBI_CG2:
+				if (parLayer.getPlayrerItemCorrectNum()  ==  0)
+					continue;
+				break;
+			}
+			add_menu( i, "ir_album01_%02d".sprintf(i), "ir_album02_%02d".sprintf(i), void,SE_RESULTVIEW_MENU_FOCUS );
+		}
+		add_menu( MAX_MENU_ID, "ir_tutorial01_05", "ir_tutorial02_05", void,SE_RESULTVIEW_MENU_FOCUS  );
+		add_menu_back( "BOTTOM" );
+		return;
+	}
+
+
+	function add_menu( _id, _unfocus_name, _focus_name, _click_play_name, _focus_play_name )
+	{
+	var		menu_page;
+
+		menu_page = menu_cg.count;
+		with (menu_cg[menu_page] = new CIriyaNormalButton(parWin,prn_menu))
+		{
+			.Init();
+			.SetLayerPriority( LAYER_LOCAL_BUTTON );
+			.LoadUnFocusCG( _unfocus_name );
+			.LoadFocusCG( _focus_name );
+			.SetLayerPosition( 32, prn_menu.height );
+			.SetClickCallbackFunc( push_btn_callback, _id );
+			.SetCancelCallback( cancel_call_back );
+			.SetFocusSEPlayFile( _focus_play_name );
+			.SetClickSEPlayFile( _click_play_name );
+			.Print();
+		}
+
+		add_menu_back( "NORMAL" );
+		return;
+	}
+	function add_menu_back( add_type )
+	{
+	var		now_page;
+	var		file_name;
+		switch ( add_type )
+		{
+		case "TOP":
+			file_name = "ir_album00_00";
+			break;
+		case "NORMAL":
+			file_name = "ir_tutorial00_01";
+			break;
+		case "BOTTOM":
+			file_name = "ir_tutorial00_02";
+			break;
+		}
+
+		now_page = menu_back.count;
+		menu_back[now_page] = EasyCreateLayerObject( parWin,prn_menu, file_name,
+							clNone, true, 0,prn_menu.height, LAYER_LOCAL_BACK );
+
+		with ( prn_menu )
+		{
+			.setSize( menu_back[now_page].imageWidth, .height+menu_back[now_page].imageHeight );
+		}
+		return;
+	}
+
+
+
+	// 表示レイヤの表示優先度オフセット位置を指定する
+	function SetPriorityOffset( _offset )
+	{
+		prn_layer_offset = _offset;
+		if (CheckValid(prn_menu)  ==  true) {
+			prn_menu.setPriority( prn_layer_offset+LAYER_MENU_CG );
+			prn_back.setPriority( prn_layer_offset+LAYER_BACK );
+		}
+		return;
+	}
+
+	function SetBasePosition( _px, _py )
+	{
+		prn_px = _px;
+		prn_py = _py;
+		if (CheckValid(prn_menu)  ==  true)
+			prn_menu.setPos( prn_px, prn_py );
+		return;
+	}
+	function SetAutoBasePosition()
+	{
+	var	prn_x;
+		prn_x = (SCREEN_SIZE_W-prn_menu.width) / 2;
+		SetBasePosition( prn_x, OPTION_MENU_PRINT_POS_Y );
+		return;
+	}
+
+	function Reset()
+	{
+		select_id = -1;
+		return;
+	}
+	function Print()
+	{
+		if (CheckValid(prn_menu)  ==  true)
+			prn_menu.visible = true;
+		if (CheckValid(prn_back)  ==  true)
+			prn_back.visible = true;
+		return;
+	}
+	function fade_in_menu()
+	{
+		if (CheckValid(prn_menu)  ==  true)
+			EasyStartFadeAnime( prn_menu, 0, 255, BACK_FADE_OUT_TIME );
+		return;
+	}
+	function FadeIn()
+	{
+		mode = MODE_FADE_IN;
+		fade_in_menu();
+		if (CheckValid(prn_back)  ==  true)
+			EasyStartFadeAnime( prn_back, 0, MAX_BACK_FADE_ALHA, BACK_FADE_OUT_TIME );
+		return;
+	}
+	function fade_out_menu()
+	{
+		if (CheckValid(prn_menu)  ==  true)
+			EasyStartFadeAnime( prn_menu, 255, 0, BACK_FADE_OUT_TIME );
+		return;
+	}
+	function FadeOut()
+	{
+		fade_out_menu();
+		if (CheckValid(prn_back)  ==  true)
+			EasyStartFadeAnime( prn_back, MAX_BACK_FADE_ALHA, 0, BACK_FADE_OUT_TIME );
+		return;
+	}
+	function fade_anime()
+	{
+	var		ret;
+		ret = false;
+
+		if (ProcessFadeAnime(prn_menu)  ==  "UPDATING")
+			ret = true;
+		if (ProcessFadeAnime(prn_back)  ==  "UPDATING")
+			ret = true;
+		return ( ret );
+	}
+
+
+	function reset_select_menu()
+	{
+	var		i;
+		if (CheckValid(menu_cg)  ==  false)
+			return;
+		for (i=0;  i<menu_cg.count;  i++)
+			menu_cg[i].Print();
+		return;
+	}
+
+
+
+	function change_result()
+	{
+		Stop();
+
+		create_result();
+
+		mode = MODE_RESULT;
+		reset_select_menu();
+		return;
+	}
+	function create_result( _type )
+	{
+		with (result = new CIriyaResultViewer(parWin, parLayer) )
+		{
+			.Init( _type );
+			.SetPriorityOffset(prn_layer_offset+LAYER_RESULT);
+			.SetBasePosition( 0,0 );
+			.InitResultViewer( GetSelectID() );
+			.SetUp();
+			.Print();
+		}
+		return;
+	}
+	function release_result()
+	{
+		EasyObjectInvalidate( result );
+		result = void;
+		return;
+	}
+	function process_result()
+	{
+		if (CheckValid(result)  ==  false)
+			return ( false );
+
+
+		with ( result )
+		{
+			.Update();
+			if (.mode  !=  .MODE_END)
+				return ( true );
+		}
+
+		release_result();	// オプションメニューを開放
+		Start();
+		return ( false );
+	}
+
+
+
+
+
+	function Update()
+	{
+		switch ( mode )
+		{
+		case MODE_NONE:
+			break;
+
+		case MODE_SELECT:
+			break;
+		case MODE_RESULT:
+			if (process_result()  ==  true)
+				break;
+			break;
+		case MODE_ITEM:
+			ProcessItemViewer();
+			break;
+		case MODE_GOHOUBI_CG:
+			ProcessGohoubiCGViewer();
+			break;
+		case MODE_RESULT_MODE:
+			process_result_mode();
+			break;
+
+
+		case MODE_FADE_IN:
+			if (fade_anime()  ==  true)
+				break;
+			mode = MODE_SELECT;
+			Start();
+			break;
+		case MODE_FADE_OUT:
+			if (fade_anime()  ==  true)
+				break;
+			mode = MODE_END;
+			break;
+
+
+		case MODE_END:
+			break;
+		}
+		return;
+	}
+
+	function Start()
+	{
+	var		i;
+		Reset();
+
+		if (CheckValid(menu_cg)  ==  true) {
+			for (i=0;  i<menu_cg.count;  i++)
+				menu_cg[i].Start();
+		}
+		if (CheckValid(prn_back)  ==  true) {
+			with ( prn_back )
+			{
+				.setMouseDownCallback( back_button_hit );
+				.setHitCheckAlphaLimit( "ALL" );
+			}
+		}
+		UpdateCursorPos2( parLayer );
+		return;
+	}
+	function Stop()
+	{
+	var		i;
+		if (CheckValid(menu_cg)  ==  true) {
+			for (i=0;  i<menu_cg.count;  i++) {
+				menu_cg[i].Stop();
+				menu_cg[i].Print();
+			}
+		}
+		if (CheckValid(prn_back)  ==  true) {
+			with ( prn_back )
+			{
+				.setMouseDownCallback( void );
+				.setHitCheckAlphaLimit( "NONE" );
+			}
+		}
+		return;
+	}
+
+	function GetSelectID()
+	{
+		return ( select_id );
+	}
+
+
+	// ボタン上でのプッシュ割り込み
+	function push_btn_callback( _id )
+	{
+		select_id = _id;
+		if (select_id  ==  MAX_MENU_ID) {
+			cancel_call_back();
+			return;
+		}
+
+		stopSound( ,, );
+		PlaySE( SE_RESULTVIEW_MENU_SELECT );
+
+		switch ( select_id )
+		{
+		case MENU_ID_TIME_RANKING:
+//			change_result( RESULTVIEW_MODE_TIME );
+			change_result_mode( RESULTVIEW_MODE_TIME );
+			break;
+		case MENU_ID_SCORE_RKING:
+//			change_result( RESULTVIEW_MODE_SCORE );
+			change_result_mode( RESULTVIEW_MODE_SCORE );
+			break;
+		case MENU_ID_CORRECTION:
+			change_item_viewer();
+			break;
+		case MENU_ID_GOHOUBI_CG1:
+		case MENU_ID_GOHOUBI_CG2:
+			change_goboubi_cg_viewer( select_id );
+			break;
+		}
+		return;
+	}
+	function back_button_hit( _layer, _x,_y, _button,_shift )
+	{
+		if (_button  ==  mbRight)
+			cancel_call_back();
+		return;
+	}
+	// ボタン上でのキャンセル
+	function cancel_call_back()
+	{
+		select_id  = -1;
+		Stop();
+
+		stopSound( ,, );
+		PlaySE( SE_RESULTVIEW_MENU_CANCEL );
+
+
+		mode = MODE_FADE_OUT;
+		reset_select_menu();
+		FadeOut();
+		return;
+	}
+
+
+
+
+
+
+
+	// レアアイテムビューアー
+	function release_item_viewer()
+	{
+		EasyObjectInvalidate( item_viewer );
+		item_viewer = void;
+		return;
+	}
+	function change_item_viewer()
+	{
+		Stop();
+
+		mode = MODE_ITEM;
+		reset_select_menu();
+
+		with (item_viewer = new CIriyaItemViewer(parWin, parLayer))
+		{
+			.Init();
+			.SetPriorityOffset( prn_layer_offset+LAYER_RESULT );
+			.Print();
+			.FadeIn();
+		}
+		parLayer.resetFrameSkipData();
+		return;
+	}
+	function ProcessItemViewer()
+	{
+		if (CheckValid(item_viewer)  ==  false)
+			return;
+
+
+		with ( item_viewer )
+		{
+			.Update();
+			if (.mode  !=  .MODE_END)
+				return;
+
+			release_item_viewer();
+//			restart_title_menu_select();
+		}
+		Start();
+		return;
+	}
+
+
+
+
+	// ご褒美CGビューアー
+	function release_goboubi_cg_viewer()
+	{
+		EasyObjectInvalidate( goboubi_cg_viewer );
+		goboubi_cg_viewer = void;
+		return;
+	}
+	function change_goboubi_cg_viewer( type )
+	{
+		Stop();
+
+		mode = MODE_GOHOUBI_CG;
+		reset_select_menu();
+
+		switch ( type )
+		{
+		case MENU_ID_GOHOUBI_CG1:
+			goboubi_cg_viewer = new CIriyaGohoubiCG1Viewer( parWin, parLayer );
+			break;
+		case MENU_ID_GOHOUBI_CG2:
+			goboubi_cg_viewer = new CIriyaGohoubiCG2Viewer( parWin, parLayer );
+			break;
+		}
+
+		with ( goboubi_cg_viewer )
+		{
+			.Init();
+			.SetPriorityOffset( prn_layer_offset+LAYER_RESULT );
+			.Print();
+			.FadeIn();
+		}
+		parLayer.resetFrameSkipData();
+		return;
+	}
+	function ProcessGohoubiCGViewer()
+	{
+		if (CheckValid(goboubi_cg_viewer)  ==  false)
+			return;
+
+		with ( goboubi_cg_viewer )
+		{
+			.Update();
+			if (.mode  !=  .MODE_END)
+				return;
+
+			release_goboubi_cg_viewer();
+		}
+		Start();
+		return;
+	}
+
+
+
+
+
+	function change_result_mode( _type )
+	{
+		Stop();
+
+		create_result_mode( _type );
+
+		mode = MODE_RESULT_MODE;
+		reset_select_menu();
+		fade_out_menu();
+		return;
+	}
+	function create_result_mode( _type )
+	{
+		with (result_mode = new CIriyaResultViewModeMenu(parWin, parLayer) )
+		{
+			.Init( _type );
+			.SetPriorityOffset(prn_layer_offset+LAYER_RESULT_SUB);
+//			.SetBasePosition( 0,0 );
+			.SetAutoBasePosition();
+			.Print();
+			.FadeIn();
+		}
+		return;
+	}
+	function release_result_mode()
+	{
+		EasyObjectInvalidate( result_mode );
+		result_mode = void;
+		return;
+	}
+	function process_result_mode()
+	{
+		if (CheckValid(result_mode)  ==  false)
+			return ( false );
+
+		with ( result_mode )
+		{
+			fade_anime();
+
+			.Update();
+			switch ( .mode )
+			{
+			case .MODE_END:
+				break;
+
+			case .MODE_CANCEL:
+				fade_in_menu();
+				.FadeOut();
+				return ( true );
+			case .MODE_FADE_IN_END:
+				.StartSelect();
+				return ( true );
+			default:
+				return ( true );
+			}
+		}
+
+		release_result_mode();	// オプションメニューを開放
+		Start();
+		return ( false );
+	}
+
+
+}
+
+
+
+
+

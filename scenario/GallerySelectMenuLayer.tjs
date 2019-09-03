@@ -1,0 +1,316 @@
+/*-----------------------------------------------------------------------------
+/	Copyright (C) TYPE-MOON All Rights Reserved.
+/		ギャラリー選択メニュー
+/----------------------------------------------------------------------------*/
+@if(__GALLERYSELECTMENULAYER_DEFINED__==0)
+@set(__GALLERYSELECTMENULAYER_DEFINED__=1)
+
+Scripts.execStorage("HFParticleLayer.tjs");
+
+//	ギャラリー選択メニュー
+//var lastchoiced_gallery;	//	直前に選択されたギャラリー
+class GallerySelectMenuLayer
+{
+	var rclickcmd	= "global.galleryselectmenu.onCommand('back')";
+	var btn2go		= %[
+		hollow	: [ "title.ks", "*hollowgallery" ],
+		another	: [ "title.ks", "*anothergallery" ]
+	];
+	var enterse	= "";
+	var clickse	= "";
+
+	var window;
+	var layer;
+
+	var return_storage, return_label;
+	var acceptable;
+
+	var buttons;
+	var timer;
+	var cards;
+
+	function GallerySelectMenuLayer(win, par)
+	{
+		window	= win;
+		layer	= par;
+
+		//	イリヤ城のご褒美CGフラグをチェックする
+		var	iriyaflag	= [
+			"ir_gohoubi_cg1",
+			"ir_gohoubi_cg2"
+		];
+		for(var i=0; i<iriyaflag.count; i++)
+			global.tf.displayedPictures[iriyaflag[i]]	= 1 if global.tf[iriyaflag[i]];	//	フラグが立っていたら、ご褒美CGをギャラリーに登録
+
+		//	背景準備
+		var tmp	= new global.Layer(win, layer);
+		with(layer)
+		{
+			.loadImages(%[storage:"tl_bg"]);
+
+			tmp.loadImages("gls_title");
+			.operateRect(15, 15, tmp, 0, 0, tmp.imageWidth, tmp.imageHeight, omAlpha);
+			tmp.loadImages("type1/bar");
+			.operateRect(250, 36, tmp, 0, 0, tmp.imageWidth, tmp.imageHeight, omAlpha);
+		}
+
+		//	ギャラリーボタン準備
+		buttons	= [];
+		cards	= %[];
+		var btn;
+		var offset	= [ 0, 0, 2, 0 ];
+		if(true)
+		{
+			with(btn = new global.ExButtonLayer(win, layer, "hollow", 100, 80, "gls_card", ""))
+			{
+				.target	= this;
+				.mode	= 3;
+				.entersound	= enterse;
+				.hitThreshold	= 0;
+				.readyVisible();
+
+				//	状態に合わせて画像を描画
+				var type	= tf["夜の聖杯戦争クリア"]>0 ? 1 : 0;
+				var key		= "ab";
+				var l = 23, t = 26;
+				tmp.loadImages("gls_hollow"+key[type]);
+				for(var i=0; i<4; i++)
+				{
+					.operateRect(l + offset[i], t + offset[i], tmp, 0, 0, tmp.imageWidth, tmp.imageHeight);
+					l	+= .width;
+				}
+			}
+			buttons.add(btn);
+			cards[btn.id]	= btn;
+		}
+
+		var	flags		= [ tf["開運遠坂神社"], tf["トラぶる花札道中記"], tf["風雲イリヤ城"] ];
+		var anotherok	= flags[0] || flags[1] || flags[2];
+		if(anotherok)
+		{
+			with(btn = new global.ExButtonLayer(win, layer, "another", 470, 80, "gls_card", ""))
+			{
+				.target	= this;
+				.mode	= 3;
+				.entersound	= enterse;
+				.hitThreshold	= 0;
+				.readyVisible();
+
+				//	状態に合わせて画像を描画
+				var key		= "abc";
+				var tops = [ 26, 91, 202 ];
+				for(var i=0; i<flags.count; i++)
+				{
+					var l = 23, t = tops[i];
+					if(flags[i])
+					{
+						tmp.loadImages("gls_another"+key[i]);
+						for(var i=0; i<4; i++)
+						{
+							.operateRect(l + offset[i], t + offset[i], tmp, 0, 0, tmp.imageWidth, tmp.imageHeight);
+							l	+= btn.width;
+						}
+					}
+				}
+			}
+			buttons.add(btn);
+			cards[btn.id]	= btn;
+		}
+
+		var	bds	= [
+			[ true,		"hollow",   92, 491, "gls_hollowbutton", "" ],
+			[ anotherok,"another", 520, 491, "gls_anotherbutton", "" ],
+			[ true,		"back",    681, 548, "gl_back", "EXTRAメニューへ戻ります。" ]
+		];
+		for(var i=0; i<bds.count; i++)
+		{
+			var bd	= bds[i];
+			if(bd[0])
+			{
+				with(btn = new global.ExButtonLayer(win, layer, bd[1], bd[2], bd[3], bd[4], bd[5]))
+				{
+					.target	= this;
+					.mode	= 3;
+					.entersound	= enterse;
+					.hitThreshold	= 0;
+					.readyVisible();
+				}
+				buttons.add(btn);
+			}
+		}
+		acceptable	= false;
+	}
+
+	function finalize()
+	{
+		releaseArray(buttons);
+	}
+
+	function show(time=400, method="crossfade", vague=60000)
+	{
+		acceptable = true;
+
+		with(window)
+		{
+			.stopAllTransitions();
+			.fore.base.beginTransition(%[time:time, method:method, vague:vague]);
+		}
+
+//		with(timer = new Timer(post_show, ""))
+//			.interval = time, .enabled = true;
+
+		setRClickExp(rclickcmd);
+
+//		var btn	= lastchoiced_gallery;
+//		if(btn != void)
+//			moveCursor(btn, btn.width>>1, btn.height>>1, time, 0);
+	}
+
+	function post_show()
+	{
+//		with(window)
+//			.stopAllTransitions();
+//		acceptable	= true;
+
+//		lastchoiced_gallery.focus() if lastchoiced_gallery != void;
+
+//		setRClickExp(rclickcmd);
+
+		invalidate timer;
+		timer	= void;
+	}
+
+	function hide(time=400, func)
+	{
+		window.stopAllTransitions();
+		acceptable = false;
+
+		//	右クリックコマンドをリセット
+		resetRClickExp();
+
+		window.process(return_storage, return_label);
+
+		func() if func != void;
+	}
+
+	function closeThis()
+	{
+		hideGallerySelectMenu();
+	}
+
+	//	ボタンからの右クリック受け付け
+	function onMouseDown(x, y, button, shift)
+	{
+		if(!acceptable)
+			return;
+
+		if(button == mbRight)
+			rclickcmd!;
+	}
+
+	function setAnotherButtonState(btn, state)
+	{
+		for(var i=0; i<buttons.count; i++)
+		{
+			if(buttons[i] != btn && buttons[i].id == btn.id)
+			{
+				buttons[i].state	= state;
+				break;
+			}
+		}
+	}
+
+	function onButtonEnter(btn)
+	{
+		if(btn.id != "back")
+			setAnotherButtonState(btn, 1) if acceptable;
+	}
+
+	function onButtonLeave(btn)
+	{
+		if(btn.id != "back")
+			setAnotherButtonState(btn, 0) if acceptable;
+	}
+
+	function onButtonDown(btn)
+	{
+		onCommand(btn.id, btn);
+	}
+
+	function onCommand(cmd, btn)
+	{
+		if(!acceptable)
+			return;
+
+		playSound(clickse);
+		if(cmd == "back")
+		{
+//			lastchoiced_gallery	= void;
+
+			closeThis();
+		}
+		else
+		{
+			return_storage	= btn2go[cmd][0];
+			return_label	= btn2go[cmd][1];
+
+//			lastchoiced_gallery	= cmd;
+
+			//	選ばれた方のカードをめくる
+			if(cards[btn.id] != void)
+			{
+				var card	= cards[btn.id];
+				card.visible	= false;
+				var reverse;
+				with(reverse = new ParticleLayer(window, layer))
+				{
+					.setImageSize(card.width, card.height);
+					.setSizeToImageSize();
+//					dm(@"operateRect(0, 0, card, ${card.imageLeft}, ${card.imageTop}, ${card.width}, ${card.height})");
+					.operateRect(0, 0, card, -card.imageLeft, card.imageTop, card.width, card.height);
+					.setPos(card.left, card.top);
+					.opacity	= 255;
+					.hitThreshold	= 256;
+					.visible	= true;
+					.saveOriginal();
+					.magnifyTo(20, .height, 400, 2,, .endOfMove);
+				}
+				window.focusedLayer	= void;
+			}
+			closeThis();
+		}
+	}
+}
+
+//	ギャラリー選択メニューを開く
+var galleryselectmenu;
+function showGallerySelectMenu(st, ret)
+{
+	if(galleryselectmenu != void)
+		invalidate galleryselectmenu;
+
+	with(galleryselectmenu = new GallerySelectMenuLayer(kag, kag.back.base))
+	{
+		.return_storage	= st;
+		.return_label	= ret;
+		.show();
+	}
+}
+
+//	ギャラリー選択メニューを閉じる
+function hideGallerySelectMenu()
+{
+	if(galleryselectmenu == void)
+		return;
+
+	galleryselectmenu.hide(, closeGallerySelectMenu);
+}
+
+function closeGallerySelectMenu()
+{
+//	dispose(galleryselectmenu);
+	heapGarbage(galleryselectmenu);	//	廃棄予約をしておいて、トランジション終了後に廃棄可能にする
+	galleryselectmenu	= void;
+}
+
+@endif

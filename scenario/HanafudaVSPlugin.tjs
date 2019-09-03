@@ -1,0 +1,251 @@
+/*-----------------------------------------------------------------------------/
+/	Copyright (C) 2004 TYPE-MOON All Rights Reserved.
+/		花札 - キャラクター選択プラグイン
+/-----------------------------------------------------------------------------*/
+@if(__HANAFUDAVSPLUGIN_DEFINED__==0)
+@set(__HANAFUDAVSPLUGIN_DEFINED__=1)
+
+class HanafudaVSManager
+{
+	var window, parent, plugin;
+	var layers	= [];
+
+	var teamno	 = [];
+
+	var tachiestorage	= "hf_vs立ち絵-";
+	var center	= [	//	立ち絵出現時の中央座標
+		[ 138, 188, 88 ],	//	左側
+		[ 657, 607, 707 ]	//	右側
+	];
+	var tachieabsolutes	= [
+		[ 6, 4, 2],
+		[ 5, 3, 1]
+	];
+	var slidelength	= [ -120, 500 ];	//	出現、退出時の移動距離(左側=右向き用、逆ならマイナス)
+	var teamnamestorage	= "hf_vsチーム名-";
+	var teamnamepos	= [	//	チーム名の出現座標
+		[ 308, 311, 1000 ],
+		[ 498, 311, 1000 ]
+	];
+	var teamnameslide	= 180;
+	var vsdata	= [ "hf_vsVS", 400, 300, 2.5, 100 ];
+	var waittime;
+
+	function HanafudaVSManager(win, par, plugin)
+	{
+		this.window	= win;
+		this.parent	= par;
+		this.plugin	= plugin;
+	}
+
+	function finalize()
+	{
+		releaseArray(layers);
+	}
+
+	function show(time, accel, wait)
+	{
+		teamno.assign(plugin.teamno);
+		waittime	= wait;
+
+//		dm(@"show: ${time}ms, ${accel}, ${wait}ms");
+//		dm(@"${hfTeamName[teamno[0]]}(${teamno[0]}) vs ${hfTeamName[teamno[1]]}(${teamno[1]})");
+		var layer;
+		var basedelay = 150;
+		for(var i=0; i<2; i++)
+		{
+			//	立ち絵の準備
+			var team = teamno[i];
+			var teamname	= hfTeamName[team];
+			with(layer = new ParticleLayer(window, parent))
+			{
+				//	準備
+				.name	= "VS: "+teamname;
+				.opacity	= 0;
+				.hitThreshold	= 256;
+				.loadImages(tachiestorage+teamname);
+				.setSizeToImageSize();
+				.flipLR() if i;
+				var out = team == 4 ? -20 : team == 0 ? -56 : 46;
+				var l = (parent.width >> 1) + (i ? -out : (out - .width));
+				var st = i ? slidelength[0] : -slidelength[0];
+				.setPos(l + st, parent.height - .height);
+				.absolute	= fusuma_object.absolute + 2 - i;
+//				dm(teamname+".left = "+.left);
+
+				//	移動指令
+				.moveTo(l,, 255, time - basedelay, accel);
+				l	-= i ? slidelength[1] : -slidelength[1];
+				.moveTo(l,, 0, time, -accel, wait, endOfMove);
+			}
+			layers.add(layer);
+
+			//	チーム名の準備
+			with(layer = new ParticleLayer(window, parent))
+			{
+				.name	= "team: "+teamname;//hfTeamName[team];
+				.opacity	= 0;
+				.hitThreshold	= 256;
+				.loadImages(teamnamestorage+hfTeamName[team]);
+				.setSizeToImageSize();
+				var mv = i ? teamnameslide : -teamnameslide;
+				.setPos(teamnamepos[i][0] - (.width >> 1), teamnamepos[i][1] - (.height >> 1) - mv);
+				.absolute	= fusuma_object.absolute + teamnamepos[i][2];
+
+				//	移動指令
+				var pos = .top + mv;
+				.moveTo(, pos, 255, time, accel);
+				pos		+= mv;
+				.moveTo(, pos, 0, time, -accel, wait, endOfMove);
+			}
+			layers.add(layer);
+		}
+
+		//	VSの準備
+		with(layer = new ParticleLayer(window, parent))
+		{
+			.name	= "vs";
+			.opacity= 0;
+			.hitThreshold	= 256;
+			.loadImages(vsdata[0]);
+			.setSizeToImageSize();
+			var w = .width, h = .height;
+			.saveOriginal();	//	本画像を保存
+			var sw = .width * vsdata[3], sh = .height * vsdata[3];
+			.face = dfOpaque, .holdAlpha	= false;
+			.setSize(sw, sh);
+			.operateStretch(0, 0, sw, sh, .org, 0, 0, w, h, omOpaque,, window.currentInterpolationMode);
+			.setPos(vsdata[1] - (sw >> 1), vsdata[2] - (sh >> 1));
+			.absolute	= fusuma_object.absolute + vsdata[4];
+
+			//	移動指令
+			.magnifyToWithOpacity(w, h, 255, time, accel);//,, cache incontextof this);
+			.magnifyToWithOpacity(sw, sh, 0, time, -accel, wait, endOfMove);
+		}
+		layers.add(layer);
+
+		hfSound.bgm5	= true;
+	}
+
+	function hide()
+	{
+		for(var i=0; i<layers.count;)
+		{
+			layers[i].finishAll();
+		}
+
+		hfSound.bgm5	= false;	//	強制終了時のみ停止させる
+	}
+
+	function endOfMove(obj)
+	{
+		dm("end of move: "+obj.name);
+		for(var i=0; i<layers.count; i++)
+		{
+			if(layers[i] == obj)
+			{
+				layers.erase(i);
+				obj.endOfMove();
+				if(layers.count == 0)
+					plugin.fire();
+				return;
+			}
+		}
+	}
+
+	function cache()
+	{
+		//	表示待ち時間を利用して、花札画像の読み込みを行う
+		cacheHanafudaImage(waittime >> 1);
+	}
+}
+
+//-----------------------------------------------------------------------------
+//	花札タイトルプラグイン
+class HanafudaVSPlugin extends KAGPlugin
+{
+	var window;
+	var manager;
+
+	var showed;
+
+	var teamno;
+
+	function HanafudaVSPlugin(win)
+	{
+		super.KAGPlugin();
+		window	= win;
+	}
+
+	function finalize()
+	{
+		release(manager);
+		super.finalize(...);
+	}
+
+	function show(time, accel, wait)
+	{
+		if(showed)
+			return;
+		showed	= true;
+
+		with(manager = new HanafudaVSManager(window, window.fore.base, this))
+			.show(...);
+	}
+
+	function hide(time, accel)
+	{
+		dm("hide: "+showed);
+		if(!showed)
+			return;
+		showed	= false;
+
+		manager.hide(...);
+	}
+
+	function fire()
+	{
+		//	表示されているかどうか
+		if(!showed)
+			return;
+		showed	= false;
+
+		//	トリガを引く
+		window.trigger("hanafuda_vschara");
+	}
+
+	function onRestore(f, clear, elm)
+	{
+		// すべての、栞を読み出すときに呼ばれる
+		hide();	//	状態が復元されるので閉じる
+	}
+}
+if(typeof global.kag != "undefined")
+{
+	//	プラグインを登録
+	kag.addPlugin(global.hanafudavs_object = new HanafudaVSPlugin(kag));
+
+	//	呼び出しタグを追加
+	kag.tagHandlers.hanafuda_vschara	= function(elm)
+	{
+		with(hanafudavs_object)
+		{
+			.teamno	= [ +elm.player, +elm.cpu ];
+			.show(+elm.time, +elm.accel, +elm.wait);
+			return 0;
+		}
+	} incontextof kag;
+
+	kag.tagHandlers.whanafuda_vschara	= function(elm)
+	{
+		if(hanafudavs_object.showed)
+			return waitTrigger(%[name:"hanafuda_vschara",canskip:true,onskip:"hanafudavs_object.hide()"]);
+		else
+			return 0;
+	} incontextof kag;
+}
+
+@endif
+/*-----------------------------------------------------------------------------/
+/	End of HanafudaVSPlugin.tjs
+/-----------------------------------------------------------------------------*/

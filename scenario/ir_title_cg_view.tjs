@@ -1,0 +1,293 @@
+
+
+
+
+
+class CIriyaGohoubiCGViewer
+{
+var		parWin,parLayer;
+
+	function CIriyaGohoubiCGViewer( _pr_win, _pr_layer )
+	{
+		parWin   = _pr_win;
+		parLayer = _pr_layer;
+
+		init_buffer();
+	}
+	function finalize()
+	{
+		Release();
+	}
+
+	var		DEF_FADE_TIME		= FRAME_PER_SEC;
+
+	var		LAYER_LOCAL_BACK	=-1000;
+
+
+	var		mode;
+		var	MODE_INIT		=   0;
+		var	MODE_FADE_IN	=  10;
+		var	MODE_WAIT		=  50;
+		var	MODE_FADE_OUT	=  90;
+		var	MODE_END		= 100;
+
+
+	var		prn_base;
+	var		bg_cg;
+	var		prn_layer_offset;
+
+
+	function init_buffer()
+	{
+		mode = MODE_INIT;
+		prn_layer_offset = 0;
+
+		prn_base = void;
+		return;
+	}
+	function Release()
+	{
+	var		i;
+		if (CheckValid(bg_cg)  == true) {
+			for (i=0;  i<bg_cg.count;  i++) {
+				EasyReleaseLayer( bg_cg[i] );
+				bg_cg[i] = void;
+			}
+			EasyObjectInvalidate( bg_cg );
+			bg_cg = void;
+		}
+
+		if (CheckValid(prn_base)  ==  true) {
+			ReleaseFadeAnime( prn_base );
+			EasyReleaseLayer( prn_base );
+			prn_base = void;
+		}
+		return;
+	}
+
+	function Init()
+	{
+		// ベースレイヤの生成
+		prn_base = new CSpriteLayer( parWin, parLayer );
+		prn_base.layerImageFromFill( 0,0, parLayer.width,parLayer.height, RGBA_MAKE(0,0,0,0), false );
+		prn_base.setGUID( -1 );
+
+		// ご褒美CG
+		bg_cg = new Array();
+
+		SetPriorityOffset( prn_layer_offset );	// ベースCGのレイヤをセット
+		return;
+	}
+
+	function SetPriorityOffset( _offset )
+	{
+		prn_layer_offset = _offset;
+		if (CheckValid(prn_base))
+			prn_base.setPriority( prn_layer_offset );
+		return;
+	}
+	function Print()
+	{
+		// ベースCGのCGを表示
+		if (CheckValid(prn_base)) {
+			prn_base.visible = true;
+		}
+
+		return;
+	}
+	function FadeIn()
+	{
+		mode = MODE_FADE_IN;
+
+		if (CheckValid(prn_base)) {
+			EasyStartFadeAnime( prn_base, 0, 255, DEF_FADE_TIME );
+			prn_base.visible = true;
+		}
+		return;
+	}
+	function FadeOut()
+	{
+		mode = MODE_FADE_OUT;
+
+		stop_click();
+		if (CheckValid(prn_base)) {
+			EasyStartFadeAnime( prn_base, 255, 0, DEF_FADE_TIME );
+			prn_base.visible = true;
+		}
+		stopSound( ,, );
+		PlaySE( SE_CGVIEWER_MENU_CANCEL );
+		return;
+	}
+
+
+
+	function back_button_hit( _layer, _x,_y, _button,_shift )
+	{
+		FadeOut();
+		return;
+	}
+	function start_click()
+	{
+		with ( prn_base )
+		{
+			.setMouseUpCallback( back_button_hit );
+			.setHitCheckAlphaLimit( "ALL" );
+		}
+		UpdateCursorPos2( parLayer );
+		return;
+	}
+	function stop_click()
+	{
+		with ( prn_base )
+		{
+			.setMouseUpCallback( void );
+			.setHitCheckAlphaLimit( "NONE" );
+		}
+		return;
+	}
+
+
+
+	function Update()
+	{
+		switch ( mode )
+		{
+		case MODE_FADE_IN:
+			if (ProcessFadeAnime(prn_base)  ==  "UPDATING")
+				break;
+			mode = MODE_WAIT;
+			start_click();
+			break;
+		case MODE_FADE_OUT:
+			if (ProcessFadeAnime(prn_base)  ==  "UPDATING")
+				break;
+			mode = MODE_END;
+			break;
+
+		case MODE_WAIT:
+			break;
+
+
+	 	case MODE_INIT:
+	 	case MODE_END:
+	 		break;
+		}
+		return;
+	}
+
+}
+
+
+
+
+// ノーマルご褒美CG
+class CIriyaGohoubiCG1Viewer extends CIriyaGohoubiCGViewer
+{
+	function CIriyaGohoubiCG1Viewer()
+	{
+		super.CIriyaGohoubiCGViewer( ... );
+	}
+	function finalize()
+	{
+		super.finalize();
+	}
+
+	function Init()
+	{
+		super.Init();
+
+		with ( parLayer )
+		{
+			bg_cg[0] = EasyCreateLayerObject( parWin,prn_base,
+					.ご褒美CGフラグ[.ご褒美CG_クリア], clNone, true, 0,0, LAYER_LOCAL_BACK );
+		}
+	}
+}
+
+
+
+
+
+// アイテムご褒美CG
+class CIriyaGohoubiCG2Viewer extends CIriyaGohoubiCGViewer
+{
+	function CIriyaGohoubiCG2Viewer()
+	{
+		super.CIriyaGohoubiCGViewer( ... );
+	}
+	function finalize()
+	{
+		super.finalize();
+	}
+
+	var	gohoubi_cg;
+	var	back_cg;
+
+	function init_buffer()
+	{
+		super.init_buffer();
+
+		gohoubi_cg = void;
+		back_cg = void;
+	}
+	function Release()
+	{
+
+		super.Release();
+
+
+		EasyReleaseLayer( back_cg );
+		back_cg = void;
+
+		EasyReleaseLayer( gohoubi_cg );
+		gohoubi_cg = void;
+
+	}
+
+
+
+	function Init()
+	{
+	var		i,layer_no,cg_size_w,cg_size_h,prn_size_w,prn_size_h,pu,pv;
+		super.Init();
+
+
+
+		back_cg = EasyCreateLayerObject( parWin,parLayer, "ir_album_bg00", clNone, false, 0,0, LAYER_LOCAL_BACK );
+		SetLayerInfoParam( prn_base, back_cg, ,, );
+
+
+
+		with ( parLayer )
+		{
+			gohoubi_cg = EasyCreateLayerObject( parWin,prn_base,
+					.ご褒美CGフラグ[.ご褒美CG_ITEMコンプリート], clNone, false, 0,0, LAYER_LOCAL_BACK );
+		}
+
+
+		cg_size_w = gohoubi_cg.imageWidth;
+		cg_size_h = gohoubi_cg.imageHeight;
+		prn_size_w = (cg_size_w\MAX_IRIYA_ITEM_PAGE_W);
+		prn_size_h = (cg_size_h\MAX_IRIYA_ITEM_PAGE_H);
+		for (i=ITEM_レア,layer_no=0;  i<ITEM_レア_終了;  i++,layer_no++) {
+			bg_cg[layer_no] = new CSpriteLayer( parWin, prn_base );
+			SetLayerInfoParam( bg_cg[layer_no], gohoubi_cg, ,, LAYER_LOCAL_BACK );
+			if (parLayer.checkPlayerGetItem(i)  ==  false)
+				continue;
+
+			with ( bg_cg[layer_no] )
+			{
+				pu = (layer_no%MAX_IRIYA_ITEM_PAGE_W) * prn_size_w;
+				pv = (layer_no\MAX_IRIYA_ITEM_PAGE_W) * prn_size_h;
+				.setSize( prn_size_w, prn_size_h );
+				.setPos( pu, pv );
+				.setUV( pu,pv );
+				.visible = true;
+			}
+		}
+
+
+		return;
+	}
+}
+

@@ -1,0 +1,2440 @@
+/*******************************************************************************
+
+	風雲イリヤ城 - ジブラルタル海峡
+
+*******************************************************************************/
+
+var PRIORITY_FLAG			= PRIORITY_PLAYER_TOP+2000; // start-flag and goal-flag (serariz stage)
+var PRIORITY_FLYINGCANNON	= PRIORITY_PLAYER_TOP+3000; // serariz
+
+var LIMIT_DISTANCE = 160;
+var CANNON_ATTACK_INTERVAL = 60;
+var BALL_SPEED_MIN = 4;
+var BALL_SPEED_MAX = 8;
+var BALL_DAMAGE = 10;
+var SHOT_SPEED_MIN = 8;
+var SHOT_SPEED_MAX = 14;
+var SHOT_DAMAGE = 4;
+var HALBERD_DAMAGE = 15;
+var SWORD_DAMAGE = 8;
+var NO_FIGHT_TIME = FRAME_PER_SEC*3;
+
+var GIL_SWORDSPEED_X = -20;
+var GIL_SWORDSPEED_Z = -20;
+var GIL_HP = 60; // 宝具２回でやられるようにしておく
+
+var 小競り合いの発生確率 = 40; // 0.1％単位 フレーム毎の確率
+var プレイヤ小競り合いの発生確率 = 200;
+
+var ギル攻撃間隔_最小 = 10;
+var ギル攻撃間隔_最大 = 80;
+var ギル攻撃_剣の数   = 6;  // 一回の攻撃で出してくる剣の数
+
+var COMがギルに宝具を使う確率 = 100;	// ランダムで宝具を発動した場合に、そのターゲットがギルになる確率 0.1%単位
+
+class CIrHalberdEffect extends CIriyaObject
+{
+	function CIrHalberdEffect( _scene, _parent )
+	{
+		super.CIriyaObject(...);
+		type = OBJTYPE_HALBERD;
+		origin = ORIGIN_PARENT;
+		direction = parent.direction;
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	function onAnimation()
+	{
+		var list = findHitServants();
+		if ( list.count>0 )
+			doHit(list);	
+		switch( timing\3 )
+		{
+		case 0: imageId=0; break;
+		case 1: imageId=1; break;
+		case 2: imageId=2; break;
+		case 3: enabled=false; break;
+		}
+	}
+	
+	function doHit(list)
+	{
+		if ( onHit )
+		{
+			var i;
+			for ( i=0; i<list.count; i++ )
+				onHit(this,list[0]);
+		}
+	}
+	
+	function getImageFileInfo()
+	{
+		var info=%[];
+		info.filename = "ir_eff_halberd%02d".sprintf(imageId);
+		switch( direction )
+		{
+		case MUKI_CLOCK01:
+		case MUKI_CLOCK02:
+		case MUKI_CLOCK03:
+		case MUKI_CLOCK04:
+		case MUKI_CLOCK05:
+		case MUKI_CLOCK06:
+			info.mirror = false;
+			break;
+		default:
+			info.mirror = true;
+			break;
+		}
+		info.adapt = false;
+		info.centerX = 160;
+		info.centerY = 152;
+		info.hitRect = %[left:-100, top:-50, right:100, bottom:50];
+		return info;
+	}
+}
+
+class CIrSwordEffect extends CIriyaObject
+{
+	var info = %[];
+	
+	function CIrSwordEffect( _scene, _parent )
+	{
+		super.CIriyaObject( ... );
+		priority = _parent.priority+10;
+		origin = ORIGIN_PARENT;
+		info.filename = "ir_eff_sword10";
+		info.mirror = false;
+		info.adapt = false;
+		info.centerX = 22;
+		info.centerY = 166;
+		animation = 0;
+		enabled = STAGE3_GILEFF;
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	function onAnimation()
+	{
+		switch( animation )
+		{
+		case 0:
+			if ( timing < 8 )
+				break;
+			animation = 1;
+			break;
+		case 1:
+			fadeOut(8);
+			animation = 2;
+			break;
+		case 2:
+			if ( fadeProcessing )
+				break;
+			enabled = false;
+			break;
+		}
+	}
+	
+	function getImageFileInfo()
+	{
+		return info;
+	}
+}
+
+
+class CIrSwordRipple extends CIriyaObject
+{
+	function CIrSwordRipple( _scene, _parent )
+	{
+		super.CIriyaObject( ... );
+		x = parent.x;
+		y = parent.y;
+		z = parent.z;
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	function onAnimation()
+	{
+		var i = timing\5;
+		if ( i<=3 )
+			imageId = i;
+		else
+			enabled = false;
+	}
+	
+	function getImageFileInfo()
+	{
+		var info = %[];
+		info.filename = "ir_eff_sword%02d".sprintf( imageId );
+		info.mirror = false;
+		info.adapt = true;
+		info.centerX = 24;
+		info.centerY = 24;
+		return info;
+	}
+}
+
+
+class CIrSword extends CIriyaObject
+{
+	var onHit;
+	var timer;
+	var swordtype;
+	var info = %[];
+	var eff;
+	
+	function CIrSword( _scene, _parent )
+	{
+		super.CIriyaObject(...);
+		priority = PRIORITY_PLAYER;
+		type = OBJTYPE_SWORD;
+		timer = 0;
+		visible = false;
+		animation = 0;
+		swordtype = random32(10);
+		info.mirror = false;
+		info.adapt = true;
+		info.centerX = 32;
+		info.centerY = 32;
+		info.hitRect = %[left:-25,top:-25,right:25,bottom:25];
+	}
+	
+	function _findHitServants()
+	{
+		var list = [];
+		var dx, dy, dz, i;
+
+		for ( i=0; i<scene.players.count; i++ )
+		{
+			with( scene.players[i] )
+			{
+				dx = this.x - .x;
+				dy = this.y - .y;
+				dz = this.z - .z;
+			}
+			if ( dy*dy < 40*40 )
+				if ( dx*dx+dz*dz < 80*80 )
+					list.add( scene.players[i] );		
+		}
+		
+		return list;
+	}
+	
+	
+	function onAnimation()
+	{
+		switch( animation )
+		{
+		case 0: // 
+			if ( timing < timer )
+				break;
+			imageId = 4+swordtype*2;
+			visible = true;
+			animation = 1;
+			break;
+			
+		case 1: // 出現
+			fadeIn(8);
+			speedX = -1;
+			speedZ = -1;
+			with( new CIrSwordRipple( scene, this ) )
+				.images = this.images;
+			animation = 2;
+			break;
+			
+		case 2: // 空中で待機
+			if ( timing < 10 )
+				break;
+			animation = 3;
+			break;
+		
+		case 3: // 剣が飛ぶ
+			if ( timing==0 )
+			{
+				speedX = GIL_SWORDSPEED_X;
+				speedY = 0;
+				speedZ = GIL_SWORDSPEED_Z;
+				with( eff=new CIrSwordEffect(scene,this) )
+				{
+					.images = this.images;
+				}
+			}
+			var list = _findHitServants();
+			if ( list.count>0 && onHit )
+			{
+				var i;
+				for ( i=0; i<list.count; i++ )
+					onHit(this,list[i]);
+			}
+			if ( z < 0 )
+				animation = 4;
+			break;
+			
+		case 4: // 地面に刺さる
+			stop();
+			imageId = 4+swordtype*2+1;
+			animation = 5;
+			break;
+		case 5:
+			if ( timing < 10 )
+				break;
+			fadeOut(10);
+			animation = 6;
+			break;
+		case 6:
+			if ( fadeProcessing )
+				break;
+			enabled = false;
+			break;
+		}
+	}
+	
+	function getImageFileInfo()
+	{
+		info.filename = "ir_char_gilgamesh90%02d".sprintf(imageId);
+		return info;
+	}
+}
+
+
+class CIrGilgameshEff extends CIriyaObject
+{
+	function CIrGilgameshEff( _scene, _parent )
+	{
+		super.CIriyaObject(...);
+		origin = ORIGIN_PARENT;
+		priority = parent.priority;
+		type = OBJTYPE_GILGAMESH;
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	function onAnimation()
+	{
+		var i = timing\3;
+		if ( i<= 5 )
+			imageId = i;
+		else
+			enabled = false;
+		// サーバントの接触チェック
+		var list = findHitServants();
+		if ( list.count>0 )
+		{
+			if ( onHit )
+			{
+				var i;
+				for ( i=0; i<list.count; i++ )
+					onHit(this,list[i]);
+			}
+		}
+	}
+	
+	function getImageFileInfo()
+	{
+		var info = %[];
+		info.filename = "ir_eff_gilgamesh%02d".sprintf(imageId);
+		info.adapt = false;
+		info.mirror = false;
+		info.centerX = 127;
+		info.centerY = 180;
+		info.hitRect = %[left: -80, top:-80, right:80, bottom:80];
+		return info;
+	}
+}
+
+
+
+
+class CIrGilgamesh extends CIrLivingObject
+{
+	var onHit;
+	var ANI_GIL_ATTACK = "gil_attack";
+	var emoObj; // 宝具処理時にエラーを起こさないためのダミー変数
+	var INFO;
+	var nextattack;
+	
+	function CIrGilgamesh( _scene, _parent )
+	{
+		super.CIrLivingObject(...);
+		priority = PRIORITY_PLAYER;
+		scene.addShadow(this);
+		animation = void;
+		type = OBJTYPE_GILGAMESH;
+		hp = GIL_HP; 
+		imageId = 100;
+		INFO = GILGAMESH;
+		nextattack = 0;
+	}
+		
+	function onAnimation()
+	{
+		// 画面外の場合は何もしない
+		if ( getLayerPos(scene.normalCamera).x > SCREEN_SIZE_W+200 )
+			return;
+		
+		nextattack -= 1;
+		switch( animation )
+		{
+		case ANI_START:
+			animation = ANI_STAND;
+			break;
+			
+		case ANI_STAND:
+			if ( timing==0 )
+				stop();
+			doAnimation();
+			if ( counterAttackCheck() )
+				counterAttack();
+			if ( nextattack <= 0 )
+			{
+				swordAttack();
+				nextattack = randomRange( ギル攻撃間隔_最小, ギル攻撃間隔_最大 );
+			}
+			if ( random32(20)==0 )
+				animation = ANI_MOVE;
+			break;
+			
+		case ANI_MOVE:
+			doAnimation();
+			if ( timing==0 )
+				scene._servantRandomMove(this,0,0);
+			if ( nextattack <= 0 )
+			{
+				swordAttack();
+				nextattack = randomRange( ギル攻撃間隔_最小, ギル攻撃間隔_最大 );
+			}
+			if ( timing > 30 )
+				animation = ANI_STAND;
+			if ( counterAttackCheck() )
+				counterAttack();
+			break;
+			
+		case ANI_DEAD:
+			doAnimation();
+			stop();
+			break;
+			
+		case ANI_DAMAGE:
+			doAnimation();
+			if ( timing<30 && scene.houguEventProcessing )
+			{
+				allowAnimationWhileUsingHougu = false;
+				break;
+			}
+			animation = ANI_STAND;
+			break;
+			
+		default:
+			doAnimation();
+			break;
+		}
+		if ( animation != ANI_DEAD )
+		{
+			// サーバントの接触チェック
+			var list = findHitServants();
+			if ( list.count>0 )
+			{
+				if ( onHit )
+				{
+					var i;
+					for ( i=0; i<list.count; i++ )
+					{
+						onHit(this,list[i]);
+					}
+				}
+			}
+			// HPチェック
+			if ( animation!=ANI_DAMAGE && hp<=0 )
+			{
+				animation = ANI_DEAD;
+				if( random32(2) == 0 )
+					scene.putItem( x, y, %[id:ITEM_レア_エクスカリバー, 確率:エクスカリバーの出現確率] );
+				else
+					scene.putItem( x, y, %[id:ITEM_レア_金ぴか耳飾り, 確率:金ぴか耳飾りの出現確率] );
+			}	
+		}
+	}
+	
+	function doAnimation( ani )
+	{
+		if ( ani==void )
+			ani = animation;
+		switch( ani )
+		{
+		case ANI_STAND:
+			imageId = 100;
+			break;
+		case ANI_MOVE:
+			imageId = 500+(timing\5)%2;
+			break;
+		case ANI_GIL_ATTACK:
+			switch(timing)
+			{
+			case 0:
+				sound( SE_GIL_ATTACK );
+				with( new CIrGilgameshEff(scene,this) )
+				{
+					.onHit = this.onHit;
+					.images = this.images;
+				}
+				imageId = 900;
+				swordAttack();
+				break;
+			case 10:
+				imageId = 901;
+				break;
+			}
+			if ( timing>=20 )
+				animation = ANI_STAND;
+			break;
+		case ANI_DEAD:
+			if ( timing==0 )
+				sound( SE_GIL_DEAD );
+			imageId = 400;
+			break;
+		case ANI_DAMAGE:
+			imageId = 200 + (timing\15) % 2;
+			break;
+		}
+	}
+	
+	
+	function counterAttackCheck()
+	{
+		var i;
+		var dx, dy;
+		for ( i=0; i<scene.players.count; i++ )
+		{
+			dx = scene.players[i].x - x;
+			dy = scene.players[i].y - y;
+			if ( dx*dx+dy*dy <= 50*50 )
+				return true;
+		}
+		return false;			
+	}
+	
+	function counterAttack()
+	{
+		animation = ANI_GIL_ATTACK;	
+	}	
+	
+	function swordAttack()
+	{
+		var i;
+		for ( i=0; i<ギル攻撃_剣の数; i++ )
+			_swordAttack(
+				randomRange(x-120,x+80),
+				randomRange(y-120,y+120), 
+				randomRange(z+100,z+140),
+				randomRange(0,30)
+			);
+	}
+		
+	function _swordAttack(sx,sy,sz,st)
+	{
+		with( new CIrSword(scene,scene.enemyRootObj) )
+		{
+			.images = this.images;
+			.x = sx;
+			.y = sy;
+			.z = sz;
+			.timer = st;
+			.onHit = onHit;
+		}
+	}
+	
+	function getImageFileInfo()
+	{
+		var info = %[];
+		info.filename = "ir_char_gilgamesh%04d".sprintf(imageId);
+		info.adapt = true;
+		info.mirror = false;
+		info.centerX = 57;
+		info.centerY = 110;
+		info.hitRect = %[left: -20, top:-20, right:20, bottom:20];
+		return info;
+	}
+}
+
+
+
+class CIrSerarizu extends CIriyaObject
+{
+	var ANI_回転			= ANI_STAGE3|1000;
+	var ANI_攻撃			= ANI_STAGE3|1001;
+	var ANI_斧振り上げ		= ANI_STAGE3|1002;
+	var ANI_斧振り下ろし	= ANI_STAGE3|1003;
+	var ANI_スタート前待機	= ANI_STAGE3|1004;
+	var ANI_退却			= ANI_STAGE3|1005;
+	var ANI_イリヤ戦用登場	= ANI_STAGE3|1006;
+	
+	var セラリズ回転速度		= 5;
+	var セラリズ移動判定周期	= 30;
+	var セラリズ最低待機時間	= 30;
+	var セラリズ最高待機時間	= 90;
+
+	var IMAGEID_HALBERD_STAY	= 0x1000;
+	var IMAGEID_HALBERD_UP		= 0x2000;
+	var IMAGEID_HALBERD_DOWN	= 0x3000;
+
+	var target;
+	var angleDeg;
+	var interval; 
+	var shadow;
+	var usingHalberd;
+	var onHalberdHit;
+	var isRizu;
+	var iriyaStage;
+	var 退却タイマ;
+	var iriyaObj;
+	
+	function CIrSerarizu( _scene, _parent )
+	{
+		super.CIriyaObject( ... );
+		priority	= PRIORITY_FLYINGCANNON;
+		animation	= ANI_スタート前待機;
+		target		= void;
+		interval	= 0;
+		angleDeg	= 0;
+		motionRateX = 0.1;
+		motionRateY = 0.05;
+		motionRateZ = 1;
+		motionType = MOTIONTYPE_INVERCE;
+		shadow = scene.addShadow(this);
+		imageWidth = 256;
+		imageHeight= 256;
+		autoImageMemory = true;
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	function selectTarget()
+	{
+		if ( iriyaStage )
+		{
+			return scene.players[ random32(scene.players.count) ];		
+		}
+		else
+		{
+			// ４人以上ゴールしている場合は攻撃しない
+			if ( 4 <= scene.servantsRootObj.countChildAnimation(ANI_GOAL) )
+				return void;
+			// ゴールに近いプレイヤを優先して狙う
+			return scene.selectTargetPlayer();
+		}
+	}
+	
+	function randomMove( x1, y1, x2, y2 )
+	{
+		motionDestX = randomRange( x1, x2 );
+		motionDestY = randomRange( y1, y2 );
+		motionDestZ = 100;
+		motionLength = 60;
+		motionType = MOTIONTYPE_INVERCE;
+		motionStart();
+	}
+	
+	// ランダムで適当な位置に移動する
+	function randomMoveEx()
+	{
+		var x1,y1,x2,y2;
+		// フィールド上で、画面に写っている範囲を得る
+		// セラリズは高い場所におり、高さの分だけ画面上のほうにオフセットして表示されるため、
+		// あらかじめY座標にはZ座標を足しておく
+		with( scene.normalCamera.visibleRect )
+		{
+			x1 = .left;
+			y1 = .top + z;
+			x2 = .right;
+			y2 = .bottom + z;		
+		}
+		// セラリズが画面外にいる場合は、ランダムで画面上部か画面下部に移動させる
+		// 既に画面内にいる場合は、あまり激しく座標が変化しないよう、適度に移動させる
+		if ( outOfScreen() || random32(5)==0 )
+		{
+			if ( random32(2)==0 )
+				randomMove( x1+300, y1+20, x2-50, y1+160 );
+			else
+				randomMove( x1+300, y2-160, x2-50, y2-20 );
+		}
+		else
+		{
+			if ( y < y1+300)
+				randomMove( x1+500, y1+20, x2-50, y1+160 );
+			else
+				randomMove( x1+500, y2-160, x2-50, y2-20 );
+		}
+	}
+	
+	function doAnimation()
+	{
+		switch( animation )
+		{
+		case ANI_スタート前待機:
+		case ANI_STAND:
+			if ( usingHalberd )
+				imageId = IMAGEID_HALBERD_STAY|(timing\3%2);
+			else
+				imageId = timing\4 %2;
+			break;
+			
+		case ANI_斧振り上げ:
+			imageId = IMAGEID_HALBERD_UP | (timing\10%2);
+			if ( timing > FRAME_PER_SEC*2 )
+				animation=ANI_斧振り下ろし;
+			break;
+			
+		case ANI_斧振り下ろし:
+			if ( timing==0 )
+			{
+				with( new CIrHalberdEffect(scene,this) )
+				{
+					.onHit = onHalberdHit;
+					.images = scene.systemImages;
+				}
+				motionDestX = target.x;
+				motionDestY = target.y;
+				motionDestZ = 100;
+				sound( SE_HALBERD );
+			}
+			switch( timing\10 )
+			{
+			case 0:
+				imageId = IMAGEID_HALBERD_DOWN|0;
+				break;
+			case 1:
+				imageId = IMAGEID_HALBERD_DOWN|1;
+				break;
+			case 2:
+				animation=ANI_STAND;
+				break;
+			}
+			break;
+		
+		default:
+			imageId = timing\4 %2;
+			break;
+		}
+		// 向きを更新
+		direction = degToClockDirection( angleDeg );
+	}
+	
+	var turnTimeLeft;
+	var emo;
+	var アイテム範囲;
+	
+	function イリヤ戦用アイテム処理()
+	{
+		// アイテム範囲が定義されていれば、アイテムをおける場所かどうかの判定をする
+		if( アイテム範囲 )
+		{
+			if( x<=アイテム範囲.x1 ) return;
+			if( y<=アイテム範囲.y1 ) return;
+			if( x>=アイテム範囲.x2 ) return;
+			if( y>=アイテム範囲.y2 ) return;
+		}
+		// アイテムをおく
+		if( random32(1000)<1000*セラリズがアイテムを置く確率 )
+			scene.putItem( x, y, %[id:ITEM_レア_メイド服, 確率:メイド服の出現確率] );
+	}
+	
+
+	function onAnimation()
+	{
+//		退却タイマ--;
+//		if (退却タイマ==0)
+//			animation = ANI_退却;
+		if ( CheckValid(iriyaObj) && iriyaObj.hp==0 )
+			animation = ANI_退却;
+		// 行動を決定する
+		switch( animation )
+		{
+		case ANI_スタート前待機:
+			break;
+			
+		case ANI_START:
+			animation = ANI_STAND;
+			break;
+		// 待機状態
+		case ANI_STAND:
+			if ( iriyaStage )
+			{
+				if ( timing == 0 )
+					interval = randomRange(セラリズ最低待機時間, セラリズ最高待機時間);
+				if ( timing < interval ) // 時間が来るまで待つ
+					break;
+					イリヤ戦用アイテム処理();
+			}
+			else
+			{
+				if ( timing<30 )
+					break;
+			}
+			target = selectTarget(); // ターゲット決定
+			if ( target == void )
+				break;
+			turnTimeLeft = 15;
+			animation = ANI_回転;
+			break;
+		// ターゲットの方向を向く
+		case ANI_回転:
+			var deg = directionDegOf( target.x, target.y );
+			if ( turnTimeLeft > 0 )
+			{
+				angleDeg += normalize360( deg-angleDeg )/turnTimeLeft;
+				turnTimeLeft--;
+				break;
+			}
+			angleDeg = deg;
+			if ( usingHalberd )
+				animation = ANI_斧振り上げ;
+			else
+				animation = ANI_攻撃;
+			break;
+			
+		case ANI_攻撃:
+			if ( timing == 0 )
+				stop();
+			if ( timing <= 30 )
+				break;
+			if ( distanceOf(target.x, target.y) < LIMIT_DISTANCE )
+				break;
+			if ( timing%5 == 0 )
+			{
+				var spd = randomRange(SHOT_SPEED_MIN,SHOT_SPEED_MAX);
+				var info = calcHitPos( target.x, target.y, target.speedX, target.speedY, x, y-z, spd );
+				var deg;
+				if ( info )
+					deg = directionDegOf( info.x, info.y );
+				else
+					deg = angleDeg;			
+				scene.createNWayShot( 3, x, y, z, spd, deg+randomRange(0,0) );
+				sound( SE_SHOT );
+			}
+			if ( timing <= 45 )
+				break;
+			animation = ANI_STAND;
+			break;
+			
+		case ANI_イリヤ戦用登場:
+			randomMoveEx();
+			animation = ANI_STAND;
+			break;
+			
+		case ANI_退却:
+			if ( timing==0 )
+			{
+				motionDestX = FieldXSize\2;
+				motionDestY = -100;
+				motionDestZ = 100;
+				motionType = MOTIONTYPE_INVERCE;
+				motionStart();
+			}			
+			if ( motionDone )
+				enabled = false;
+			return;
+		}
+		
+		// 一定時間毎に、サーバント、セラorリズに近づきすぎていないかチェックする。
+		if ( ! iriyaStage )
+		{
+			if ( scene.timerCount%30 == 0 )
+				distanceCheck();
+		}
+		
+		if ( animation != ANI_斧振り下ろし )
+		{
+			// 移動先を変更する
+			// アニメに関係なく、時間で移動する
+			if ( scene.timerCount%セラリズ移動判定周期 == 0 )
+			{
+				if ( random32(3) == 0 )
+					randomMoveEx();
+			}
+		}
+		doAnimation();
+	}
+	
+	// サーバント、セラorリズに近づきすぎていればランダム移動
+	function distanceCheck()
+	{
+		switch( animation )
+		{
+		case ANI_斧振り上げ:
+		case ANI_斧振り下ろし:
+			return;
+		}
+		// セラがリズに近づいていたら遠のく
+		if ( isRizu==false && CheckValid(scene.rizuObj) )
+			if ( scene.rizuObj.distanceOf(x,y) < LIMIT_DISTANCE )
+				randomMoveEx();
+		// サーバントに近づきすぎていたら遠のく
+		var obj;
+		var i;
+		for ( i=0; i<scene.players.count; i++ )
+		{
+			obj = scene.players[i];
+			if ( obj == this )
+				continue;
+			// 近かった場合はランダムで位置を変える
+			if ( distanceOf(obj.x, obj.y-obj.z) < LIMIT_DISTANCE )
+			{
+				randomMoveEx();
+				break;
+			}
+		}
+	}
+	
+	
+	function getImageFileInfo()
+	{
+		var file;
+		var mir;
+		// 斧を使っている場合
+		if ( usingHalberd )
+		{
+			switch( direction )
+			{
+			case MUKI_CLOCK01:
+			case MUKI_CLOCK02:
+			case MUKI_CLOCK03:
+			case MUKI_CLOCK04:
+			case MUKI_CLOCK05:
+			case MUKI_CLOCK06:
+				mir = false;
+				break;
+			default:
+				mir = true;
+				break;
+			}
+			var index = imageId & IMAGEID_INDEXMASK;
+			switch( imageId & IMAGEID_TYPEMASK )
+			{
+			case IMAGEID_HALBERD_STAY:	file="ir_char_rizu05"; break;
+			case IMAGEID_HALBERD_UP:	file="ir_char_rizu06"; break;
+			case IMAGEID_HALBERD_DOWN:	file="ir_char_rizu07"; break;
+			default:
+				return void;
+			}
+			//
+			var info = %[];
+			info.filename = file+"%02d".sprintf(index);
+			info.mirror = mir;
+			info.centerX = 137;
+			info.centerY = 159;
+			info.adapt = true;
+			return info;
+		}
+		// 基本ファイル名の決定・反転の有無
+		if ( isRizu )
+			file="ir_char_rizu";
+		else
+			file="ir_char_sera";
+		
+		switch( direction )
+		{
+		case MUKI_CLOCK01: file+="00"; mir=true; break;
+		case MUKI_CLOCK02: file+="01"; mir=true; break;
+		case MUKI_CLOCK03: file+="02"; mir=true; break;
+		case MUKI_CLOCK04: file+="02"; mir=true; break;
+		case MUKI_CLOCK05: file+="03"; mir=true; break;
+		case MUKI_CLOCK06: file+="04"; mir=false; break;
+		case MUKI_CLOCK07: file+="03"; mir=false; break;
+		case MUKI_CLOCK08: file+="02"; mir=false; break;
+		case MUKI_CLOCK09: file+="02"; mir=false; break;
+		case MUKI_CLOCK10: file+="01"; mir=false; break;
+		case MUKI_CLOCK11: file+="00"; mir=false; break;
+		case MUKI_CLOCK12: file+="00"; mir=false; break;
+		default:
+			return void;
+		}	
+		switch( imageId )
+		{
+		case 0: file+="00"; break;
+		case 1: file+="01"; break;
+		default:
+			return void;
+		}
+		//
+		var info = %[];
+		info.filename = file;
+		info.mirror = mir;
+		info.centerX = 39;
+		info.centerY = 130;
+		info.adapt = true;
+		return info;
+	}
+}
+
+
+
+
+
+function __degToClockDirection( deg )
+{
+	switch( normalize360(deg) \ 30 )
+	{
+	case 0: return MUKI_CLOCK03;
+	case 1:	return MUKI_CLOCK04;
+	case 2: return MUKI_CLOCK05;
+	case 3:	return MUKI_CLOCK06;
+	case 4: return MUKI_CLOCK07;
+	case 5:	return MUKI_CLOCK08;
+	case 6: return MUKI_CLOCK09;
+	case 7:	return MUKI_CLOCK10;
+	case 8: return MUKI_CLOCK11;
+	case 9:	return MUKI_CLOCK12;
+	case 10:return MUKI_CLOCK01;
+	case 11:return MUKI_CLOCK02;
+	}
+}
+
+function degToClockDirection( deg )
+{
+	var clock = __degToClockDirection( deg );
+	
+	if( clock==MUKI_CLOCK03 )
+	{
+		if ( deg>0 ) return MUKI_CLOCK04;
+		if ( deg<0 ) return MUKI_CLOCK02;
+	} 
+	if( clock==MUKI_CLOCK09 )
+	{
+		if ( deg>0 ) return MUKI_CLOCK08;
+		if ( deg<0 ) return MUKI_CLOCK10;
+	} 
+	return clock;
+}
+
+
+class CIrCannon extends CIriyaObject
+{
+	var target;
+	var angleDeg;
+	var interval;
+	
+	function CIrCannon( _scene, _parent )
+	{
+		super.CIriyaObject( ... );
+		priority = PRIORITY_GROUNDOBJ;
+		target = void;
+		interval = 0;
+		imageWidth = 256;
+		imageHeight = 256;
+		autoImageMemory = true;
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+
+	function doUpdateCom()
+	{
+		super.doUpdateCom(...);
+		//
+		if ( timing % CANNON_ATTACK_INTERVAL > 0 )
+			return;
+		// ４人以上ゴールしている場合は攻撃しない
+		if ( 4 <= scene.servantsRootObj.countChildAnimation(ANI_GOAL) )
+			return;
+		// 画面外の場合は何もしない
+		if ( outOfScreen() )
+			return; 
+		// ゴールに近いプレイヤを優先して狙う
+		target = scene.selectTargetPlayer();
+		if ( target==void )
+			return;
+		// 向きを変える		
+		angleDeg = directionDegOf( target.x+100, target.y );
+		direction = degToClockDirection( angleDeg );
+		// 弾を生成してリストに追加する
+		var sp = randomRange( BALL_SPEED_MIN, BALL_SPEED_MAX );
+		var ballx, bally;
+		switch( direction )
+		{
+		case MUKI_CLOCK12:
+			ballx=0; bally=-100; break;
+		case MUKI_CLOCK01:
+		case MUKI_CLOCK02:
+		case MUKI_CLOCK03:
+			ballx=60; bally=-80; break;
+		case MUKI_CLOCK04:
+		case MUKI_CLOCK05:
+			ballx=40; bally=-20; break;
+		case MUKI_CLOCK06:
+			ballx=0; bally=-10; break;
+		case MUKI_CLOCK07:
+		case MUKI_CLOCK08:
+			ballx=-40; bally=-20; break;
+		case MUKI_CLOCK09:
+		case MUKI_CLOCK10:
+		case MUKI_CLOCK11:
+			ballx=-60; bally=-80; break;
+		}
+		if ( STAGE3_ENABLE_ATTACK )
+			scene.createBall( x+ballx, y+bally, z, target.x+100, target.y, sp );
+		sound( SE_BALL );
+	}
+	
+	function onAnimation()
+	{
+		direction = degToClockDirection( angleDeg );
+		switch( direction )
+		{
+		case MUKI_CLOCK12:
+			imageId=1;
+			break;
+		case MUKI_CLOCK01:
+		case MUKI_CLOCK02:
+		case MUKI_CLOCK03:
+			imageId=2;
+			break;
+		case MUKI_CLOCK04:
+		case MUKI_CLOCK05:
+			imageId=3;
+			break;
+		case MUKI_CLOCK06:
+			imageId=5;
+			break;
+		case MUKI_CLOCK07:
+		case MUKI_CLOCK08:
+			imageId=4;
+			break;
+		case MUKI_CLOCK09:
+		case MUKI_CLOCK10:
+		case MUKI_CLOCK11:
+			imageId=0;
+			break;
+		default:
+			return void;
+		}
+	}
+	
+	function getImageFileInfo()
+	{
+		var cx;
+		var cy;
+		switch( direction )
+		{
+		case MUKI_CLOCK12:
+			imageId=1;
+			cx=80;
+			cy=100;
+			break;
+		case MUKI_CLOCK01:
+		case MUKI_CLOCK02:
+		case MUKI_CLOCK03:
+			imageId=2;
+			cx=80;
+			cy=100;
+			break;
+		case MUKI_CLOCK04:
+		case MUKI_CLOCK05:
+			imageId=3;
+			cx=72;
+			cy=72;
+			break;
+		case MUKI_CLOCK06:
+			imageId=5;
+			cx=72;
+			cy=72;
+			break;
+		case MUKI_CLOCK07:
+		case MUKI_CLOCK08:
+			imageId=4;
+			cx=72;
+			cy=72;
+			break;
+		case MUKI_CLOCK09:
+		case MUKI_CLOCK10:
+		case MUKI_CLOCK11:
+			imageId=0;
+			cx=80;
+			cy=100;
+			break;
+		default:
+			return void;
+		}
+		var info = %[];
+		info.filename = "ir_obj_cannon%02d".sprintf(imageId);
+		info.mirror = false;
+		info.adapt = true;
+		info.centerX = cx;
+		info.centerY = cy;
+		return info;
+	}
+}
+
+
+
+
+class CIriyaGib extends CIriyaSceneEx
+{
+	var ボール影表示範囲_上余白 = 30;
+	var ボール影表示範囲_下余白 = 30;
+//
+	var FieldXSize = 4800;
+	var FieldYSize = 1000;
+	var FirstCameraPosX = 2000;
+	var FirstCameraPosY = 200;
+	var BallInitialSpeedZ = 8;
+	var ゴール位置X = 4600;
+	var ゴール後待機位置X = [ 4700, 4620, 4700, 4620, 4700 ];
+	var ゴール後待機位置Y = [  420,  500,  580,  660,  740 ];
+	var CameraPosY = 530;
+	var SERVANT_NODAMAGE_TIME = FRAME_PER_SEC*0.8;
+	var SERVANT_NODAMAGE_TIME_SHIELDLOST = FRAME_PER_SEC*1;
+	var サーバント復帰時無敵時間 = FRAME_PER_SEC;
+	var サーバント移動可能範囲_左 = 30;
+	var ノックバック速度 = 12;
+	var SERVANT_KNOCKBACK_TIME = 15;
+	var 復帰歩き速度 = 15;
+	var 盾の自然解除までの時間 = 280;
+	var ショット角度間隔 = 45;
+	// プレイヤキャラクタの移動可能範囲
+	var TopBorderLines		= [ 
+		%[x:   0, y: 344], %[x: 130, y: 344], %[x: 200, y: 470], %[x: 760, y: 475], 
+		%[x: 825, y: 400], %[x:1460, y: 410], %[x:1490, y: 440], %[x:1690, y: 440], 
+		%[x:1740, y: 490], %[x:2140, y: 490], %[x:2250, y: 380], %[x:2400, y: 340],
+		%[x:2670, y: 430], %[x:3840, y: 420], %[x:3900, y: 500], %[x:4090, y: 490], %[x:4520, y: 490],
+		%[x:4580, y: 410], %[x:4800, y: 370]
+	];		
+	var BottomBorderLines	= [ 
+		%[x:   0, y: 660], %[x: 280, y: 710], %[x: 770, y: 710], %[x:1010, y: 600],
+		%[x:1430, y: 600], %[x:1520, y: 720], %[x:2200, y: 720], %[x:2270, y: 670],
+		%[x:2560, y: 640], %[x:2670, y: 630], %[x:3820, y: 610], %[x:3880, y: 690],
+		%[x:4070, y: 750], %[x:4520, y: 740], %[x:4800, y: 820]
+	];
+	var DefaultPlayers = [
+		%[ x: 140, y: 640 ],
+		%[ x: 155, y: 605 ],
+		%[ x: 170, y: 570 ],
+		%[ x: 185, y: 535 ],
+		%[ x: 200, y: 500 ]
+	];
+	var DefaultCannons = [
+		%[ x:  530, y:260, deg: 90 ],
+		%[ x: 1210, y:820, deg:-90 ],
+		%[ x: 1990, y:250, deg: 90 ],
+		%[ x: 2940, y:270, deg: 90 ],
+		%[ x: 3580, y:850, deg:-90 ],
+		%[ x: 4380, y:270, deg: 90 ]
+	];
+	
+	var 順位=0;
+	var seraObj;
+	var rizuObj;
+	var gilObj;
+	
+	//--------------------------------------------------------------------------
+	// コンストラクタなど
+	//--------------------------------------------------------------------------
+	function CIriyaGib( parent, scene_id )
+	{
+		super.CIriyaSceneEx( ... );
+		dm( "ジブラルタル" );
+	}
+
+	function init()
+	{
+		super.init( ... );
+		ANIWAIT_TITLE = 2;
+		BgmPlay( BGM_STAGE3 );
+	}
+	
+	// デストラクタ
+	function finalize()
+	{
+		super.finalize( ... );
+	}
+
+	// objの影を更新する
+	function onShadowUpdate( shadow )
+	{	
+		var y1 = getPlayerYLimitTop( shadow.x )-ボール影表示範囲_上余白;
+		var y2 = getPlayerYLimitBottom( shadow.x )+ボール影表示範囲_下余白;
+		if( CheckValid(shadow.parent) && shadow.parent.animation!=ANI_復帰 )
+			shadow.visible = inRange( y1, shadow.y, y2 );
+	}
+
+
+	//==========================================================================
+	//	キャラクタ・オブジェクトのイベント
+	//==========================================================================
+	// index番目のプレイヤの初期化処理の際に呼び出される
+	function onInitPlayer( player, _index )
+	{
+		with( player )
+		{
+			.onMoved = onPlayerMoved;
+			.x = DefaultPlayers[_index].x;
+			.y = DefaultPlayers[_index].y;
+			.owner = void; // 自分（盾）を持っているサーバント
+			.shield = void; // 自分が持っている盾サーバント.
+			if ( .isPlayer )
+				.onUpdateCom = servantPlayer;
+			else
+				.onUpdateCom = servantCom;
+			.onHouguDamaged = servantHouguDamaged;
+		}
+	}
+
+	function onServantPositionQuery( index )
+	{
+		var start = DefaultPlayers[index].x;
+		var len = FieldXSize - start;
+		var pos = players[index].x - start;
+		return round( 0, pos/len*100, 100 );
+	}
+	
+	function servantHouguDamaged( servant )
+	{
+		with( servant )
+		{
+			if ( .shield )
+			{
+				var sh = .shield;
+				盾解除( servant, sh );
+				sh.animation = ANI_放り出される;
+				sh.allowAnimationWhileUsingHougu = true;
+				return;
+			}
+			if ( .animation == ANI_SHIELD )
+			{
+				盾解除( .owner, servant );
+				.allowAnimationWhileUsingHougu = true;
+				return;
+			}
+		}
+	}
+
+	// フィールドの初期化時に呼び出される
+	function initField()
+	{
+		super.initField();
+		// カーソル
+		destinationCursorCreate();
+		// 背景用オブジェクト
+		if ( DIVIDE_BACKGROUND_IMAGE )
+		{
+			var x;
+			var i=0;
+			for ( x=0; x<4800; x+=400 )
+				with( new CIrBackground(this,etcRootObj) )
+				{
+					.filename = "ir_st3_bg%02d".sprintf(i++);
+					.x = x;
+					.y = 0;
+					.imageWidth = 400;
+					.imageHeight= 1000;
+					.autoImageMemory = true;
+				}
+		}
+		else
+		{
+			with( new CIrBackground(this,etcRootObj) )
+				.filename = "ir_st3_bg";
+		}
+		// スタート旗のポール
+		with ( new CIrBackground(this,etcRootObj) )
+		{
+			.x = 180;
+			.y = 260;
+			.priority = PRIORITY_GROUNDOBJ;
+			.filename = "ir_st3_start_01";
+			.adapt = true;
+			.imageWidth = 256;
+			.imageHeight= 100;
+			.autoImageMemory = true;
+		}
+		// スタート旗
+		with ( new CIrBackground(this,etcRootObj) )
+		{
+			.x = 45;
+			.y = 280;
+			.priority = PRIORITY_FLAG;
+			.filename = "ir_st3_start_00";
+			.onAnimation= flagAnimation;
+			.adapt = true;
+			.imageWidth = 256;
+			.imageHeight= 100;
+			.autoImageMemory = true;
+		}
+		// ゴール旗のポール
+		with ( new CIrBackground(this,etcRootObj) )
+		{
+			.x = 4560;
+			.y = 300;
+			.priority = PRIORITY_GROUNDOBJ;
+			.filename = "ir_st3_goal_01";
+			.adapt = true;
+			.imageWidth = 256;
+			.imageHeight= 100;
+			.autoImageMemory = true;
+		}
+		// ゴール旗
+		with ( new CIrBackground(this,etcRootObj) )
+		{
+			.x = 4590;
+			.y = 320;
+			.priority = PRIORITY_FLAG;
+			.filename = "ir_st3_goal_00";
+			.onAnimation = flagAnimation;
+			.adapt = true;
+			.imageWidth = 256;
+			.imageHeight= 100;
+			.autoImageMemory = true;
+		}
+		// 砲台
+		if ( STAGE3_ENABLE_CANNON )
+		{
+			var i;
+			for ( i=0; i<DefaultCannons.count; i++ )
+			{
+				with ( new CIrCannon(this,enemyRootObj) )
+				{
+					.x = DefaultCannons[i].x;
+					.y = DefaultCannons[i].y;
+					.angleDeg = DefaultCannons[i].deg;
+					.images = systemImages;
+					.cannonindex = i;
+				}
+			}
+		}
+		// セラリズ
+		if ( STAGE3_ENABLE_SERARIZ )
+		{
+			// セラ
+			with ( seraObj = new CIrSerarizu(this,enemyRootObj) )
+			{
+				.isRizu = false;
+				.x		= 600;
+				.y		= 300;
+				.angleDeg= 135;
+			}
+			// リズ
+			with ( rizuObj = new CIrSerarizu(this,enemyRootObj) )
+			{
+				.isRizu = true;
+				.x		= 600;
+				.y		= 600;
+				.angleDeg= -135;
+				.usingHalberd = getRizuHalberdFlag(); // 斧を持っているかどうか
+				.onHalberdHit = playerHitBall;
+			}
+		}
+		// ギル先生
+		with ( gilObj = new CIrGilgamesh(this,enemyRootObj) )
+		{
+			.x = 4400;
+			.y = 600;
+			.onHit = playerHitBall;
+		}
+		// アイテム
+		var i;
+		var x;
+		var y;
+		for ( i=0; i<20; i++ )
+		{
+			x = randomRange( 400, FieldXSize-600 );
+			y = randomRange( getPlayerYLimitTop(x)+20, getPlayerYLimitBottom(x)-20 );
+			if( random32(1000)<宝箱の出現確率*1000 )
+			{
+				if( random32(2)==0 )
+					putItem( x, y, ランダム出現するレアアイテム() );
+				else
+					putItem( x, y, 特定キャラを使用した場合のレアアイテム(playerObj) );
+			}
+			else
+				putItem( x, y );
+		}
+	}
+	
+	function flagAnimation( flag )
+	{
+		// サーバントが重なっていたら半透明にする
+		var i;
+		var over = false;
+		for ( i=0; i<players.count; i++ )
+			if ( inRect( players[i].x, players[i].y, flag.x+30, flag.y+50, flag.x+130, flag.y+400 ) )		
+			{
+				over = true;
+				break;
+			}
+		
+		if ( CheckValid(flag.layer) )
+		{
+			if ( over )
+				flag.layer.opacity = 128;
+			else
+				flag.layer.opacity = 255;
+		}
+	}
+	
+	// 通常カメラを更新する
+	function normalCameraUpdate( camera )
+	{
+		if ( camera.mode != CAMERAMODE_DEFAULT )
+			return false;
+
+		switch( playerObj.animation )
+		{
+		case ANI_STAND:
+		case ANI_麻痺:
+		case ANI_MOVE:
+		case ANI_イベント待機:
+		case ANI_イベント移動:
+		case ANI_MOVETOGOAL:
+		case ANI_SHIELD:
+		case ANI_HOUGU:
+		case ANI_勝利:
+		case ANI_GOAL:
+//		case ANI_復帰:
+			camera.motionDestX = playerObj.x;
+			break;
+		}
+		camera.motionDestY = CameraPosY;
+		return true;
+	}
+	
+	
+	function createFireEffect( x, y )
+	{
+		if ( ! STAGE3_FIREEFF )
+			return;
+		with( new CIrCannonFire(this,etcRootObj) )
+		{
+			.x = x;
+			.y = y;
+			.images = systemImages;
+		}	
+	}
+	
+	// フィールド座標 (x, y) に, (targetX, targetY) の方向へ向かうボールを生成する
+	function createBall( x, y, z, targetX, targetY, speed )
+	{
+		var dx		= targetX - x;
+		var dy		= targetY - y;
+		var dist	= hypot( dx, dy );
+		var _sin	= dy/dist;
+		var _cos	= dx/dist;
+		return _createBall( x, y, z, speed*_cos, speed*_sin );
+	}
+
+	
+	// フィールド座標 (x, y) に, (speedX, speedY) の速さのボールを生成する
+	function _createBall( x, y, z, speedX, speedY, speedZ=BallInitialSpeedZ )
+	{
+		// エフェクトを生成
+		createFireEffect( x, y );
+		// 弾を生成してリストに追加する
+		with ( new CIrBall(this,enemyRootObj) )
+		{
+			.x		= x;
+			.y		= y;
+			.z		= z;
+			.speedX	= speedX;
+			.speedY	= speedY;
+			.speedZ	= speedZ;
+			.onHit	= playerHitBall;
+			.images = systemImages;
+		}
+	}
+	
+	function createNWayShot( n, x, y, z, speed, deg )
+	{
+		var i=0;
+		for ( i=0; i<n; i++ )
+			_createShot( x, y, z, speed, deg+ショット角度間隔*(i-(n-1)/2) );
+	}
+	
+	function _createShot( x, y, z, speed, deg )
+	{
+		// 弾を生成してリストに追加する
+		with ( new CIrShot(this,etcRootObj) )
+		{
+			.x		= x;
+			.y		= y;
+			.z		= z;
+			.speedX	= speed * Math.cos( degToRad(deg) );
+			.speedY	= speed * Math.sin( degToRad(deg) );
+			.speedZ	= 0;
+			.onHit	= playerHitBall;
+			.images = systemImages;
+		}
+	}	
+	
+	function compareX( obj1, obj2 )
+	{
+		return obj1.x > obj2.x;
+	}
+	
+	
+	// ゴールに近い順にプレイヤを並べたリストを返す
+	function createListSortedByX()
+	{
+		var list=[];
+		var i;
+		for ( i=0; i<players.count; i++ )
+			list.add( players[i] );
+		list.sort( compareX, false );
+		return list;
+	}
+	
+	function sum( array, count )
+	{
+		var i;
+		var total;
+		if ( count==void )
+			count = array.count;
+		for ( i=0; i<count; i++ )
+			total += array[i];
+		return total;
+	}
+	
+	// ゴールに近いプレイヤほど高い確率で返す
+	function selectTargetPlayer( gettop=false )
+	{
+		var 相対確率 = [20,5,4,2,1]; // 各順位のサーバントを選ぶ確率
+		var list = createListSortedByX(); // X座標の小さい順に並べる。list[0]はビリ、list[4]はトップランナー
+		// 画面外のサーバント、プレイ中でないサーバントを削除する
+		var i;
+		for ( i=list.count-1; i>=0; i-- )
+		{
+			if ( list[i].outOfScreen() || list[i].status!=STATUS_PLAYING )
+				list.erase(i);
+		}
+		if ( gettop )
+			return list[0];
+		// 指定された相対確率に従って対象を決定する
+		var val = random32( sum(相対確率) );
+		for ( i=0; i<list.count; i++ )
+			if ( val < sum(相対確率,i) )
+				return list[i];
+		// 候補がない場合
+		return void;
+	}		
+
+	// プレイヤがボール又はショットに当った場合に呼び出される
+	function playerHitBall( tama, servant )
+	{
+		if ( servant.condition==CONDITION_NODAMAGE || servant.condition==CONDITION_PROTECTED )
+			return;
+		switch( servant.animation )
+		{
+		// 通常の状態で当たった場合
+		// 盾を持っていた場合は、盾に当たったと見なす	
+		case ANI_STAND:
+		case ANI_麻痺:
+		case ANI_MOVE:
+			if ( servant.shield )
+			{
+				var shield = servant.shield;
+				盾解除( servant, shield );
+				_playerHitBall( tama, shield );
+			}
+			else
+				_playerHitBall( tama, servant );
+			break;
+			
+		// 盾に当たった場合
+		case ANI_SHIELD:
+			盾解除( servant.owner, servant );
+			_playerHitBall( tama, servant );
+			break;
+		}
+	}	
+	
+	function _playerHitBall( tama, target )
+	{
+		// ボールにあたった者は吹き飛ばされる
+		with( target )
+		{
+			.animation = ANI_KNOCKBACK;
+			var dx = .x - tama.x;
+			var dy = .y - tama.y;
+			var r  = .distanceOf( tama.x, tama.y );
+			if ( r<1 ) r=1;
+			switch( tama.type )
+			{
+			case OBJTYPE_BALL:
+				target.scoreInc( 得点_ボールに当たった );
+				.speedX = dx/r * ノックバック速度;
+				.speedY = dy/r * ノックバック速度;
+				.hpDamage( BALL_DAMAGE );
+				break;
+			case OBJTYPE_SHOT:
+				target.scoreInc( 得点_ショットに当たった );
+				.speedX = dx/r * ノックバック速度\2;
+				.speedY = dy/r * ノックバック速度\2;
+				.hpDamage( SHOT_DAMAGE );
+				break;
+			case OBJTYPE_HALBERD:
+				target.scoreInc( 得点_ハルバードに当たった );
+				.speedX = dx/r * ノックバック速度*2;
+				.speedY = dy/r * ノックバック速度*2;
+				.hpDamage( HALBERD_DAMAGE );
+				break;
+			case OBJTYPE_GILGAMESH:
+				target.scoreInc( 得点_ギルに弾き飛ばされた );
+				.sound( SE_GIL_ATTACK2 );
+				.motionType = MOTIONTYPE_DEFAULT;
+				.speedX = -Math.abs( dx/r * ノックバック速度*1.5 ); //常に左方向へ吹き飛ばされる
+				.speedY = dy/r * ノックバック速度*1.5;
+				break;
+			case OBJTYPE_SWORD:
+				target.scoreInc( 得点_ギルの剣に当たった );
+				.motionType = MOTIONTYPE_DEFAULT;
+				.speedX = -Math.abs(dx/r * ノックバック速度); //常に左方向へ吹き飛ばされる
+				.speedY = dy/r * ノックバック速度;
+				.hpDamage( SWORD_DAMAGE );
+				break;
+			}
+			// 前には進みにくいようにする
+			if ( .speedX > 0 ) .speedX /= 2;
+			if ( .speedX < 0 ) .speedX *= 1.5;
+		}
+		createHitEff( target );
+	}
+		
+	// 指定したＸ座標での、上方向の移動可能Ｙ座標を返す. リミットがない場合は負の無限大を返す
+	function getPlayerYLimitTop( x )
+	{
+		var y = getYPosOnPolyline( TopBorderLines, x );
+		if ( y === void )
+			return -0xFFFFFFFF;
+		else
+			return y;
+	}
+	
+
+	// 指定したＸ座標での、下方向の移動可能Ｙ座標を返す. リミットがない場合は正の無限大を返す
+	function getPlayerYLimitBottom( x )
+	{
+		var y = getYPosOnPolyline( BottomBorderLines, x );
+		if ( y === void )
+			return 0xFFFFFFFF;
+		else
+			return y;
+	}
+
+
+	// プレイヤの座標を更新した直後に呼び出されるイベント
+	function onPlayerMoved( player )	
+	{
+		// 位置を調整するかどうか
+		switch( player.animation )
+		{
+		case ANI_KNOCKBACK:
+		case ANI_FIGHT:
+		case ANI_場外:
+		case ANI_HOUGU:
+		case ANI_HOUGU2:
+		case ANI_HOUGU3:
+		case ANI_HOUGU4:
+			return; // 位置を調整しない
+		}
+		// 上側のラインに引っかかっていないかどうかを調べる
+		// まず、プレイヤのいる位置に対応する境界線データを見つけ出し、その線をY方向に超えてしまっているならば、正しい位置に修正する
+		var i;
+		var borderY;
+		var p1, p2;
+		borderY = getPlayerYLimitTop( player.x );
+		if ( player.y < borderY )
+			player.y = borderY;
+		else
+		{
+			borderY = getPlayerYLimitBottom( player.x );
+			if ( player.y > borderY )
+				player.y = borderY;
+		}
+		// 左のリミットを調べる
+		player.x = max( player.x, サーバント移動可能範囲_左 );
+	}
+
+	function servantAction( servant )
+	{
+		if ( CheckValid( servant.shield ) )
+		{
+			if ( servant.shield.animation != ANI_SHIELD )
+				盾解除( servant, servant.shield, false );	
+		}
+	
+		switch( servant.animation )
+		{
+		case ANI_麻痺:
+			servant.doAnimation();
+			if( servant.condition != CONDITION_PARALYZE )
+				servant.animation = ANI_STAND;
+			return false;
+
+		case ANI_SHIELD:
+			// 体力チェック
+			if ( servant.hp==0 )
+			{
+				盾解除(servant.owner, servant );
+				servant.animation = ANI_DEAD;
+			}
+			break;	
+
+		case ANI_STAND:
+		case ANI_MOVE:
+			// 体力チェック
+			if ( servant.hp==0 )
+			{
+				if ( servant.shield )
+					盾解除( servant, servant.shield );
+				servant.animation = ANI_DEAD;
+				return false;
+			}
+			// 麻痺した？
+			if ( servant.condition == CONDITION_PARALYZE )
+			{
+				servant.animation = ANI_麻痺;
+				return false;
+			}
+			// 混乱した？
+			if ( servant.condition == CONDITION_CONFUSE )
+			{
+				if ( servant.timing%15 == 0 )
+					_servantRandomMove( servant, -60, 60 );
+				return false;
+			}
+			// 接触した？
+			var list = findHitServants( servant );
+			if ( list.count > 0 )
+			{
+				if ( サーバント同士が接触(servant,list[0]) )
+					return false;
+			}
+			return true;
+		default:
+			return true;
+		}
+	
+	}
+	
+	// ユーザーが操作するキャラクタの状態を更新する必要がある場合に呼び出される
+	function servantPlayer( servant )
+	{
+		if ( ! servantAction(servant) )
+			return;
+		switch( servant.animation )
+		{
+		case ANI_STAND:
+		case ANI_MOVE:
+			// プレイヤの入力
+			if ( input.left == 0 )
+			{
+				var pos = currentCamera.windowToField( input.x, input.y );
+				with ( servant )
+				{
+					.stop();
+					.motionDestX = pos.x;
+					.motionDestY = round(
+						getPlayerYLimitTop(pos.x),
+						pos.y,
+						getPlayerYLimitBottom(pos.x)
+					);
+					.motionDestZ = 0;
+					.motionSpeed = .servantSpeed();
+					.motionType = MOTIONTYPE_LINER;
+					.motionStart();
+					.animation = ANI_MOVE;
+					destinationCursorChange( .motionDestX, .motionDestY  );
+				}
+			}
+			// 宝具
+			if ( input.right==0 )
+				_servantUseItem( servant );
+			break;
+		}
+	}
+	
+	
+	function 宝具ターゲット決定( servant )
+	{
+		// ギルが画面外にいる場合は、ターゲットは自動決定される
+		if ( gilObj.outOfScreen() )
+			return void;
+		// ギルが死んでいる場合は、ターゲットは自動決定される
+		if ( gilObj.animation==ANI_DEAD )
+			return void;
+		// ギルが画面内にいて生きている場合、宝具を使ったのがプレイヤーであれば無条件でギルがターゲットになる
+		if( servant.isPlayer )
+			return gilObj;
+		// ＣＯＭが宝具を使ったのであれば、一定の確率でギルがターゲットになる
+		if( random32(1000) < COMがギルに宝具を使う確率 )
+			return gilObj;
+		// どれにも当てはまらない場合、ターゲットは自動決定される
+		return void;			
+	}
+		
+	function _servantUseItem( servant )
+	{
+		// 使用者が盾を持っていた場合は、盾を手放す
+		var shield = servant.shield;
+		if ( shield )
+		{
+			盾解除( servant, shield );
+			shield.animation = ANI_放り出される;
+			shield.allowAnimationWhileUsingHougu = true;
+		}
+		var target = 宝具ターゲット決定( servant );
+		// 宝具を使用する
+		// （注意）ターゲットが盾を持っているサーバントだった場合の処理は servantUseItem 関数内で行われる
+		return servantUseItem( servant, target );
+	}	
+
+	function act_check( servant )
+	{
+		if ( playerObj.x < servant.x+400 )
+			return random32(100)<50;
+		else
+			return random32(100)<20;
+	}
+
+	// COMの操作するキャラクタの状態を更新する必要がある場合に呼び出される
+	function servantCom( servant )
+	{
+		if ( ! servantAction(servant) )
+			return;
+		switch( servant.animation )
+		{
+		case ANI_DEAD:
+			if ( ALLOW_RIVAL_RESURRECTION )
+				if ( timing>REQUIREDTIME_RESURRECTION )
+				{
+					servant.onRestart();
+					servant.animation = ANI_復帰;
+				}
+			break;
+			
+		case ANI_STAND:
+		case ANI_MOVE:
+			// COMが画面外にいる場合は追い上げを優先する
+			if ( servant.outOfScreen() && servant.x<playerObj.x && random32(10)==0 )
+			{
+				_servantRandomMove(servant,100,200);
+				break;
+			}
+			// 無敵状態・速度上昇・盾を持っているときは急いでゴールへ向かう
+			if ( servant.condition==CONDITION_NODAMAGE||servant.condition==CONDITION_RAPID||servant.shield )
+			{
+				if ( random32(10)==0 )
+				{
+					_servantRandomMove(servant,100, 200);
+					break;
+				}
+			}
+			// 行動する？			
+			if ( ! act_check(servant) )
+				break;
+			// 宝具使用
+			if ( ENABLE_HOUGU )
+			{
+				var top = selectTargetPlayer(true);
+				if ( top )
+				{
+					var 分子 = top.position - servant.position; // 0-100の値になる
+					//var 分子 = playerObj.position-servant.position; // 0-100の値になる
+					var 分母 = 1000; // 宝具を使用する確率
+					if ( noUseHouguTimer==0 && gameTimerTime()>NO_HOUGU_TIME && random32(分母) < 分子 )
+					{
+						if ( _servantUseItem( servant ) )
+							break;
+					}
+				}
+			}
+			if ( ENABLE_RIVAL_ACTION && servant.timing%(FRAME_PER_SEC)==0 )
+				servantRandomMove( servant );
+			break;
+		}
+	}
+	
+	
+
+	function servantRandomMove( servant )
+	{
+		if ( servant.x < playerObj.x+400 )
+			_servantRandomMove(servant, -40, 400 );
+		else
+			_servantRandomMove(servant, -100, 100 );
+	}
+	
+	
+	function _servantRandomMove( servant, left, right )
+	{
+		with( servant )
+		{
+			.stop();
+			.motionDestX = .x + randomRange(left, right );
+			.motionDestY = randomRange( getPlayerYLimitTop(.motionDestX)+10, getPlayerYLimitBottom(.motionDestX)-10 );
+			.motionDestZ = 0;
+			if ( servant.type == OBJTYPE_SERVANT )
+				.motionSpeed = .servantSpeed();
+			else
+				.motionSpeed = 5;
+			.motionType = MOTIONTYPE_LINER;
+			.motionStart();
+			.animation = ANI_MOVE;
+		}
+	}
+
+
+
+	function 盾にする( _owner, _shield )
+	{
+		_owner.animation = ANI_STAND;
+		_owner.shield = _shield;
+		with( _shield )
+		{
+			.animation = ANI_SHIELD;
+			.owner = _owner;
+			.priority = PRIORITY_PLAYER+10;
+		}
+	}
+	
+	
+	function 盾解除( _owner, _shield, resetanim=true )
+	{
+		with( _shield )
+		{
+			if ( resetanim )
+				.animation = ANI_STAND;
+			.owner = void;
+			.priority = PRIORITY_PLAYER;
+			.z = 0;
+		}
+		_owner.animation = ANI_STAND;
+		_owner.shield = void;
+		// 盾を失った直後は保護状態にする
+		_owner.condition = CONDITION_PROTECTED;
+		_owner.conditionTimeLeft = SERVANT_NODAMAGE_TIME_SHIELDLOST;
+	}
+	
+	
+	// 小競り合い終了時の処理
+	function onBattleEnd( winner, loser )
+	{
+		盾にする( winner, loser );
+	}
+	
+	// サーバントのアニメ更新	
+	function servantAnimation( servant )
+	{
+		switch( servant.animation )
+		{
+		case ANI_STAND:
+			with( servant )
+			{
+				if ( .shield )
+				{
+					if( .timing%10==0 )
+						.scoreInc(得点_盾を持っているフレーム);
+					.doAnimation( ANI_DEFENSE_STAND );
+				}
+				else
+					.doAnimation();
+				// ゴールしたかどうかの判定
+				if ( .x >= ゴール位置X )
+				{
+					if ( .shield )
+						盾解除( servant, .shield );
+					.animation = ANI_MOVETOGOAL;
+					break;
+				}
+			}
+			break;
+			
+		case ANI_KNOCKBACK:
+			with( servant )
+			{
+				.doAnimation();
+				if ( .timing == SERVANT_KNOCKBACK_TIME )
+				{
+					.stop();
+				}
+				if ( .timing == SERVANT_KNOCKBACK_TIME*2 )
+				{
+					.animation = ANI_STAND;
+					.condition = CONDITION_PROTECTED; // 保護状態にする
+					.conditionTimeLeft = SERVANT_NODAMAGE_TIME;
+					// やられ状態が終わったときに橋の外にいた場合
+					if ( .y<getPlayerYLimitTop(.x) || .y>getPlayerYLimitBottom(.x) )
+						.animation = ANI_場外;
+					.allowAnimationWhileUsingHougu = false;
+				}
+			}
+			break;
+
+		case ANI_MOVE:
+			with( servant )
+			{
+				if ( .shield )
+				{
+					if( .timing%10==0 )
+						.scoreInc(得点_盾を持っているフレーム);
+					.doAnimation( ANI_DEFENSE_MOVE );
+				}
+				else
+					.doAnimation();
+				// ゴールしたかどうかの判定
+				if ( .x >= ゴール位置X )
+				{
+					if ( .shield )
+						盾解除( servant, .shield );
+					.animation = ANI_MOVETOGOAL;
+					break;
+				}
+				// 目的地まで移動
+				if ( .motionDone )
+				{
+					.animation = ANI_STAND;
+					break;
+				}
+				else
+					.updateDirectionByMotionDest();
+			}
+			break;
+
+			
+		case ANI_MOVETOGOAL:
+			with( servant )
+			{
+				.doAnimation( ANI_MOVE );
+				// ゴール後の立ち位置を指定
+				if( .timing == 0 )
+				{
+					.onSucceeded();
+					.motionDestX = ゴール後待機位置X[ 順位 ];
+					.motionDestY = ゴール後待機位置Y[ 順位 ];
+					.motionDestZ = 0;
+					.motionSpeed = .servantSpeed();
+					.motionType = MOTIONTYPE_LINER;
+					.motionStart();
+					.updateDirectionByMotionDest();
+					順位++;
+				}
+				// 目的地まで移動
+				if ( .motionDone )
+				{
+					.animation = ANI_GOAL;
+					break;
+				}
+			}
+			break;
+
+		case ANI_SHIELD:
+			with( servant )
+			{
+				if( .timing%10 == 0 )
+					.scoreInc( 得点_盾になっているフレーム );
+				.doAnimation();
+				// 向き調整
+				.direction = .owner.direction;
+				// 位置調整
+				.x = .owner.x;
+				.y = .owner.y;
+				.z = .owner.z+30;
+				switch( .direction )
+				{
+				case MUKI_LEFT:  .x-=30; break;
+				case MUKI_RIGHT: .x+=30; break;
+				}
+				// 自然解除
+				if ( .timing == 盾の自然解除までの時間 )
+				{
+					盾解除( .owner, servant );
+					.animation = ANI_放り出される;
+				}
+			}
+			break;
+			
+		case ANI_場外:
+			with( servant )
+			{
+				switch( .timing )
+				{
+				case 0:
+					.stop();
+					.condition = CONDITION_NORMAL;
+					.fadeOut(15);
+					.marker.fadeOut(15) if( CheckValid(.marker) && .isPlayer );
+					break;
+				case 15:
+					// 復帰アニメの設定
+					.animation	= ANI_復帰;
+					break;
+				}
+				.doAnimation( ANI_DAMAGE );
+			}
+			break;
+						
+		case ANI_放り出される:
+			if ( servant.timing == 0 )
+			{
+				switch( servant.direction )
+				{
+				case MUKI_LEFT:
+					servant.motionDestX = servant.x-80;
+					break;
+				case MUKI_RIGHT:
+					servant.motionDestX = servant.x+80;
+					break;
+				}
+				servant.motionDestY = servant.y;
+				servant.motionDestZ = 0;
+				servant.motionHeight = 80;
+				servant.motionLength = 30;
+				servant.motionType = MOTIONTYPE_SCHEDULED_JUMP;
+				servant.motionStart();
+			}
+			if ( servant.motionDone )
+			{
+				servant.animation = ANI_気絶;
+			}
+			break;
+			
+		case ANI_気絶:
+			// 気絶する。サーバントのプライオリティが下がるので注意
+			if ( servant.timing < 30 )
+				servant.doAnimation( ANI_DEAD );
+			else
+				servant.animation = ANI_起き上がり;
+			servant.allowAnimationWhileUsingHougu = false;
+			break;
+			
+		case ANI_起き上がり:
+			servant.priority = PRIORITY_PLAYER; // 優先順位を元に戻す
+			if ( servant.timing < 30 )
+				servant.doAnimation( ANI_しゃがみ );
+			else
+				servant.animation = ANI_STAND;
+			break;
+
+		// 画面外からの復帰用アニメ
+		case ANI_復帰:
+			if( servant.timing==0 )
+			{
+				servant.復帰モード = 0;
+				servant.allowAnimationWhileUsingHougu = false;
+			}
+			switch( servant.復帰モード )
+			{
+			case 0:
+				if( servant.timing<30 )
+					break;
+				servant.復帰モード = 1;
+				break;
+			case 1:
+				with( servant )
+				{
+					.marker.fadeIn(10) if( CheckValid(.marker) && .isPlayer );
+					.visible = true;
+					.fadeIn(10);
+					.direction = MUKI_RIGHT;
+					.stop();
+					.speedX = 復帰歩き速度;
+					// 復帰位置を設定する. プレイヤ位置よりもゴールに近い場合は、画面左端から復帰する。
+					// プレイヤよりもスタートに近い場合はそのままの位置で復帰する
+					var 画面左端 = normalCamera.visibleRect.left;
+					if ( 画面左端 < playerObj.x )
+						.x = 画面左端-100;
+					else
+						.x -= 100;
+					.y = DefaultPlayers[ .index ].y;
+					.z = 0;
+					.condition = CONDITION_PROTECTED; // 保護状態にする
+					.conditionTimeLeft = サーバント復帰時無敵時間;
+				}
+				servant.復帰モード = 2;
+				break;
+			case 2:
+				with( servant )
+				{
+					.doAnimation( ANI_RUN );
+					// 画面内に入ってきたら待機状態にする
+					if ( .x > normalCamera.visibleRect.left+100 )
+						.animation = ANI_STAND;
+				}
+				break;
+			}
+			break;
+			
+		case ANI_BLOWN:
+			with( servant )
+			{
+				.doAnimation();
+				if ( .timing == 0 )
+				{
+					if ( .shield )
+					{
+						var sh = .shield;
+						盾解除( servant, .shield );
+						sh.animation = ANI_放り出される;
+					}
+					.scoreInc( 得点_吹き飛ばされた );
+					.stop();
+					.speedZ = 20;
+					.marker.fadeOut(15) if( CheckValid(.marker) && .isPlayer );
+				}
+				// 一度画面外に出るか、もともと画面外で吹き飛んだ場合は非表示にする
+				if ( .visible && .outOfScreen() )
+					.visible = false;
+				if ( .timing >= 30 )
+					.animation = ANI_復帰;
+			}
+			break;
+			
+		case ANI_DEAD:
+			servant.stop();
+			servant.doAnimation();
+			if( servant.timing==0 )
+			{
+				servant.onFailed();
+				if( サーバントが倒れたら無条件で宝箱が出現する || servant.トドメをさされた==playerObj )
+				{
+					var info = サーバントを倒した場合のレアアイテム(servant);
+					if( info )
+						putItem( servant.x, servant.y, info );
+				}
+			}
+			break;
+			
+		case ANI_麻痺:
+			servant.stop();
+			servant.doAnimation();
+			break;
+		
+		default:
+			servant.doAnimation();
+			break;
+		}
+	}
+	
+	
+	// プレイヤが小競り合いに参加できるかどうかを問い合わせる際に呼び出される.
+	// 参加可能な場合は true を返す
+	function battleQuery( obj )
+	{
+		// スタート直後は小競り合い無し
+		if ( gameTimerTime() < NO_FIGHT_TIME )
+			return false;
+		// 状態チェック
+		if ( obj.condition==CONDITION_NODAMAGE || obj.condition==CONDITION_PROTECTED || obj.condition==CONDITION_PARALYZE )
+			return false;
+		// 盾を持っていた場合は無効
+		if ( obj.shield )
+			return false;
+		// 状態チェック
+		switch( obj.animation )
+		{
+		case ANI_STAND:
+		case ANI_MOVE:
+			return true;
+		default:
+			return false;
+		}
+	}
+	
+	
+	function サーバント同士が接触( servant1, servant2 )
+	{
+		var 確率 = 小競り合いの発生確率;
+		if( servant1.isPlayer && servant1.animation==ANI_MOVE ) 確率=プレイヤ小競り合いの発生確率;
+		if( servant2.isPlayer && servant2.animation==ANI_MOVE ) 確率=プレイヤ小競り合いの発生確率;
+			
+		if ( ENABLE_FIGHT )
+			if ( random32()%1000 < 確率)
+				if ( battleQuery( servant1 ) && battleQuery( servant2 ) )
+				{
+					battleStart( servant1, servant2 );
+					return true;
+				}
+		return false;
+	}
+
+	
+	//--------------------------------------------------------------------------
+	// イベント進行
+	//--------------------------------------------------------------------------
+	function onEventFirst()
+	{
+		with( normalCamera )
+		{
+			.motionDestX = 400;
+			.motionDestY = CameraPosY;
+		}
+	}
+	
+	function onEventStart()
+	{
+		servantsRootObj.changeChildAnimation( ANI_STAND );
+		enemyRootObj.changeChildAnimation( ANI_START );
+	}
+	
+	function onEventLast()
+	{
+		if ( parentLayer.getStageSelectFlag() )
+		{
+			next = SCENE_TITLE;
+			return;
+		}
+		switch( parentLayer.getCallType() )
+		{
+		case CALLTYPE_NORMAL:
+			next = SCENE_STAGE3_NEXT;
+			return;
+		case CALLTYPE_ADV:
+			next = SCENE_STAGE3_ADV_NEXT;
+			return;
+		default:
+			next = SCENE_TITLE;
+			return;
+		}
+	}
+	
+	function onEventPlaying()
+	{
+@if( DEBUG_MODE )
+		if ( input.del==0 )
+		{
+			playerObj.x = 4400;
+		}
+@endif
+		if( input.control==0 )
+		{
+			parentLayer.setUseStageSkipFlag();
+			eventSwitch = EVENTSWITCH_LAST;
+		}
+		switch ( playerObj.animation )
+		{
+		case ANI_GOAL:
+			eventSwitch = EVENTSWITCH_GOAL;
+			return;
+		case ANI_DEAD:
+			if ( playerObj.timing >= AFTER_DEAD_TIME )
+				eventSwitch = EVENTSWITCH_FAILED; // ３位以下だったら失敗
+			return;
+		}
+	}
+}
+

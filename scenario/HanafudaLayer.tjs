@@ -1,0 +1,698 @@
+/*-----------------------------------------------------------------------------/
+/	Copyright (C) 2004 TYPE-MOON All Rights Reserved.
+/		花札レイヤー
+/-----------------------------------------------------------------------------*/
+@if(__HANAFUDALAYER_DEFINED__==0)
+@set(__HANAFUDALAYER_DEFINED__=1)
+Scripts.execStorage("subroutine.tjs");
+Scripts.execStorage("HFChipLayer.tjs");
+Scripts.execStorage("HFSound.tjs");
+
+//	カードの割り振ったZ座標
+var lastAbsolute	= 0;
+var limitAbsolute	= 999;
+
+//	花札の札を表すレイヤー
+var reversedFudaStorage	= "hf_裏";
+var fudaBorderStorage	= "hf_枠A";
+
+//	花札画像
+var fudaLLStorage	= "hf_fuda-ll";
+var fudaSSStorage	= "hf_fuda-ss";
+var fudaSStorage	= "hf_fuda-s";
+class HanafudaLayer extends ChipLayer
+{
+	var abssept	= 1000;
+
+	var fuda;		//	対応する札
+
+	var _reverse;	//	表・裏
+	var _border;	//	縁取り
+	var _choiced;	//	選択済み
+
+	var onLButtonDown, onLButtonDownValue;	//	左クリックされたときに呼出されるメソッド
+	var onEnter2, onEnter2Value;			//	マウスON/フォーカスONしたときに
+	var onLeave2, onLeave2Value;			//	マウスOFF/フォーカスOFFしたときに
+
+	var orgwidth, orgheight;
+
+	var previtem, nextitem, prevgroup, nextgroup;	//	フォーカスリンク
+
+	function HanafudaLayer(win, par, f)
+	{
+		super.ChipLayer(...);
+
+		fuda	= f;
+		name	= f.month+"月の"+f.number+"番";
+		hitThreshold= 0;
+		orgwidth	= width;
+		orgheight	= height;
+
+		createShareImages();
+		with(shareimages)
+		{
+			.load(win, par, "reversed",	reversedFudaStorage);
+			.load(win, par, "border",	fudaBorderStorage);
+		}
+
+		_changeImage(normal, true, false);
+		setPos((par.width - width)>>1, par.height);
+		visible	= true;
+	}
+
+	function finalize()
+	{
+		with(shareimages)
+		{
+			.release("border");
+			.release("reversed");
+		}
+		releaseShareImages();
+		super.finalize(...);
+	}
+
+	function setLButtonDown(func, value)
+	{
+		onLButtonDown		= func;
+		onLButtonDownValue	= value;
+	}
+	function resetLButtonDown()
+	{
+		onLButtonDown	= onLButtonDownValue	= void;
+	}
+
+	function setCallByEnter(func, value)
+	{
+		onEnter2		= func;
+		onEnter2Value	= value;
+	}
+	function resetCallByEnter()
+	{
+		onEnter2	= onEnter2Value	= void;
+	}
+
+	function setCallByLeave(func, value)
+	{
+		onLeave2		= func;
+		onLeave2Value	= value;
+	}
+	function resetCallByLeave()
+	{
+		onLeave2	= onLeave2Value	= void;
+	}
+
+	//	size= this.small, this.xlarge
+	//	mon	= 1 〜 12
+	//	num	= 0 〜 3
+	function getStorageName(s=size,mon=fuda.month,num=fuda.number)
+	{
+		var nsl	= [ "", "s", "l", "ll" ];
+		var st = "hf_%s%02d-%1d".sprintf(nsl[s], mon, num+1);
+//		dm("get storage: "+st);
+		return st;
+	}
+
+	//	札画像を読み込む
+	function loadFudaImage(sz, layer=this)
+	{
+		var l = shareimages.get(sz);
+//		dm(@"${l}: ${l.width}(${l.imageWidth}), ${l.height}(${l.imageHeight})");
+		with(l)
+		{
+			layer.setImageSize(.width, .height);
+			layer.copyRect(0, 0, l, .width * fuda.number, .height * (fuda.month-1), .width, .height);
+			layer.setSizeToImageSize();
+		}
+	}
+
+	//	拡縮前に、元画像を変更する
+	function _changeOriginal(r, b, force=false)
+	{
+		r	= reverse if r === void;
+		b	= border if b === void;
+		if(r !== reverse || b !== border || force)
+		{
+//			dm(@"${name}: reverse = ${reverse} -> ${r} / border = ${border} -> ${b}");
+			with(org)
+			{
+				if(r)
+					.assignImages(shareimages.get("reversed"));	//	裏面
+				else
+				{
+					loadFudaImage("xlarge", org);
+
+					if(b)
+					{
+						var bor	= shareimages.get("border");
+						.face	= dfAlpha;
+						.operateStretch(0, 0, .imageWidth, .imageHeight, bor, 0, 0, bor.width, bor.height,, boropa);
+					}
+				}
+				.setSizeToImageSize();
+				.type	= ltOpaque;
+			}
+			_reverse	= r if r !== reverse;
+			_border		= b if b !== border;
+			return true;	//	変更があった
+		}
+		return false;
+	}
+
+	//	画像を変更する
+	function _changeImage(s, r, b, force=true)
+	{
+//		dm("("+left+", "+top+")-("+width+", "+height+")");
+		s	= size if s === void;
+		r	= reverse if r === void;
+		b	= border if b === void;
+		var cl = left + (width >> 1), ct = top + (height >> 1);	//	サイズ変更の可能性を考慮して、中心座標を記録
+		if(_changeOriginal(r, b, force) || s !== size)
+		{
+//			dm(@"${name}: size = ${size} -> ${s} / reverse = ${reverse} -> ${r} / border = ${border} -> ${b} / force = ${force}");
+			if(s == small && !r)
+			{//	一番小さい札はバイリニアフィルタではきれいに描画できないので、画像を読み込む
+				loadFudaImage("small");
+			}
+			else
+			{
+				var sz = getSizeSize(s);
+				setSize(sz[0], sz[1]);
+				face	= dfOpaque, holdAlpha	= false;
+				operateStretch(0, 0, width, height, org, 0, 0, org.width, org.height,,, stFastLinear);
+			}
+			size	= s if s !== size;
+		}
+
+		setPos(cl - (width >> 1), ct - (height >> 1));	//	中心座標を元に、座標を補正
+//		dm("("+left+", "+top+")-("+width+", "+height+")");
+	}
+
+	//	現在の設定で書き直す
+	function redrawImage()
+	{
+		_changeImage();
+	}
+
+	var normal = 0, small = 1, large = 2, xlarge = 3;
+	var size	= normal;
+	function getSizeSize(s)
+	{
+		if(s == normal)
+			return [ parent.fudawidth, parent.fudaheight ];
+		else if (s == small)
+			return [ parent.smallwidth, parent.smallheight ];
+		else if (s == large)
+			return [ parent.largewidth, parent.largeheight ];
+		else
+			return [ parent.xlargewidth, parent.xlargeheight ];
+	}
+
+	function _changeNormal()	{	_changeImage(normal,,, false);	}	//	通常のサイズ画像に変更
+	function _changeSmall()		{	_changeImage(small,,, false);	}	//	縮小画像に変更
+	function _changeLarge()		{	_changeImage(large,,, false);	}	//	拡大画像に変更
+	function _changeXLarge()	{	_changeImage(xlarge,,, false);	}	//	さらに拡大画像に変更
+
+	//	裏表の状態
+	property reverse
+	{
+		setter(r)	{ _changeImage(, r,, false); }
+		getter		{ return _reverse; }
+	}
+
+	//	縁取りのありなし
+	var boropa	= 256;
+	property border
+	{
+		setter(b)	{ _changeImage(,, b, false); }
+		getter		{ return _border; }
+	}
+
+	//	受け入れ可能(キー、マウス)
+	property acceptable
+	{
+		setter(a)
+		{
+			if(focusable !== a)	{	focusable	= a;	}
+		}
+		getter	{ return focusable; }
+	}
+
+	//	選択済み
+	property choiced
+	{
+		setter(c)
+		{
+			if(choiced != c)
+			{
+				if(c)
+					_changeImage(large,,, false), becomeFront();
+				else
+					_changeImage(normal,,, false), becomeFormer();
+				_choiced	= c;
+			}
+		}
+		getter	{ return _choiced; }
+	}
+
+	//	リンクアニメ可
+	var _enabledLink;
+	property enabledLink
+	{
+		setter(e)
+		{
+			if(e !== enabledLink)
+				_enabledLink	= e;
+		}
+		getter	{ return _enabledLink; }
+	}
+
+
+	property no { getter { return fuda.no; } }
+	property month { getter { return fuda.month; } }
+	property num { getter { return fuda.num; } }
+
+	function allReset()
+	{
+		choiced		= false;
+		acceptable	= false;
+		border		= false;
+//		enabledLink	= false;
+//		endAnimation();
+		sinkLink();
+		resetLButtonDown();
+		resetCallByEnter();
+		resetCallByLeave();
+	}
+
+	function put()
+	{
+		lastAbsolute++;
+		if(lastAbsolute > limitAbsolute)
+		{
+			lastAbsolute	= 1;
+			if(typeof parent.resetCardAbsolute != "undefined")
+				parent.resetCardAbsolute();
+		}
+		absolute	= lastAbsolute + baseabsolute;
+	}
+
+	function resetAbsolute()
+	{
+		absolute	= baseabsolute;
+	}
+
+	var _fudatype, lastfudatype;
+	property fudatype
+	{
+		setter(s)
+		{
+			if(s !== fudatype)
+			{
+				lastfudatype= _fudatype;
+				_fudatype	= s;
+				put();
+			}
+		}
+		getter	{ return _fudatype; }
+	}
+	function becomeYamafuda()	{	fudatype	= 0;	}
+	function becomeBafuda()		{	fudatype	= 1;	}
+	function becomeTefuda()		{	fudatype	= 2;	}
+	function becomeYakufuda()	{	fudatype	= 3;	}
+	function becomeFront()		{	fudatype	= 4;	}
+	function becomeFormer()		{	fudatype	= lastfudatype;	}
+
+	property baseabsolute
+	{
+		getter	{ return fudatype * abssept; }
+	}
+
+	//-------------------------------------------------------------------------
+	//	自律行動
+	//	場札に合わせる
+	var clap_tilt	= -20 * A2R;
+	function clapTo(l, t, heavy=false, time=300, accel=0, delay=0)
+	{
+//		dm("clap to");
+		reverse	= false;
+		time	>>= 1;
+		var cl = ((l - left) * 0.8)  + left, ct = ((t - top) * 0.8) + top;
+		playDistSound();
+		mmTo(cl, ct, parent.xlargewidth, parent.xlargeheight, time, accel, delay);
+		mmrTo(l, t, parent.fudawidth, parent.fudaheight, 0, clap_tilt, time, -accel,, heavy ? playHeavySound : playLightSound);
+		return time << 1;
+	}
+
+	//	場に捨てる
+	var drop_rot	= 360 * A2R;
+	function dropTo(l, t, time=300, accel=0, delay=0)
+	{
+		reverse	= false;
+		var rot = Math.random() > 0.5 ? drop_rot : -drop_rot;
+		playDistSound();
+		mmrTo(l, t, parent.fudawidth, parent.fudaheight, 0, rot, time, accel, delay, endofDrop);
+		return time;
+	}
+	//	新しいaffine変換で誤差が生じるようになってしまったので、回転移動後元の画像で再描画する
+	function endofDrop()
+	{
+		_changeImage(normal);	//	強制再描画
+		playDepositSound();
+	}
+
+	//	配る
+	function distributeTo(l, t, time, accel, delay, func, initfunc)
+	{
+		moveTo(l, t, time, accel, delay, func,, initfunc);
+	}
+
+	//	配ったあと反転する
+	function distributeAndTurn(l, t, time=300, accel=0, delay=0, ttime=500, taccel=0, tdelay=0, func, initfunc)
+	{
+		moveTo(l, t,, time, accel, delay,,, initfunc);
+		reverseTo(ttime, taccel, tdelay, func);
+	}
+	function endofDistTefuda()	{ becomeTefuda(); /*playDepositSound();*/ }
+	function endofDistBafuda()	{ becomeBafuda(); /*playDepositSound();*/ }
+
+	//	元の大きさになって、指定の場所へ移動する
+	function anonymousTo(l, t, r=true, time=300, accel=0, delay=0)
+	{
+//		dm("anonymouse to");
+		size	= normal;
+		reverse	= r;
+		mmTo(l, t, parent.fudawidth, parent.fudaheight, time, accel, delay, redrawImage);
+		return time;
+	}
+
+	//	裏返す
+	function reverseTo(time=500, accel=0, delay=0, func, w=width, h=height)
+	{
+//		dm(@"reverseTo(${time}, ${accel}, ${delay})");
+		if(time > 0)
+		{
+			time	>>= 1;	//	半分ずつに時間を分ける
+			magnifyTo(1, h, time, accel, delay, _turnHalfProcess, "fold");	//	半回転して、画像を変更
+			magnifyTo(w, h, time, -accel,, _turnEndProcess, "unfold");			//	更に半回転
+			elements[elements.count - 1].func2	= func;
+		}
+		else
+			doThat(delay, doReverse);
+	}
+	function _turnHalfProcess()		//	reverseToのサポート
+	{
+//		dm(name+".border = "+border);
+		_changeOriginal(!reverse,,, true);
+//		dm(name+".border = "+border);
+	}
+	function _turnEndProcess(obj, elm)
+	{
+		if(elm.func2 != void)
+			elm.func2(...);
+		redrawImage();
+	}
+	function doReverse()
+	{
+		reverse	= !reverse;
+	}
+
+	//	大きさが変わる
+	function sizeTo(s, time=100, accel=2, delay=0)
+	{
+//		dm(name+" change size: "+size+" → "+s);
+		var sz = getSizeSize(s);
+		var func;
+		if(s == normal)
+			func	= _changeNormal;
+		else if(s == small)
+			func	= _changeSmall;
+		else if(s == large)
+			func	= _changeLarge;
+		else
+			func	= _changeXLarge;
+		magnifyTo(sz[0], sz[1], time, accel, delay, func, "size");
+	}
+
+	//	役札になる
+	function moveToYakufuda(l, t, time=400, accel=0, delay=0)
+	{
+////		dm("move to yakufuda");
+//		dm(@"moveToYakufuda(${l}, ${t}, ${time}, ${accel}, ${delay})");
+		mmTo(l, t, parent.smallwidth, parent.smallheight, time, accel, delay, _changeSmall);
+		becomeYakufuda();
+	}
+
+	//	山札に戻る
+	function moveToYamafuda(l, t, time=300, accel=0, delay=0)
+	{
+//		dm("move to yamafuda");
+//		dm(@"moveToYamafuda(${l}, ${t}, ${time}, ${accel}, ${delay})");
+		mmTo(l, t, parent.fudawidth, parent.fudaheight, time, accel, delay, _changeNormal);
+		becomeYamafuda();
+	}
+
+	//-------------------------------------------------------------------------
+	//	サウンド再生
+	function playDistSound()	{ hfSound.配る		= true; }
+	function playDepositSound()	{ hfSound.場に置く	= true; }
+	function playLightSound()	{ hfSound.軽く置く	= true; }
+	function playHeavySound()	{ hfSound.重く置く	= true; }
+
+	//-------------------------------------------------------------------------
+	//	入った
+	var entersize	= large;
+	var leavesize	= normal;
+	var entertime	= 100;
+	var entered;
+
+	function enterOperation()
+	{
+		finish("size");
+		sizeTo(entersize, entertime, 2);
+		if(onEnter2)
+			onEnter2(this, onEnter2Value);
+		becomeFront();
+//		dm("enter: "+name+".absolute = "+absolute+" / enabledLink = "+enabledLink);
+		if(enabledLink)
+			popupLink();
+	}
+
+	function enter()
+	{
+		//	拡大する
+		if(acceptable && !entered)
+			enterOperation();
+		entered	= true;
+//		dm(name+".entered = true");
+	}
+
+	//	出た
+	function leave()
+	{
+		//	縮小する
+		if(acceptable && entered)
+			leaveOperation();
+		entered	= false;
+		popdown();
+	}
+
+	function leaveOperation()
+	{
+		finish("size");
+		sizeTo(leavesize, entertime, -2);
+		if(onLeave2)
+			onLeave2(this, onLeave2Value);
+		becomeFormer();
+//		dm("leave: "+name+".absolute = "+absolute+" / enabledLink = "+enabledLink);
+		if(enabledLink)
+			sinkLink();
+	}
+
+	//	実行
+	function exec()
+	{
+//		dm("exec: "+onLButtonDown);
+		if(onLButtonDown)
+		{
+			onLButtonDown(this, onLButtonDownValue);
+//			hfSound.決定 = true;	//	決定音再生
+		}
+	}
+
+	var framesize = 8;
+	function redrawBorder(frame)
+	{
+//		dm(name+".redrawBorder = "+frame);
+		var per = Math.abs(frame - (framesize >> 1)) / (framesize >> 1);
+		var opac = per * 255;
+		var layer = new global.Layer(window, this);
+		var bor = shareimages.get("border");
+		with(bor)
+		{
+			layer.setSize(.width, .height);
+			layer.copyRect(0, 0, bor, 0, 0, .width, .height);
+		}
+		with(layer)
+		{
+			.face	= dfOpaque;
+			.colorRect(0, 0, .width, .height, 0x000000, opac);
+			.face	= dfAlpha;
+			operateStretch(0, 0, width, height, layer, 0, 0, .width, .height,, 255);
+		}
+		invalidate layer;
+	}
+
+	function endAnimation()
+	{
+		super.endAnimation();
+
+		//	元に戻す
+		redrawImage();
+	}
+
+	function popupLink()
+	{
+		var samemon	= parent.getSameMonth(month);
+		if(samemon.count > 1)
+		{
+			for(var i=0; i<samemon.count; i++)
+			{
+				with(samemon[i][0])
+				{
+					.beginAnimation(.redrawBorder, framesize);
+				}
+			}
+		}
+	}
+
+	function sinkLink()
+	{
+/*		var samemon	= parent.getSameMonth(month);
+		if(samemon.count > 1)
+		{
+			for(var i=0; i<samemon.count; i++)
+				samemon[i][0].endAnimation();
+		}
+*///	手札、場札だけでなく、全ての札を対象としてアニメーションを停止する
+		var fudas	= parent.cards;
+		for(var i=0; i<4; i++)
+			fudas[(month-1) * 4 + i].endAnimation();
+	}
+
+	function popup(to_cursorpos=true)
+	{
+		//	ポップアップ要請
+		if(!reverse)
+		{
+			if(parent.popuped)
+				parent.onEndPopup();
+			else
+				parent.onBeginPopup(this, to_cursorpos);
+		}
+	}
+
+	function popdown()
+	{
+		//	ポップアップ終了要請
+		if(!reverse)
+			parent.onEndPopup();
+	}
+
+	//-------------------------------------------------------------------------
+	//	イベント
+	function onFocus()
+	{
+		enter();
+	}
+
+	function onBlur()
+	{
+		leave();
+	}
+
+	function onMouseEnter()
+	{
+		dm("on enter");
+		if(window.focusedLayer != this && focusable)
+			this.focus();
+		else
+			enter();
+	}
+
+	function onMouseLeave()
+	{
+		dm("on leave");
+		leave();
+	}
+
+	function onMouseUp(x, y, button, shift)
+	{
+		if(acceptable && button == mbLeft)
+		{
+			exec();		//	決定・実行
+			popdown();	//	ポップアップを消す
+		}
+		else if(button == mbRight)
+		{
+			if(parent.popup)
+				popup(true);	//	ポップアップ(カーソル位置へ)
+			else
+				parent.onMouseDown(...);	//	右クリックは親へ
+		}
+	}
+
+	function onKeyDown(key, shift)
+	{
+		dm("hanafuda.onKeyDown = "+key+", "+shift);
+		var it;
+		var items = [ previtem, prevgroup, nextitem, nextgroup ];
+		var key2dir = %[
+			VK_LEFT	=> 0,
+			VK_UP	=> 1,
+			VK_RIGHT=> 2,
+			VK_DOWN	=> 3,
+		];
+		var dir;
+		switch(key)
+		{
+
+		case VK_RETURN:
+		case VK_SPACE:
+		case VK_Z:
+			exec();		//	決定・実行
+			popdown();	//	ポップアップを消す
+			return;
+
+		case VK_ESCAPE:
+		case VK_DELETE:
+		case VK_BACK:
+		case VK_X:
+			if(parent.popup)
+				popup(false);	//	ポップアップする(札の右上へ)
+			else
+				parent.onMouseDown(,, mbRight);	//	親へ右クリックを送る
+			return;
+		}
+
+		//	方向から次にフォーカスを当てるレイヤーを決める
+		if((dir = key2dir[key]) !== void)
+		{
+			if(it = parent.searchItem(this, dir))
+			{
+				it.focus();
+				return;
+			}
+			else if(items[dir])
+			{
+				items[dir].focus();
+				return;
+			}
+		}
+		return super.onKeyDown(key, shift, true);
+	}
+}
+
+@endif
+/*-----------------------------------------------------------------------------/
+/	End of HanafudaLayer.tjs
+/-----------------------------------------------------------------------------*/

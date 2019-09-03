@@ -1,0 +1,213 @@
+/*-----------------------------------------------------------------------------/
+/	Copyright (C) 2004 TYPE-MOON All Rights Reserved.
+/		花札 - コンティニュー確認プラグイン
+/-----------------------------------------------------------------------------*/
+@if(__HANAFUDACONTINUEPLUGIN_DEFINED__==0)
+@set(__HANAFUDACONTINUEPLUGIN_DEFINED__=1)
+
+Scripts.execStorage("HFMessageLayer.tjs");
+
+class HanafudaContinueLayer extends PopupLayer
+{
+	var result;
+
+	var button;
+	var plugin;
+	var ctlayer;
+
+	var lasttime, lastaccel;
+
+	function HanafudaContinueLayer(win, par, plugin)
+	{
+		name	= "コンティニュー確認";
+		super.PopupLayer(...);
+//		absolute	= KoikoiConfirmAbsolute;
+		this.plugin	= plugin;
+		with(ctlayer = new global.ChipLayer(win, par))
+			.visible	= false;
+	}
+
+	function finalize()
+	{
+		releaseArray(button);
+		release(ctlayer);
+		super.finalize(...);
+	}
+
+	function show(type, time, accel, delay)
+	{
+		//	外形作成
+		var pos	= makeBackground(252, 144);
+		setPos((parent.width - width) >> 1, (parent.height - height)>>1);
+
+		//	メッセージを書き込む
+		var layer	= new global.Layer(window, this);
+		with(layer)
+		{
+			.loadImages(type == "normal" ? "hf_ct-つづけますか？" : "hf_ct-令呪を使用しますか？");
+			operateRect((width - .imageWidth)>>1, 22, layer, 0, 0, .imageWidth, .imageHeight, omAlpha);
+			.loadImages("hf_ct-あと何回");
+			operateRect(104, 168, layer, 0, 0, .imageWidth, .imageHeight, omAlpha);
+			.loadImages("hf_ct-残り回数数字b");
+			.setSize(.imageWidth \ 10, .imageHeight);
+			var cnt = string global.hanafuda_continue;
+			var l = 168;
+			for(var i=cnt.length-1; i>=0; i--)
+			{
+				operateRect(l, 168, layer, .width * +cnt[i], 0, .width, .height, omAlpha);
+				l	-= 19;
+			}
+		}
+		invalidate layer;
+
+		//	continueを表示
+		with(ctlayer)
+		{
+			.loadImages("hf_ct-continue");
+			.setSizeToImageSize();
+			.setPos(left + ((width - .width)>>1), top - 13);
+			.opacity	= 0;
+			.visible	= true;
+		}
+
+		//	ボタンを作成
+		button	= [];
+		with(button[0] = new PushButtonLayer(window, this, type == "normal" ? "hf_ct-挑戦ボタン" : "hf_ct-使用ボタン"))
+		{
+			.setPos(188, 55);
+			.visible	= true;
+		}
+		with(button[1] = new PushButtonLayer(window, this, "hf_ct-終了ボタン"))
+		{
+			.setPos(87, 59);
+			.visible	= true;
+		}
+
+		//	表示
+		opacity	= 0;
+		moveTo(,, 255, lasttime = time, lastaccel = accel, delay);
+		ctlayer.moveTo(,, 255, time, accel, delay);
+		visible	= true;
+	}
+
+	function hide(time=lasttime, accel=lastaccel, delay)
+	{
+		moveTo(,, 0, time, accel, delay, closeThis);
+		ctlayer.moveTo(,, 0, time, accel, delay);
+	}
+
+	function closeThis()
+	{
+		dispose(this);
+	}
+
+	function onButtonDown(btn)
+	{
+		switch(btn)
+		{
+		case button[0]:
+			result	= true;
+			plugin.hide();
+			break;
+		case button[1]:
+			result	= false;
+			plugin.hide();
+			break;
+		}
+	}
+}
+
+class HanafudaContinuePlugin extends KAGPlugin
+{
+	var window;
+	var yes, no;
+	var menu;
+
+	var showed;
+
+	function HanafudaContinuePlugin(win)
+	{
+		super.KAGPlugin(...);
+		window	= win;
+	}
+
+	function finalize()
+	{
+		release(yes);
+		release(no);
+		release(menu);
+		super.finalize(...);
+	}
+
+	function show(time, accel, yess, yesl, nos, nol, type)
+	{
+		if(showed)
+			return;
+		showed	= true;
+
+		release(yes);
+		release(no);
+		this.yes	= %[storage:yess,label:yesl];
+		this.no		= %[storage:nos,label:nol];
+		with(menu = new HanafudaContinueLayer(window, window.fore.base, this))
+		{
+			.show(type, time, accel);
+		}
+	}
+
+	function hide(time, accel)
+	{
+		if(!showed)
+			return;
+		showed	= false;
+
+		if(typeof global.kag != "undefined")
+		{
+			var go	= menu.result ? yes : no;
+			kag.process(go.storage, go.label);
+		}
+
+		close(time, accel);
+	}
+
+	function close(time, accel)
+	{
+		if(menu)
+		{
+			menu.hide(time, accel);
+			menu	= void;
+		}
+	}
+
+	function onRestore(f, clear, elm)
+	{
+		close();
+	}
+}
+
+if(typeof global.kag != "undefined")
+{
+	kag.addPlugin(global.hanafudacontinue_object = new HanafudaContinuePlugin(kag));
+
+	//	呼び出しタグ追加
+	with(kag.tagHandlers)
+	{
+		.hanafudacontinue	= function(elm)
+		{
+			elm.type	= elm.type !== void ? elm.type : "normal";
+			elm.time	= elm.time !== void ? +elm.time : 400;
+			elm.accel	= elm.accel !== void ? +elm.accel : 0;
+			global.hanafudacontinue_object.show(elm.time, elm.accel, elm.retry_storage, elm.retry_label, elm.over_storage, elm.over_label, elm.type);
+			return 0;
+		} incontextof kag;
+		.hanafudacontinue_close	= function(elm)
+		{
+			elm.time	= elm.time !== void ? +elm.time : 400;
+			elm.accel	= elm.accel !== void ? +elm.accel : 0;
+			global.hanafudacontinue_object.close(elm.time, elm.accel);
+			return 0;
+		} incontextof kag;
+	}
+}
+
+@endif

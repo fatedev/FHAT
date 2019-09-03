@@ -1,0 +1,631 @@
+/*-----------------------------------------------------------------------------/
+/	Copyright (C) 2004 TYPE-MOON All Rights Reserved.
+/		使い捨てレイヤー
+/-----------------------------------------------------------------------------*/
+@if(__HF_PARTICLELAYER_DEFINED__==0)
+@set(__HF_PARTICLELAYER_DEFINED__=1)
+Scripts.execStorage("subroutine.tjs");
+Scripts.execStorage("HFChipLayer.tjs");
+
+var MojiAbsolute	= 120000;
+
+//	使い捨てレイヤー
+class ParticleLayer extends ChipLayer
+{
+	function ParticleLayer()
+	{
+		super.ChipLayer(...);
+	}
+
+	function endOfMove()
+	{
+//		stopAll();
+		global.dispose(this);
+	}
+}
+
+//	飛んでいく役名を管理
+class YakuMojiManager
+{
+	var window, parent;
+	var faces;	//	対象となるレイヤー
+	var iw = 42;
+	var data	= [
+//		[ stleft, left, top, bw, hadd ]
+		[ 900, 800, 554, -42, -46 ],
+		[ -100, 0, 0, 0, 46 ]
+	];
+
+	function YakuMojiManager(win, par, fcs)
+	{
+		window	= win;
+		parent	= par;
+		faces	= fcs;
+		dm("window = "+window+" / parent = "+parent+" / faces = "+faces);
+	}
+
+	//	役リストの役名を分解して、相手に撃ち込む
+	function shot(target, yakus, time, guard=false)
+	{
+		var dest= faces[target];
+//		var src	= faces[(target + 1) & 1];
+		var dt	= data[target];
+
+		var accel	= -1.3;
+		var interval= 50;
+		var delay	= 0, d = 0;
+		var l, t = dt[2], h;
+		var wait	= 300;
+		for(var i=0; i<yakus.count; i++)
+		{
+			var yaku	= yakus[i];
+			if(yaku[1] < 1)
+				continue;	//	文数が0文以下の役は飛んでいかない
+
+			l	= dt[1] + yaku[0].length * dt[3];
+			for(var j=0; j<yaku[0].length; j++)
+			{
+				with(new YakuMojiLayer(window, parent, yaku[0][j]))
+				{
+					.setPos(dt[0], t);
+					.shot(l, t, dest, time, accel, delay, wait, guard);
+					h	= .height;
+				}
+				wait+= interval;
+				l	+= iw;
+			}
+			delay	+= interval;
+			t		+= dt[4];
+		}
+		return delay + wait + time;	//	かかった時間
+	}
+}
+
+//	飛んでいく役名
+var mojierase	= %[time:600,accel:2];
+class YakuMojiLayer extends ParticleLayer
+{
+	function YakuMojiLayer(win, par, moji)
+	{
+		super.ParticleLayer(...);
+		name	= moji;
+
+		var st = "hf_char-"+moji;
+		var chk = Storages.isExistentStorage;
+		if(chk(st+".png") || chk(st+".tlg") || chk(st+".bmp"))
+			loadImages(st);
+		else
+			loadImages("hf_char-・");
+		setSizeToImageSize();
+		absolute	= MojiAbsolute;
+	}
+
+	function shot(il, it, to, time, accel, delay, wait, guard)
+	{
+		opacity	= 0;
+
+		//	集結地点へ移動
+		time	>>= 1;
+		moveTo(il, it, 255, time, -accel, delay);
+
+		//	目的位置へ移動
+		var l, t, func = void, ml, mt;
+		var r = 200;
+		with(to)
+		{
+			t = .top + ((.height - height) >> 1);
+			if(guard)
+			{
+				var gt;
+				if(.top < 300)
+				{
+					gt	= .top + .height;
+					mt	= int(Math.random() * r);
+				}
+				else
+				{
+					gt	= .top - height;
+					mt	= -int(Math.random() * r);
+				}
+				var	v	= Math.abs(gt - it) / Math.abs(t - it);
+				time	= int(time * v);
+				l	= .left + int(v * ((.width - width) >> 1)) - (.width >> 1) + int(.width * Math.random());
+				t	= gt;
+				func	= onGuard;
+			}
+			else
+			{
+				l	= .left + ((.width - width) >> 1);
+				mt	= int(Math.random() * (r << 1) - r);
+			}
+			ml	= int(Math.random() * (r << 1) - r);
+		}
+//		dm(name+" go: "+l+", "+t);
+		delaySound(hfSound.文字出現, wait);
+		moveTo(l, t, 255, time, accel, wait, func);
+		if(!guard)
+			delaySound(hfSound[Math.random() >= 0.3 ? "パンチ" : "パンチ2"], -50);
+
+		//	消える
+//		dm("ml = "+ml+" / mt = "+mt);
+		l	+= ml;// * 2;
+		t	+= mt;// * 2;
+//		dm(name+" lose: "+l+", "+t);
+		moveTo(l, t, 0, mojierase.time, mojierase.accel,, endOfMove);
+		visible	= true;
+	}
+
+	//	文字をガードした
+	function onGuard()
+	{
+		//	効果音
+		hfSound.ガード	= false;
+		hfSound.ガード	= true;
+
+		//	ガードエフェクトを表示
+		with(new global.ParticleLayer(window, parent))
+		{
+			.loadImages("hf_guardeffect");
+			.setSizeToImageSize();
+			.setPos(left + ((width - .width)>>1), top + ((height - .height)>>1));
+			.type	= ltAdditive;
+			.opacity	= 255;
+			.visible	= true;
+			.moveTo(,, 0, 200, -2,, .endOfMove);
+		}
+	}
+}
+
+//	カットイン
+class CutinLayer extends ParticleLayer
+{
+	var	baseline	= [ 320, 600 ];
+
+	function CutinLayer(win, par)
+	{
+		super.ParticleLayer(...);
+	}
+
+	function cutin(side, chara, intime, accel, staytime)
+	{
+		//	画像を用意
+		loadImages("hf_カットイン-"+chara);
+		setSizeToImageSize();
+		if(!side)
+			flipLR();	//	データはプレイヤー側から見たものになっているので、CPUなら反転する
+
+		//	初期状態指定
+		var pw = parent.width;
+		setPos(side ? -width : pw, baseline[side] - height);
+		opacity	= 128;
+
+		//	イン
+		moveTo(side ? 0 : (pw - width),, 255, intime, accel);
+
+		//	アウト
+		moveTo(side ? (width >> 2) : (pw - width - (width >> 2)),, 0, intime >> 1, accel, staytime, endOfMove);
+
+		visible	= true;
+		return intime + (intime >> 1) + staytime;
+	}
+}
+
+//	カットインの声(「勝負！」とか「こいこい！」とか)
+class ShoutLayer extends ParticleLayer
+{
+	function ShoutLayer(win, par)
+	{
+		super.ParticleLayer(...);
+		absolute	= CutinAbsolute;
+	}
+
+	//	専用の振動
+	function myShake(sw = 5, time=500, accel=0, delay=0, func)
+	{
+		var elm = %[];
+		with(elm)
+		{
+			.sw		= sw;	//	最大振幅
+//			.eopac	= opac;	//	不透明度
+			.time	= time;
+			.accel	= accel;
+			.construct	= myShake_construct;
+			.func	= myShake_func;
+			.func2	= func;
+			.init	= myShake_init;
+		}
+		start("shake", elm, delay);
+	}
+	function myShake_init(elm)
+	{
+		with(elm)
+		{
+//			.sopac	= opacity;
+			.bleft	= left;
+			.btop	= top;
+		}
+		visible	= true;
+		opacity	= 255;
+	}
+	function myShake_construct(elm, per)
+	{
+		with(elm)
+		{
+			if(per - .lastper > 0.05 || per == 1.0)
+			{
+				var sx = int(Math.random() * (.sw << 1) - .sw);
+				var sy = int(Math.random() * (.sw << 1) - .sw);
+//				opacity	= int((.eopac - .sopac) * per + .sopac + 0.5);
+				setPos(.bleft + sx, .btop + sy);
+				.lastper	= per;
+			}
+		}
+	}
+	function myShake_func(obj, elm)
+	{
+		with(elm)
+		{
+			setPos(.bleft, .btop);	//	元の位置へ戻す
+			if(.func2)
+				.func2(obj, elm);
+		}
+	}
+
+	function shout(storage, sound, centerleft, centertop, time, accel, staytime=0)
+	{
+
+		loadImages(storage);
+		setSizeToImageSize();
+		setPos(centerleft - (width >> 1), centertop - (height >> 1));
+
+		visible	= false;
+		delaySound(sound, staytime + 50);
+		myShake(20, staytime, accel, time);
+
+		moveTo(,, 0, time >> 1, accel,, endOfMove);
+	}
+
+	function shout2(storage, sound, cl, ct, time, accel, staytime=0, func)
+	{
+		with(org)
+		{
+			//	準備
+			.loadImages(storage);
+			setSize(.imageWidth << 1, .imageHeight << 1);
+			setPos(cl - (width >> 1), ct - (height >> 1));
+			opacity	= 0;
+			visible	= true;
+
+			//	小さくなりつつ、はっきりと表示
+			magnifyToWithOpacity(.imageWidth, .imageHeight, 255, time, accel,, staytime == 0 ? func : void);
+			delaySound(sound, time - 150);
+			if(staytime != 0)
+			{
+				var l = cl-(.imageWidth>>1), t = ct-(.imageHeight>>1);
+				moveTo(l, t, 255, staytime);
+				moveTo(l, t, 0, time, 0,, func);
+			}
+		}
+	}
+}
+
+//	衝撃波
+class ShockwaveLayer extends ParticleLayer
+{
+	var func;
+
+	/*------------------------------------------------------------------------/
+	/	衝撃波を発生
+	/	in	: target	衝撃波を発するレイヤー
+	/		: storage	画像ファイル
+	/		: l, t		初期の表示座標
+	/		: sopac		最初の不透明度
+	/		: emag		最終的な拡大率
+	/		: time, accel	拡大時間
+	/		: delay		開始遅延
+	/		: func		終了後処理
+	/------------------------------------------------------------------------*/
+	function ShockwaveLayer(win, par, target, storage, /*l, t, */sopac=128, emag=2.0, time=200, accel=0, delay=0, func)
+	{
+		super.ParticleLayer(win, par);
+		name	= "Shockwave: "+storage;
+		hitThreshold= 256;
+		opacity		= sopac;
+		this.func	= func;
+		type	= ltAdditive;
+		if(storage != "")
+		{
+			loadImages(storage);
+			setSizeToImageSize();
+		}
+		else
+		{
+			type	= ltOpaque;
+			setSize(100, 100);
+			fillRect(0, 0, width, height, 0xFFFFFFFF);
+		}
+		saveOriginal();
+		with(target) setPos(.left - ((width - .width)>>1), .top - ((height - .height)>>1));
+		magnifyToWithOpacity(width * emag, height * emag, 0, time, accel, delay, endofMagnify);
+	}
+
+	function endofMagnify()
+	{
+		if(func)
+			func();
+		endOfMove();
+	}
+}
+
+//	宝具用カットイン
+class CutInLayer2 extends ParticleLayer
+{
+	var layers;
+	var imgs;
+
+	var allWidth, allHeight;
+
+	function CutInLayer2(win, par, image, rects, flip)
+	{
+		super.ParticleLayer(...);
+
+		this.imgs	= imgs;
+		var layer = new global.Layer(win, par);
+		with(layer)
+		{
+			.loadImages(image);
+			allWidth	= .imageWidth;
+			allHeight	= .imageHeight;
+		}
+		layers	= [ this ];
+		if(rects != void)
+		{
+			for(var i=0; i<rects.count; i++)
+			{
+				var rect = rects[i];
+				if(layers[i] == void)
+					layers[i] = new global.Layer(win, par);
+				with(layers[i])
+				{
+					.name	= "宝具用カットイン("+i+")";
+					.setSize(rect[2], rect[3]);
+					.copyRect(0, 0, layer, rect[0], rect[1], .width, .height);
+					.absolute		= CutinAbsolute;
+					.hitThreshold	= 256;
+					.opacity	= 0;
+					.visible	= true;
+					layers[i]["oleft"]	= rect[0];
+					layers[i]["otop"]	= rect[1];
+				}
+			}
+		}
+		else
+		{
+			with(layer)
+			{
+				setSize(.imageWidth, .imageHeight);
+				copyRect(0, 0, layer, 0, 0, .imageWidth, .imageHeight);
+				this["oleft"]	= 0;
+				this["otop"]	= 0;
+			}
+		}
+		invalidate layer;
+		if(flip)
+		{
+			for(var i=0; i<layers.count; i++)
+			{
+				with(layers[i])
+				{
+					.flipLR();
+					.oleft	= allWidth - .oleft - .width;
+				}
+			}
+		}
+	}
+
+	function finalize()
+	{
+		for(var i=1; i<layers.count; i++)
+			invalidate layers[i];
+		super.finalize(...);
+	}
+
+	function setPos(l, t)
+	{
+		super.setPos(l + oleft, t + otop);
+		for(var i=1; i<layers.count; i++)
+			with(layers[i])
+				.setPos(l + .oleft, t + .otop);
+	}
+
+	property left
+	{
+		setter(l)	{ super.left = l + oleft; }
+		getter	{ return super.left - oleft; }
+	}
+
+	property top
+	{
+		setter(t)	{ super.top = t + otop; }
+		getter	{ return super.top - otop; }
+	}
+
+	property opacity
+	{
+		setter(o)
+		{
+			super.opacity	= o;
+			for(var i=1; i<layers.count; i++)
+				layers[i].opacity	= o;
+		}
+		getter	{ return super.opacity; }
+	}
+
+	/*
+	/	ジャンプする
+	/	in	: jh	ジャンプの高さ
+	/		: time	全体の時間
+	/		: accel	加速度
+	/		: count	ジャンプの回数
+	/		: delay	開始までの遅延時間
+	*/
+	function jump(jh, time, accel, count, delay)
+	{
+		time	= (time >> 1) \ count;
+		for(var i=0; i<count; i++)
+		{
+			moveTo(, top - jh, 255, time, -accel, delay);
+			delay	= 0;
+			moveTo(, top, 255, time, accel,, flipLR);
+		}
+	}
+}
+
+//	宝具用文字
+class TreasureNameLayer extends ParticleLayer
+{
+	var image;
+	var no;
+	var basewidth;
+
+	function TreasureNameLayer(win, par, img, w, h, no)
+	{
+		name	= "宝具用文字("+no+")";
+		super.ParticleLayer(...);
+		image		= img;
+		this.no		= no;
+		basewidth	= w;
+
+		absolute	= CutinAbsolute;
+		hitThreshold= 256;
+		opacity		= 0;
+		visible		= false;
+	}
+
+	function finalize()
+	{
+		super.finalize(...);
+	}
+
+	function magnify_opacity_construct(elm, per)
+	{
+		with(elm)
+		{
+			var w = int((.ew - .sw) * per + .sw + 0.5), h = int((.eh - .sh) * per + .sh + 0.5);
+			setPos(centerleft - (w >> 1), centertop - (h >> 1));
+			opacity	= int((.eo - .so) * per + .so + 0.5);
+			setSize(w, h);
+			face	= dfOpaque;	holdAlpha	= false;
+			var layer;
+			with(layer = shareimages.get(image))
+				operateStretch(0, 0, w, h, layer, basewidth * no, 0, basewidth, .imageHeight, omOpaque,, window.currentInterpolationMode);
+			visible	= true;
+		}
+	}
+}
+
+//	回転する札
+class TurningCardLayer extends ParticleLayer
+{
+	var org2;
+	var reverse;
+	var timer;
+
+	var reversal;
+
+	function TurningCardLayer(win, par)
+	{
+		name	= "Turning card";
+		super.ParticleLayer(...);
+		org.loadImages("hf_成功");
+		with(org2 = new global.Layer(win, this))
+			.loadImages("hf_失敗");
+
+		setSize(org.imageWidth, org.imageHeight);
+		copyRect(0, 0, org, 0, 0, width, height);
+		setPos((par.width-width)>>1, (par.height-height)>>1);
+		hitThreshold	= 256;
+		absolute		= 1500000;
+		opacity	= 0;
+		visible	= true;
+	}
+
+	function finalize()
+	{
+		release(org2);
+		super.finalize(...);
+	}
+
+	//	回転しつつ、画面上方から降りてくる
+	//	count: 奇数なら裏、偶数なら表
+	function turn(count, turntype)
+	{
+		var time	= 50;
+		var accel	= -2;
+		var deccel	= 1.1;
+		var sumtime	= 0;
+		var delay	= 800;
+		var wait	= 400;
+		for(var i=0; i<count; i++)
+		{
+			magnifyTo(1, height, int time, accel,, chgPlane);
+			sumtime	+= time;
+			time	*= deccel;
+			magnifyTo(width, height, int time, accel);
+			sumtime	+= time;
+			time	*= deccel;
+		}
+//		opacityTo(0, wait,, delay, endOfMove); sumtime += wait + delay;
+		with(timer = new Timer(fall, ""))
+			.interval = 16, .enabled = true;
+
+		reversal	= ((count & 1) + 1) & 1;	//	逆転したか？
+		return sumtime;
+	}
+
+	function chgPlane()
+	{
+		reverse	= (reverse + 1) & 1;
+	}
+
+	function fall()
+	{
+//		dm(@"(${left}, ${top})-(${width}, ${height})");
+		opacity	+= int(255 / 1000 * 16);
+		if(opacity >= 255)
+		{
+			invalidate timer;
+			timer	= void;
+		}
+	}
+
+	function stopAll()
+	{
+		super.stopAll();
+		if(timer != void)
+		{
+			invalidate timer;
+			timer	= void;
+		}
+	}
+
+	function magnify_construct(elm, per)
+	{
+		var layer = reverse ? org2 : org;
+		with(elm)
+		{
+			var w = int((.ew - .sw) * per + .sw + 0.5), h = int((.eh - .sh) * per + .sh + 0.5);
+			setPos(centerleft - (w >> 1), centertop - (h >> 1));
+//			dm("magnify["+per+"]: "+this.name+" setPos("+left+", "+top+"), center("+centerleft+", "+centertop+"), setSize("+w+", "+h+") opacity = "+opacity);
+			setSize(w, h);
+			face	= dfOpaque;	holdAlpha	= false;
+			operateStretch(0, 0, w, h, layer, 0, 0, layer.imageWidth, layer.imageHeight, omOpaque,, window.currentInterpolationMode);
+		}
+		visible	= true;
+	}
+}
+
+@endif
+/*-----------------------------------------------------------------------------/
+/	End of ParticleLayer.tjs
+/-----------------------------------------------------------------------------*/

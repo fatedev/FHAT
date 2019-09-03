@@ -1,0 +1,1535 @@
+
+// 原点の指定
+var ORIGIN_FIELD		= 0;
+var ORIGIN_WINDOW		= 1;
+var ORIGIN_WINDOWCENTER = 2;
+var ORIGIN_PARENT		= 3;
+// イベント
+var EVENTSWITCH_FIRST					= 1000;
+var EVENTSWITCH_FADEIN_WAITING			= 1010;
+var EVENTSWITCH_TITLE					= 1020;
+var EVENTSWITCH_TITLE_WAITING			= 1030;
+var EVENTSWITCH_READYGO					= 1040;
+var EVENTSWITCH_READYGO_WAITING 		= 1050;
+var EVENTSWITCH_START					= 1060;
+var EVENTSWITCH_PLAYING					= 1070;
+var EVENTSWITCH_FAILED					= 1080;
+var EVENTSWITCH_TIMEOVER				= 1085;
+var EVENTSWITCH_RETIRE					= 1090;
+var EVENTSWITCH_RETIRE_WAITING			= 1100;
+var EVENTSWITCH_RETIRE_MENU				= 1110;
+var EVENTSWITCH_RETIRE_MENU_WAITING		= 1120;
+var EVENTSWITCH_FAILED_FADEOUT			= 1130;
+var EVENTSWITCH_FAILED_FADEOUT_WAITING	= 1140;
+var EVENTSWITCH_GOAL					= 1150;
+var EVENTSWITCH_GOAL_WAITING			= 1160;
+var EVENTSWITCH_CONGRATULATIONS 		= 1170;
+var EVENTSWITCH_CONGRATULATIONS_WAITING = 1180;
+var EVENTSWITCH_ENDING					= 1230;
+var EVENTSWITCH_RANK					= 1240;
+var EVENTSWITCH_RANK_WAITING			= 1250;
+var EVENTSWITCH_FADEOUT					= 1260;
+var EVENTSWITCH_FADEOUT_WAITING			= 1270;
+var EVENTSWITCH_LAST					= 1280;
+var EVENTSWITCH_QUIZ_END				= 1290;
+// 処理分岐
+var PROCMODE_GAME	= 0;
+var PROCMODE_OPTION = 1;
+// 接触判定関数用
+var HITTEST_ONSCREEN = 0; // 画面上で重なっている（レイヤが重なっている）
+var HITTEST_ONFIELD  = 1; // フィールド上で重なっている
+
+
+var g_Painting = false;
+
+//==============================================================================
+//	ゲームシーンの拡張クラス
+//	各ゲームに共通の処理をまとめたクラス。
+//==============================================================================
+class CIriyaSceneEx extends CIriyaScene
+{
+	// public members 
+	var next;			// next scene-id
+	var objects;		// list of all objects
+	var currentCamera;
+	var normalCamera;
+	var eventSwitch;
+	var procMode;
+	var houguEventProcessing; // 法具イベント中かどうか
+	var servantsRootObj;	// root of servant-objects
+	var etcRootObj;		// root of etc-objects
+	var systemRootObj;	// root of system-objets
+	var enemyRootObj;
+	var systemImages;	// CImageBuffer object
+	var servantImages;	// CImageBuffer object
+	var input = %[];
+	var createScreen = true;
+	
+	// public events
+	var onShadowUpdate;	// 影を更新した
+	var onBattleEnd;	// 小競り合いが終わった
+	var onBattleAbort;
+	var onInitPlayer;	// サーバントの初期化
+	var onEventFirst;	// シーン開始の初期化直後
+	var onEventReadygo;	// readygoの表示を開始
+	var onEventStart;	// readygo の go が表示された
+	var onEventPlaying;	// プレイ中
+	var onEventLast;	// シーン終了
+	var onEventEnding;
+	var onServantPositionQuery;
+	var onCreateServant;
+	
+	// private members
+	var _rankObj;
+	var _menuObj;
+	var _fadeObj;
+	var _debugmode = false;
+	var _debugCamera;
+	var _destinationCursor; // サーバントの移動先を表すカーソル
+	var _topScreenObj;
+	var _bottomScreenObj;
+	var processSystemObjectsOnly; // システムオブジェクトのみ処理を行う
+	var noUseHouguTimer;
+	var itemPromptObj;
+	var firstscore;
+
+	function CIriyaSceneEx ( layer, scene_id )
+	{
+		super.CIriyaScene( ... );
+		_debugCamera = new CIriyaCamera();
+		normalCamera = new CIriyaCamera();
+		objects = [];
+		// 初期設定
+		next = SCENE_DEFAULT;
+		eventSwitch = EVENTSWITCH_FIRST;
+		procMode = PROCMODE_GAME;
+		// 初期化
+		init();
+	}
+	
+	// サーバントに対して点数を加算する
+	function addServantScore( servant, point )
+	{
+		// 画面左上のスコアが存在しない場合は何もしない
+		if ( ! CheckValid(scoreObj) )
+			return;
+		// プレイヤの場合（クイズだけはマスターを操作するので、プレイヤが選択したサーバント又はマスターの場合という条件になる）
+		if ( servant.characterId==playerObj.characterId || (servant.characterId&CHARA_ID_MASTER) )
+		{
+			// 加算
+			parentLayer.addScore( point );
+			scoreObj.score = parentLayer.getTotalScore();
+			// 点数エモーションを出す
+			with( new CIrScoreEmotion( this, servant, point ) )
+			{
+				.images = systemImages;
+			}
+		}
+	}
+	
+	function finalize()
+	{
+		// 念のため、カーソルを標準に戻しておく
+		parentLayer.cursor = crDefault; 
+		// カメラを削除
+		invalidate normalCamera;
+		invalidate _debugCamera;
+		//
+		if ( _menuObj )
+			invalidate _menuObj;
+		if ( itemPromptObj )
+			invalidate itemPromptObj;
+ 		// オブジェクトを削除
+ 		clearObjects();
+ 		invalidate objects;
+ 		// バッファを削除
+		invalidate systemImages if ( CheckValid(systemImages) );
+		invalidate servantImages if ( CheckValid(servantImages) );
+		//
+		super.finalize( ... );
+	}
+
+	var playerObj;	// プレイヤの操作対象
+	var players;	// サーバント配列
+	var scoreObj;
+	var demoObj;
+
+	function init()
+	{
+		if ( CheckValid(_menuObj) )
+			invalidate _menuObj;
+		clearObjects();
+		// オブジェクト用のリストを作成する
+		objects.add( servantsRootObj = new CIrRootObject(this) );
+		objects.add( etcRootObj = new CIrRootObject(this) );
+		objects.add( systemRootObj = new CIrRootObject(this) );
+		objects.add( enemyRootObj = new CIrRootObject(this) );
+		//
+		systemImages = new CImageBuffer(parentWindow,parentLayer);
+		systemImages.capacity = IMAGEBUFFER_CAPACITY_SYSTEM;
+		servantImages = new CImageBuffer(parentWindow,parentLayer);
+		servantImages.capacity = IMAGEBUFFER_CAPACITY_SERVANT;
+		// 初期設定
+		initPlayers();
+		initField();
+		// システムオブジェクトを作成
+		loadTitle();
+		loadReadygo();
+		// メニューオブジェクトを作成
+		switch( id )
+		{
+		case SCENE_STAGE1:
+		case SCENE_STAGE2:
+		case SCENE_STAGE3:
+		case SCENE_BOSS:
+			_menuObj = new CIriyaGSysCGManage( parentWindow, parentLayer, this );
+			_menuObj.Create();
+			break;
+		}
+		// アイテム用メッセージオブジェクトを初期化
+		itemPromptObj = new CIrItemPrompt( this, void );
+		// スコア表示用オブジェクトを初期化
+		switch( id )
+		{
+		case SCENE_STAGE1:
+		case SCENE_STAGE2:
+		case SCENE_STAGE3:
+		case SCENE_BOSS:
+		case SCENE_QUIZ1:
+		case SCENE_QUIZ2:
+		case SCENE_QUIZ3:
+			scoreObj = new CIrScore( this, systemRootObj );
+			scoreObj.score = scoreObj.printscore = parentLayer.getStageInitScore();
+			scoreObj.visible = !isAutoPlayMode();
+			break;
+		}
+		// デモ表示用のオブジェクトを初期化
+		if ( isAutoPlayMode() )
+		{
+			switch( id )
+			{
+			case SCENE_TITLE:
+				break;
+			default:
+				demoObj = new CIrDemo( this, systemRootObj );
+				break;
+			}
+		}
+		// カメラ
+		with( normalCamera )
+		{
+			.screenWidth = parentWindow.innerWidth;
+			.screenHeight = parentWindow.innerHeight;
+			.limitRect = %[left: 0, top:0, right: FieldXSize, bottom: FieldYSize];
+			.limitRectEnabled = true;
+			.onUpdate = normalCameraUpdate;
+		}
+		//
+		parentLayer.setClearFlag(false);
+		processSystemObjectsOnly = false;
+		currentCamera = normalCamera;
+		noUseHouguTimer = 0;
+	}
+	
+	function syssound( file )
+	{
+		PlaySE( file );
+	}
+
+	
+	function clearObjects()
+	{
+		var i;
+		for( i=0; i<objects.count; i++ )
+			invalidate objects[i];
+		objects.clear();
+	}
+	
+	function gameTimerStart()
+	{
+		if ( _menuObj )
+			_menuObj.StartTime();
+	}
+	
+	function gameTimerStop()
+	{
+		if ( _menuObj )
+			_menuObj.StopTime();
+	}
+	
+	function gameTimerTime()
+	{
+		if ( _menuObj )
+			return _menuObj.stage_time.time_count;
+		else
+			return -1;
+	}
+	
+	function addShadow( parent, zsync=false )
+	{
+		var obj = new CIrShadow(this,parent,zsync);
+		obj.onUpdateCom = onShadowUpdate;
+		obj.images = systemImages;
+		return obj;
+	}
+
+	// フェード用オブジェクトを作成し、描画オブジェクトリストに登録する
+	function fadeCreate( color=0xff000000, visible=true )
+	{
+		_fadeObj = fadeCreate2(color,visible);
+		return _fadeObj;
+	}
+	
+	function fadeCreate2( color=0xff000000, visible=true )
+	{
+		var obj;
+		with( obj = new CIriyaObject(this,systemRootObj) )
+		{
+			.allowAnimationWhileUsingHougu = true;
+			.x				= 0;
+			.y				= 0;
+			.origin			= ORIGIN_WINDOW;
+			.priority		= PRIORITY_FADE;
+			.visible		= visible;
+			.layer.width	= parentLayer.width;
+			.layer.height	= parentLayer.height;
+			.layer.fill( color );
+			invalidate .images; // 画像バッファは必要無い
+		}
+		return obj;
+	} 
+
+	// フェードインを始める（黒スクリーン→クリア）
+	function fadeIn( timelength=60, priority=PRIORITY_FADE )
+	{
+		fade( 255, 0, timelength, priority ); // 黒スクリーンを、だんだん見えなくなるように変化させるので、レイヤ的にはフェードアウトになることに注意
+	}
+
+	// フェードアウトを始める（クリア→黒スクリーン）
+	function fadeOut( timelength=60, priority=PRIORITY_FADE )
+	{
+		fade( 0, 255, timelength, priority ); // 黒スクリーンを、だんだん見えるように変化させるので、レイヤ的にはフェードインになることに注意
+	}
+
+	// フェードを始める
+	function fade( alphastart, alphaend, timelength=60,priority=PRIORITY_FADE )
+	{
+		_fadeObj.priority = priority;
+		_fadeObj.fade( alphastart, alphaend, timelength );
+	}
+
+	// フェード処理中ならば true を返す
+	property fadeProcessing
+	{
+		getter()
+		{
+			return _fadeObj.fadeProcessing;
+		}
+	}
+
+	// １フレーム毎のフェード処理を行う
+	function fadeProc()
+	{
+		_fadeObj.fadeProc();
+	}
+
+	//	キー入力状態を取得する
+	function updateInputInfo()
+	{
+		input = parentLayer.inputObj.update();
+	}
+
+	// 描画
+	function draw()
+	{
+		g_Painting = true;
+		var i;
+		for ( i=0; i<objects.count; i++ )
+			objects[i].paint();
+		g_Painting = false;
+	}
+
+	// 指定したオブジェクトと重なっているサーバントリストを返す
+	function findHitServants( obj, testmode )
+	{
+		if( timerCount%5>0 )
+			return [];
+		var i;
+		var list=[];
+		for ( i=0; i<players.count; i++ )
+		{
+			if ( players[i] != obj )
+				if ( isHitObject( obj, players[i], testmode ) )
+					list.add( players[i] );
+		}
+		return list;
+	}
+	
+	// 指定されたオブジェクトと重なっているかどうかを調べる. hitRect プロパティを使って調べる
+	function isHitObject( obj1, obj2, testmode=HITTEST_ONSCREEN )
+	{
+		var hit1 = obj1.hitRect;
+		var hit2 = obj2.hitRect;
+		var pos1, pos2;
+		
+		switch( testmode )
+		{
+		case HITTEST_ONFIELD:
+			pos1 = obj1.getFieldPos();
+			pos2 = obj2.getFieldPos();
+			// ※当たり判定のY座標は、フィールド上ではZ座標になるので注意すること
+			// X方向（水平）の判定
+			if ( pos1.x+hit1.right < pos2.x+hit2.left    ) return false;
+			if ( pos1.x+hit1.left  > pos2.x+hit2.right   ) return false;
+			// Z方向（高さ）の距離（高いほどZ値も大きくなるので注意すること。画面上側のほうがZ値が大きくなる）
+			if ( pos1.z-hit1.bottom > pos2.z-hit2.top    ) return false;
+			if ( pos1.z-hit1.top    < pos2.z-hit2.bottom ) return false;
+			// Y方向（奥行き）の距離
+			if ( Math.abs( obj1.y-obj2.y ) >= 25 ) return false;
+			// OK
+			return true;			
+
+		case HITTEST_ONSCREEN:
+			// オブジェクトの、スクリーン上での座標を得る
+			pos1 = obj1.getDrawPos( normalCamera );
+			pos2 = obj2.getDrawPos( normalCamera );
+			// 当たり判定RECT同士の重なりを調べる
+			if ( pos1.x+hit1.right	< pos2.x+hit2.left	) return false;
+			if ( pos1.y+hit1.bottom	< pos2.y+hit2.top	) return false;
+			if ( pos1.y+hit1.top	> pos2.y+hit2.bottom ) return false;
+			if ( pos1.x+hit1.left	> pos2.x+hit2.right	) return false;
+			// OK
+			return true;	
+		}		
+	}
+	
+	// カメラの位置を更新する場合に呼び出される
+	function updateCamera()
+	{
+		normalCamera.update();
+		_debugCamera.update();
+	}
+	
+	function destinationCursorCreate()
+	{
+		_destinationCursor = new CIrDestinationCursor(this,playerObj);
+		_destinationCursor.images = systemImages;
+	}
+	
+	function destinationCursorChange( newX, newY )
+	{
+		_destinationCursor.change( newX, newY );
+	}
+	
+	function initPlayers()
+	{
+		var i;
+		var player;
+		servantsRootObj.child.clear();
+		players = servantsRootObj.child;
+		for ( i=0; i<MAX_PLAYER_NUM; i++ )
+		{
+			// create servant object
+			if ( onCreateServant )
+				player = onCreateServant( i );
+			else
+			{
+				player = new CIrServant( this, servantsRootObj );
+				player.onAnimation = servantAnimation;
+			}
+			// サーバントの初期化
+			with ( player )
+			{
+				.index = i;
+				.characterId = parentLayer.CharaStatus[i].GetServantID();
+				.masterId = parentLayer.CharaStatus[i].GetMasterID();
+				.images = servantImages;
+				.allowFadeAnimationWhileUsingHougu = true;
+				.isPlayer = false;
+				.gauge.defaultAlpha = 90;
+				// オートプレイが無効になっていて、かつインデックスがゼロのキャラクタがプレイヤ操作可能になる
+				if ( .index==0 )
+				{
+					.marker = new CIrPlayerMarker( this, player ); // 操作対象にはマーカーをつけておく
+					if( isAutoPlayMode() )
+						.marker.enabled = false;
+					else
+					{
+						.isPlayer = true;
+						.gauge.defaultAlpha = 255;
+					}
+					this.playerObj = player;
+				}
+			}
+			if ( onInitPlayer )
+				onInitPlayer( player, i );
+		}
+	}
+	
+	function screenHide( obj )
+	{
+		if ( CheckValid(_topScreenObj) )
+			_topScreenObj.animation = 1;
+		if ( CheckValid(_bottomScreenObj) )
+			_bottomScreenObj.animation = 1;
+	}
+	
+	function screenAnimation( obj )
+	{
+		switch( obj.animation )
+		{
+		case 0:
+			break;
+		case 1:
+			if ( obj.timing==0 )
+				obj.fadeOut(30);
+			if ( ! obj.fadeProcessing )
+				obj.enabled = false;
+			break;
+		}	
+	}
+	
+	function initField()
+	{
+		// フェード用レイヤ
+		fadeCreate( 0xFF000000, true );
+		// 上下の余白部分
+		if ( createScreen )
+		{
+			with( _topScreenObj = new CIriyaObject(this,systemRootObj) )
+			{
+				.x			= 0;
+				.y			= 0;
+				.origin		= ORIGIN_WINDOW;
+				.priority	= PRIORITY_SCREEN_FADE;
+				.layer.setSize( SCREEN_SIZE_W, 120 );
+				.layer.fill(0xFF000000);
+				.animatoin = 0;
+				.onAnimation = screenAnimation;
+				invalidate .images; // 画像バッファは必要ない
+			}
+			with( _bottomScreenObj = new CIriyaObject(this,systemRootObj) )
+			{
+				.x			= 0;
+				.y			= 470;
+				.origin		= ORIGIN_WINDOW;
+				.priority	= PRIORITY_SCREEN_FADE;
+				.layer.setSize( SCREEN_SIZE_W, 130 );
+				.layer.fill(0xFF000000);
+				.animatoin = 0;
+				.onAnimation = screenAnimation;
+				invalidate .images; // 画像バッファは必要ない
+			}
+		}
+	}
+
+	var __readygo;
+	function loadReadygo()
+	{
+		if ( CheckValid(__readygo) )
+			invalidate __readygo;
+		__readygo = new CIrReadygo(this,systemRootObj);
+	}
+
+	function showReadyGo()
+	{
+		__readygo.show();
+	}
+	
+	function showGoal()
+	{
+		new CIrGoal(this,systemRootObj);
+		syssound( SE_GOAL );
+	}
+
+	function showCongratulations()
+	{
+		new CIrCongratulations(this,systemRootObj);
+		syssound( SE_CONGRATULATIONS );
+	}
+
+	var __titleObj;
+	function loadTitle()
+	{
+		if ( CheckValid( __titleObj ) )
+			invalidate __titleObj;
+		__titleObj = new CIrTitle(this,systemRootObj);
+	}
+	function showTitle()
+	{
+		if ( CheckValid(__titleObj) )
+			__titleObj.show();
+		syssound( SE_TITLE );
+	}
+	function hideTitle()
+	{
+		if ( CheckValid(__titleObj) )
+			__titleObj.enabled = false;
+	}
+
+
+	var __retireObj;
+	function showRetire( timeover=false )
+	{
+		__retireObj = new CIrRetire(this,systemRootObj,timeover);
+	}
+	
+	function retireShowing()
+	{
+		return ( CheckValid(__retireObj) && __retireObj.enabled );
+	}
+
+	function createHitEff( target )
+	{
+		with( new CIrShotHitEffect( this, target ) )
+		{
+			.images = systemImages;
+			.z = target.z+20;
+		}
+	}
+	
+	
+	// プレイヤが宝具を使用した場合に呼び出される
+	function servantUseItem( servant, target=void )
+	{
+		// 万が一宝具使用中の場合は、アイテムイベントは発生しない
+		if ( houguEventProcessing )
+			return false;
+		if ( servant.characterId == CHARA_ID_BERSERCAR )
+		{
+			// バーサーカーの場合は、とくに宝具を使う相手を決めないが、
+			// 処理上の問題で target が void だとエラーが起きるため、適当な値を指定しておく
+			target = servant;
+		}
+		else
+		{
+			// プレイヤの小競り合い中には使えない
+			if ( [ANI_FIGHT,ANI_FIGHT_READY].find(playerObj.animation) >= 0 )
+				return false;
+			// プレイヤのゴール後・ダウン後は使えない
+			if ( playerObj.status != STATUS_PLAYING )
+				return false;
+			// MPがなければ使えない
+			if ( servant.mp < servant.mpMax )
+				return false;
+			// ターゲットが指定されていない場合は自動決定する
+			if ( target===void )
+				target = selectHouguTarget(servant);
+			// 宝具を当てることのできる相手がいない場合は使えない(COMが宝具を使おうとした場合のみ)
+			if ( servant.isPlayer==false )
+				if ( target==servant )
+					return false;
+			// 成功
+			servant.mp = 0;
+			if ( servant.mp < 0 )
+				servant.mp = 0;
+		}
+		// 宝具イベントを作成する
+		var event;
+		switch( servant.characterId )
+		{
+		case CHARA_ID_ARCHER:
+			event = new CIrArcherHouguEvent(this,etcRootObj);
+			break;
+		case CHARA_ID_CASTER:
+			event = new CIrCasterHouguEvent(this,etcRootObj);
+			break;
+		case CHARA_ID_LANCER:
+			event = new CIrLancerHouguEvent(this,etcRootObj);
+			break;
+		case CHARA_ID_RIDER:
+			event = new CIrRiderHouguEvent(this,etcRootObj);
+			break;
+		case CHARA_ID_SABER:
+			event = new CIrSaberHouguEvent(this,etcRootObj);
+			break;
+		case CHARA_ID_BERSERCAR:
+			event = new CIrBersercarHouguEvent(this,etcRootObj);
+			break;
+		}
+		// イベントに、宝具使用情報を設定する
+		with( event )
+		{
+			.attacker = servant;
+			.target = target;
+			.onDisactive = houguEventDisactive;
+			.images = systemImages;
+		}
+		// エモーションを消しておく
+		if( id == SCENE_STAGE1 )
+		{
+			servant.ryujinemo.enabled = false if ( CheckValid(servant.ryujinemo) );
+			target.ryujinemo.enabled = false if ( CheckValid(target.ryujinemo) );
+		}
+		gameTimerStop(); // タイマーをとめておく
+		houguEventProcessing = true; // 宝具処理中のフラグを立てておく
+		dm( "宝具イベント開始" );
+		//
+		return true;
+	}
+	
+	function houguEventDisactive( event )
+	{
+		gameTimerStart();
+		houguEventProcessing = false;
+		noUseHouguTimer = HOUGU_INTERVAL;
+		dm( "宝具イベント終了" );
+	}
+	
+	function selectHouguTarget( attacker )
+	{
+		var target;
+		var list = getPlayingServantList();
+		var i;
+		for ( i=0; i<list.count; i++ )
+		{
+			target = list[i];
+			if ( target==attacker )
+				continue;
+			// データの有効性をチェック
+			if ( target===void )
+				dm("target==void !" );
+			if ( attacker===void )
+				dm("attacker==void !" );
+			if ( target.characterId == attacker.characterId )
+				continue;
+			// ターゲットが、宝具を当ててもよい状態かどうかを確認する				
+			if ( ! target.houguTargetQuery() )
+				continue;
+			return target;
+		}
+		// no target.
+		return attacker;
+	}
+	
+	// プレイヤ同士の小競り合いを発生させる
+	function battleStart( player1, player2 )
+	{	
+		with( new CIrFight( this, etcRootObj, player1, player2 ) )
+		{
+			.onBattleEnd = onBattleEnd;
+			.onBattleAbort = onBattleAbort;
+			.images = systemImages;
+		}
+		player1.stop();
+		player1.animation = ANI_FIGHT_READY;
+		player2.stop();
+		player2.animation = ANI_FIGHT_READY;
+	}	
+	
+	function onUpdateDebug()
+	{
+		// シフトキーが押されている間はデバッグモードに移行する
+		// デバッグモードの場合はカメラの移動リミット・自動更新を無効にする.
+		// クリックされた点にカメラを移動する
+		_debugmode = ( input.shift>=0 );
+		if ( _debugmode )
+		{
+			if ( input.shift == 0 )
+			{
+				_debugCamera.copyFrom( currentCamera );
+				currentCamera = _debugCamera;
+			}
+			if ( input.left == 0 )
+				with ( _debugCamera.windowToField( input.x, input.y ) )
+				{
+					_debugCamera.motionType = MOTIONTYPE_INVERCE;
+					_debugCamera.motionDestX = .x;
+					_debugCamera.motionDestY = .y;
+				}
+		}
+		else
+			currentCamera = normalCamera;
+	}
+
+	function updateObjectList()
+	{
+		var i;
+		var c = objects.count;
+		if ( processSystemObjectsOnly )
+			systemRootObj.step();
+		else
+		{
+			for( i=0; i<c; i++ )
+				objects[i].step();
+		}
+		if ( timerCount%CORRECTION_INTERVAL == 0 )
+			removeDisactiveObjects();
+	}
+	
+	// 無効なオブジェクトを削除する
+	function removeDisactiveObjects()
+	{
+		var i;
+		for ( i=0; i<objects.count; i++ )
+			objects[i].pack();	
+	}
+
+	function proc()
+	{
+		// キー入力を得る
+		updateInputInfo();
+		// アイテムメッセージが表示されている間は進行ストップ
+		if ( itemPromptObj.active )
+		{
+			itemPromptObj.step();
+			itemPromptObj.updateLayerImage();
+			itemPromptObj.updateLayerPos();
+			return SCENE_DEFAULT;
+		}
+		// メニューの状態によって処理内容を決定する
+		if ( _menuObj )
+			with( _menuObj )
+			{
+				.Update();// システムメニューの更新
+				switch( .GetNowMode() )
+				{
+				case .UPDATE_MODE_PAUSE:	// ポーズボタン待機状態
+					return SCENE_DEFAULT;
+
+				case .UPDATE_MODE_TITLE_RET_FADE_END:	// タイトルに戻る後のフェード完了状態
+					return SCENE_TITLE;
+				}
+			}
+		_proc(); // 通常ゲーム処理を行う
+		return next;
+	}
+	
+	var exitAutoPlayMode = false;
+
+
+	var SKIPFLAG_NONE 		= -1;	// スキップしない
+	var SKIPFLAG_IMPOSSIBLE = 0;	// スキップ不可能
+	var SKIPFLAG_STAGE		= 1;	// ゲーム面をスキップした
+	var SKIPFLAG_TALK		= 2;	// 激励シーンをスキップした
+	var SKIPFLAG_FORCE		= 3;	// 強制的にゲームスキップした
+	
+	function getSkipFlag()
+	{
+		// スキップしない
+		if ( input.control != 0 )
+			return SKIPFLAG_NONE;
+		// 通常面をスキップ
+		// リリースモードの場合、ここではＮＯＮＥを返しておく。実際には各ステージスクリプト内で判定する
+		if ( [SCENE_STAGE1,SCENE_STAGE2,SCENE_STAGE3].find(this.id) >= 0 )
+		{
+		@if( DEBUG_MODE )
+			return SKIPFLAG_STAGE;
+		@endif;
+			return SKIPFLAG_NONE;
+		}
+		// 激励シーンをスキップ
+		if ( [SCENE_TALK1,SCENE_TALK2].find(this.id) >= 0 )
+			return SKIPFLAG_TALK;
+		// デバッグモードの場合は強制スキップ
+		@if( DEBUG_MODE )
+			return SKIPFLAG_FORCE;
+		@endif;
+		// スキップできない
+		return SKIPFLAG_IMPOSSIBLE;
+	}
+
+	
+	function _proc()
+	{
+		// タイマを進める
+		if ( _menuObj )
+		{
+			if ( _menuObj.CheckTimeOver() )
+				eventSwitch = EVENTSWITCH_TIMEOVER;
+			else
+				_menuObj.StepTime();
+		}
+		//
+		@if ( DEBUG_MODE )
+			onUpdateDebug();
+		@endif
+		var skipflag = getSkipFlag();
+		if ( skipflag != SKIPFLAG_NONE )
+		{
+			switch( skipflag )
+			{
+			case SKIPFLAG_STAGE:
+				parentLayer.setUseStageSkipFlag(); // ステージスキップを使ったのでフラグを立てておく
+				eventSwitch = EVENTSWITCH_LAST;
+				break;
+			case SKIPFLAG_TALK:
+			case SKIPFLAG_FORCE:
+				eventSwitch = EVENTSWITCH_LAST;
+				break;
+			}
+		}
+		if( (input.right==0||input.left==0) && isAutoPlayMode() && !exitAutoPlayMode )
+		{
+			eventSwitch = EVENTSWITCH_FADEOUT;
+			exitAutoPlayMode = true;
+		}
+		// イベント処理
+		if( gameProc() )
+		{
+			// カメラの状態を更新する
+			updateCamera();
+			// オブジェクトの状態を更新
+			updateObjectList();
+			// レーダーを更新
+			if ( _menuObj )
+				_menuObj.UpdateMapInfo();
+			//
+			noUseHouguTimer--;
+			if ( noUseHouguTimer < 0 )
+				noUseHouguTimer = 0;
+		}
+	}
+
+	var _counter = 0;
+	var optShowTitle = true;
+	var optShowReadygo = true;
+	var yesNoDialog;
+	
+	function updateTotalTime()
+	{
+		parentLayer.CharaStatus[0].AddTotalTime( _menuObj.GetNowStageTime() );
+	}
+	
+	function skipCamera()
+	{
+		with( normalCamera )
+		{
+			.x = .motionDestX;
+			.y = .motionDestY;
+			.stop();
+		}
+	}
+	
+	var timeover = false;
+	
+	function gameProc()
+	{
+		// 通常イベントの処理
+		switch( eventSwitch )
+		{
+		// 初期化直後
+		case EVENTSWITCH_FIRST:
+			fadeIn( FADETIME_SCENESTART, PRIORITY_SCREEN_FADE );
+			with( normalCamera )
+			{
+				.x = FirstCameraPosX;
+				.y = FirstCameraPosY;
+				//.motionDestX (設定済み)
+				//.motionDestY (設定済み)
+				.mode = CAMERAMODE_SCAN;
+				.motionLength = 140;
+				.motionType = MOTIONTYPE_SCHEDULED_LINER;
+				.motionStart();
+			}
+			onEventFirst() if( onEventFirst );
+			eventSwitch = EVENTSWITCH_FADEIN_WAITING;
+			break;
+			
+		// フェードインの完了待ち
+		case EVENTSWITCH_FADEIN_WAITING:
+			if ( input.left==0 )
+			{
+				skipCamera();
+				fadeIn(0);
+				screenHide();
+				eventSwitch = EVENTSWITCH_READYGO;
+				break;
+			}
+			if ( fadeProcessing )
+				break;
+			eventSwitch = EVENTSWITCH_TITLE;
+			break;
+		
+		// タイトル表示
+		case EVENTSWITCH_TITLE:
+			if ( ! optShowTitle )
+			{
+				eventSwitch = EVENTSWITCH_READYGO;
+				break;
+			}
+			showTitle();
+			_counter = WAIT_TITLE;
+			eventSwitch = EVENTSWITCH_TITLE_WAITING;
+			break;
+		
+		// タイトル表示完了待ち
+		case EVENTSWITCH_TITLE_WAITING:
+			_counter--;
+			if ( input.left==0 )
+			{
+				skipCamera();
+				hideTitle();
+				screenHide();
+				eventSwitch = EVENTSWITCH_READYGO;
+				break;
+			}
+			if ( _counter == WAIT_TITLE\2 )
+				screenHide();
+			if ( _counter<=0 && normalCamera.motionDone )
+				eventSwitch = EVENTSWITCH_READYGO;
+			break;
+		
+		// READYGO表示
+		case EVENTSWITCH_READYGO:
+			if ( ! optShowReadygo )
+			{
+				eventSwitch = EVENTSWITCH_START;
+				break;
+			}
+			if ( _menuObj && CREATE_MENU )
+				_menuObj.FrameIn();
+			showReadyGo();
+			onEventReadygo() if( onEventReadygo );
+			with( normalCamera )
+			{
+				.mode = CAMERAMODE_DEFAULT;
+				.motionType = MOTIONTYPE_INVERCE;
+			}
+			_counter = WAIT_READYGO;
+			eventSwitch = EVENTSWITCH_READYGO_WAITING;
+			break;
+		
+		// READYGO表示完了待ち
+		case EVENTSWITCH_READYGO_WAITING:
+			_counter--;
+			if ( _counter > 0 )
+				break;
+			eventSwitch = EVENTSWITCH_START;
+			break;
+		
+		// ゲームスタート
+		case EVENTSWITCH_START:
+			gameTimerStart();
+			onEventStart() if ( onEventStart );
+			eventSwitch = EVENTSWITCH_PLAYING;
+			break;
+		
+		// ゲーム中
+		case EVENTSWITCH_PLAYING:
+@if( DEBUG_MODE )
+			if ( input.shift<0 && input.ret==0 )
+				playerObj.hp = 0;
+			if ( input.shift>0 && input.ret==0 )
+			{
+				var i;
+				for ( i=1; i<5; i++ )
+					players[i].hp=0;
+			}
+			if( System.getKeyState( VK_T ) )
+				_menuObj.stage_time.SetLeftTime(1);
+
+			if ( ALWAYS_NODAMAGE  ){ playerObj.condition=CONDITION_NODAMAGE;playerObj.conditionTimeLeft=9999;}
+			if ( ALWAYS_RAPIDMODE ){ playerObj.condition=CONDITION_RAPID;	playerObj.conditionTimeLeft=9999;}
+@endif
+			updateServantPosition();
+ 			updateServantRank();
+			onEventPlaying();
+			break;
+			
+		// タイムオーバー
+		case EVENTSWITCH_TIMEOVER:
+			parentLayer.cursor = crDefault;
+			processSystemObjectsOnly = true;
+			timeover = true;
+			//
+			
+		// リタイア
+		case EVENTSWITCH_FAILED:
+			if ( _menuObj )
+				_menuObj.FrameOut();
+			gameTimerStop();
+			// オートプレイモードの場合は、そのままゲーム終了にもっていく
+			if( isAutoPlayMode() )
+				eventSwitch = EVENTSWITCH_FADEOUT;
+			else
+			{
+				processSystemObjectsOnly = true;
+				fade( 0, 128, 30, PRIORITY_MENU_FADE );
+				eventSwitch = EVENTSWITCH_RETIRE;
+			}
+			break;
+		
+		// RETIRE表示
+		case EVENTSWITCH_RETIRE:
+			// 失敗した場合はスコアをリセットする
+			parentLayer.resetStageScore();
+			if ( fadeProcessing )
+				break;		
+			showRetire( timeover );
+			eventSwitch = EVENTSWITCH_RETIRE_WAITING;
+			break;
+		
+		// RETIRE表示終了待ち
+		case EVENTSWITCH_RETIRE_WAITING:
+			if ( retireShowing() )
+				break;
+			eventSwitch = EVENTSWITCH_RETIRE_MENU;
+			break;
+			
+		case EVENTSWITCH_RETIRE_MENU:
+			with ( yesNoDialog = new CIriyaYesNoDialogEx(parentWindow,parentLayer) )
+			{
+				.CreateDefaultSet( PRIORITY_MENU, "ir_menu01_13", false );
+				.StartFadeIn();
+			}
+			eventSwitch = EVENTSWITCH_RETIRE_MENU_WAITING;
+			break;
+			
+		case EVENTSWITCH_RETIRE_MENU_WAITING:
+			with( yesNoDialog )
+			{
+				.UpdateEx();
+				if( .GetSelectID() == .SEL_ID_NONE )
+					break;
+				if (.GetSelectID()  ==  .SEL_ID_NO)
+					fadeOutAll( 20*FRAME_PER_SEC);
+			}
+			eventSwitch = EVENTSWITCH_FAILED_FADEOUT;
+			break;
+
+		// リタイア時のフェードアウト
+		case EVENTSWITCH_FAILED_FADEOUT:
+			fade( 128, 255, 30, PRIORITY_SCREEN_FADE );
+			eventSwitch = EVENTSWITCH_FAILED_FADEOUT_WAITING;
+			break;
+			
+		// リタイア時のフェードアウト待ち
+		case EVENTSWITCH_FAILED_FADEOUT_WAITING:
+			if ( fadeProcessing )
+				break;
+			// フェードアウトが終了したらContinue確認ダイアログを表示する
+			var flag = true;
+			with( yesNoDialog )
+				switch( .GetSelectID() )
+				{
+				case .SEL_ID_YES:
+					init();
+					parentLayer.setUseContinueFlag();
+					eventSwitch = EVENTSWITCH_FIRST;
+					flag = false;
+					break;
+				case .SEL_ID_NO:
+					next = SCENE_GAMEOVER;
+					break;
+				default:
+					break;	
+				}
+			yesNoDialog.Release();
+			invalidate yesNoDialog;
+			return flag;
+//			break;
+		
+		// CONGRATULATIONS表示
+		case EVENTSWITCH_CONGRATULATIONS:
+			//
+			stopBGM( , );
+			_rankObj = new CIriyaPrintGoalRank( parentWindow, parentLayer, this );
+			_rankObj.Init();
+			invalidate _rankObj;
+			_rankObj = void;
+			parentLayer.flushScore();
+			showCongratulations();
+			if ( _menuObj )
+				_menuObj.FrameOut();
+			gameTimerStop();
+			for ( var i=0; i<players.count; i++ )
+				players[i].gauge.visible = false;
+			playerObj.marker.visible = false if( CheckValid(playerObj.marker) );
+			_counter = 110;
+			eventSwitch = EVENTSWITCH_CONGRATULATIONS_WAITING;
+			break;
+			
+		// CONGRATULATIONS 表示後の待ち
+		case EVENTSWITCH_CONGRATULATIONS_WAITING:
+			_counter--;
+			if ( _counter>0 )
+				break;
+			if ( parentLayer.getStageSelectFlag() )
+				eventSwitch = EVENTSWITCH_FADEOUT;
+			else
+				eventSwitch = EVENTSWITCH_ENDING;
+			break;
+			
+		case EVENTSWITCH_ENDING:
+			onEventEnding() if ( onEventEnding );
+			break;
+
+		// GOAL表示
+		case EVENTSWITCH_GOAL:
+			if( isAutoPlayMode() )
+			{
+				eventSwitch = EVENTSWITCH_FADEOUT;
+				break;
+			}
+			parentLayer.setClearFlag(true);
+			_rankObj = new CIriyaPrintGoalRank( parentWindow, parentLayer, this );
+			_rankObj.Init();
+			_counter = 60;
+			parentLayer.flushScore();
+			if ( _menuObj )
+				_menuObj.FrameOut();
+			showGoal();
+			gameTimerStop();
+			for ( var i=0; i<players.count; i++ )
+				players[i].gauge.visible = false;
+			playerObj.marker.visible = false if( CheckValid(playerObj.marker) );
+ 			processSystemObjectsOnly = true;
+			eventSwitch = EVENTSWITCH_GOAL_WAITING;
+			break;
+		
+		// GOAL 表示後の待ち
+		case EVENTSWITCH_GOAL_WAITING:
+			_counter--;
+			if ( _counter>0 )
+				break;
+			eventSwitch = EVENTSWITCH_RANK;
+			break;	
+		
+		// ランキング表示
+		case EVENTSWITCH_RANK:
+			if ( id==SCENE_BOSS )
+			{
+				eventSwitch = EVENTSWITCH_FADEOUT;
+				break;
+			}
+			_rankObj.Print();
+			eventSwitch = EVENTSWITCH_RANK_WAITING;
+			break;
+		
+		// ランキング表示終了待ち
+		case EVENTSWITCH_RANK_WAITING:
+			if ( _rankObj.Update() )
+				break;
+			eventSwitch = EVENTSWITCH_FADEOUT;
+			break;
+			
+		// クイズ面の終了
+		case EVENTSWITCH_QUIZ_END:
+			parentLayer.flushScore();
+			eventSwitch = EVENTSWITCH_FADEOUT;
+			break;
+		
+		// ゲーム終了のフェードアウト開始
+		case EVENTSWITCH_FADEOUT:
+			fadeOut( FADETIME_SCENEEND, PRIORITY_SCREEN_FADE );
+			eventSwitch = EVENTSWITCH_FADEOUT_WAITING;
+			break;
+		
+		// ゲーム終了のフェードアウト完了待ち
+		case EVENTSWITCH_FADEOUT_WAITING:
+			if ( fadeProcessing )
+				break;
+			eventSwitch = EVENTSWITCH_LAST;
+			break;
+		
+		// 後始末
+		case EVENTSWITCH_LAST:
+			stopAll(); // sound stop
+			onEventLast() if ( onEventLast );
+			EasyObjectInvalidate( _rankObj );
+			// 念のため後始末
+			if ( CheckValid(yesNoDialog) )
+			{
+				yesNoDialog.Release();
+				invalidate yesNoDialog;
+			}
+			if ( exitAutoPlayMode )
+				next = SCENE_TITLE;
+			break;
+			
+		default:
+			dm( "unknwon event-switch in function gameProc : " + eventSwitch );
+			break;
+		}
+		return true;
+	}
+	
+	function getPlayingServantList()
+	{
+ 		var list = [];
+ 		var i;
+		// 未ゴールのサーバントリストを作成する
+ 		for ( i=0; i<players.count; i++ )
+ 		{
+ 			if( players[i].status == STATUS_PLAYING )
+				list.add( players[i] );
+		}
+   		//サーバントを進行順にソートする
+ 		list.sort( comparePosition, true );
+		return list;
+	}
+	
+	function updateServantPosition()
+	{
+ 		var i;
+ 		// 位置情報を更新
+		// 未ゴールのサーバントリストを作成する
+ 		for ( i=0; i<players.count; i++ )
+ 			players[i].position = getServantPosition(i);
+	}
+	
+ 	function updateServantRank()
+ 	{
+ 		var list=[];
+ 		var goal=0;
+ 		var i;
+ 		var obj;
+ 		// 位置情報を更新
+		// 未ゴールのサーバントリストを作成する
+ 		for ( i=0; i<players.count; i++ )
+ 		{
+ 			obj = players[i];
+ 			obj.position = getServantPosition(i);
+ 			switch( obj.status )
+ 			{
+ 			case STATUS_PLAYING:
+				list.add( obj );
+				break;
+			case STATUS_SUCCEEDED:
+				goal++;
+				break;
+			}
+ 		}
+  		//サーバントを進行順にソートする
+ 		list.sort( comparePosition, true );
+ 		// 順位決定
+ 		for ( i=0; i<list.count; i++ )
+ 			list[i].rank = goal+i;
+	}
+	
+	function comparePosition( obj1, obj2 )
+	{
+		return obj1.position > obj2.position;
+	}
+	
+	
+	function getServantRank( index )
+	{
+		return players[index].rank;
+	}
+	 
+	// スタートを0、ゴールを100として、指定されたサーバントの位置を実数で返す
+	// サーバント情報が存在しない場合は void を返す
+	function getServantPosition( index )
+	{
+		if ( players===void )
+			return void;
+		if ( players[index] === void )
+			return void;
+		switch( players[index].status )
+		{
+		case STATUS_PLAYING:
+		case STATUS_FAILED:
+			if ( onServantPositionQuery )
+				return onServantPositionQuery( index );
+			else
+				return 0;
+		case STATUS_SUCCEEDED:
+			return 100;
+		}
+		return void;
+	}
+
+	function getServantClearTime( index )
+	{
+		return players[index].clearTime;
+	}
+
+	function servantPlayer( servant )
+	{
+		// abstract method
+	}
+	
+	function servantCom( servant )
+	{
+		// abstract method
+	}
+
+	// 指定した座標がレイヤに重なっているかどうか
+	function inLayer( layer, x, y )
+	{
+		return inRect(
+			x, y,
+			layer.left,
+			layer.top,
+			layer.left+layer.width,
+			layer.top+layer.height
+		);
+	}
+		
+	function cursorInLayer( layer )
+	{
+		var px, py;
+		with( currentCamera.windowToField(input.x,input.y) )
+		{
+			px = .x;
+			py = .y;
+		}
+		return inLayer( layer, px, py );
+	}
+
+	function putItem( x, y, info=void )
+	{
+		var item;
+		// オートプレイモードの場合は、宝箱を出さない
+		if( isAutoPlayMode() )
+			info = void;
+		// アイテムを生成する
+		with( item = new CIrItem( this, etcRootObj, info ) )
+		{
+			.images = systemImages;
+			.x = x;
+			.y = y;
+			.z = 0;
+			.onHit = servantGetItem;
+		}
+		return item;
+	}
+	
+	function アイテム取得済み( item_id )
+	{
+		return false;
+	}
+	
+	
+	function ランダム出現するレアアイテム()
+	{
+		switch( random32(4) )
+		{
+		case 0: return %[id:ITEM_レア_掛け軸, 確率:掛け軸の出現確率 ];
+		case 1: return %[id:ITEM_レア_おいしいネコ缶, 確率:おいしいネコ缶の出現確率 ];
+		case 2: return %[id:ITEM_レア_泰山のレンゲ, 確率:泰山のレンゲの出現確率 ];
+		case 3: return %[id:ITEM_レア_タイガーストラップ, 確率:タイガーストラップの出現確率 ];
+		}
+		return void;	
+	}
+	
+	function 特定キャラを使用した場合のレアアイテム( servant )
+	{
+		switch( servant.characterId )
+		{
+		case CHARA_ID_SABER:
+			return %[id:ITEM_レア_セイバーの茶碗, 確率:セイバーの茶碗の出現確率 ];
+
+		case CHARA_ID_RIDER:
+			return %[id:ITEM_レア_ライダーの眼鏡, 確率:ライダーの眼鏡の出現確率 ];
+
+		case CHARA_ID_CASTER:
+			return %[id:ITEM_レア_キャスターの指輪, 確率:キャスターの指輪の出現確率 ];
+
+		case CHARA_ID_ARCHER:
+			return %[id:ITEM_レア_アーチャーのお玉, 確率:アーチャーのお玉の出現確率 ];
+		}
+		return void;
+	}
+	
+	
+	function 特定マスターのサーバントを倒した場合のレアアイテム( servant )
+	{
+		switch( servant.masterId )
+		{
+		case CHARA_ID_SHIROU:
+			return %[ id:ITEM_レア_カリバーン, 確率:カリバーンの出現確率 ];
+
+		case CHARA_ID_RIN:
+			return %[ id:ITEM_レア_凛のペンダント, 確率:凛のペンダントの出現確率 ];
+
+		case CHARA_ID_SAKURA:
+			return %[ id:ITEM_レア_偽臣の書, 確率:偽臣の書の出現確率 ];
+		}
+		return void;
+	}
+	
+	// 状況に応じたレアアイテムの種類を返す
+	function 特定サーバントを倒した場合のレアアイテム( servant )
+	{
+		switch( servant.characterId )
+		{
+		case CHARA_ID_SABER:
+			return %[id:ITEM_レア_セイバーのぬいぐるみ, 確率:セイバーのぬいぐるみの出現確率 ];
+
+		case CHARA_ID_CASTER:
+			return %[id:ITEM_レア_キャスターのコイン, 確率:キャスターのコインの出現確率 ];
+
+		case CHARA_ID_LANCER:
+			return %[id:ITEM_レア_ランサーの釣竿, 確率:ランサーの釣竿の出現確率 ];
+
+		case CHARA_ID_ARCHER:
+			return %[id:ITEM_レア_アーチャーのスリッパ, 確率:アーチャーのスリッパの出現確率 ];
+		}
+		return void;
+	}
+
+
+	function サーバントを倒した場合のレアアイテム( servant )
+	{
+		var info1, info2;
+		
+		info1 = 特定サーバントを倒した場合のレアアイテム( servant );
+		info2 = 特定マスターのサーバントを倒した場合のレアアイテム( servant );
+		if( info1 && info2 )
+			return random32(2)==0 ? info1 : info2;
+		if( info1 )
+			return info1;
+		if( info2 )
+			return info2;
+		return void;
+	}
+	
+	
+	function servantGetItem( item, servant )
+	{
+		switch( item.typeid )
+		{
+		// はずれ
+		case ITEM_はずれ:
+			servant.motionType = MOTIONTYPE_DEFAULT;
+			servant.animation = ANI_BLOWN;
+			servant.sound( SE_ITEM_EXPLOSION );
+			with( new CIrCannonFire(this,etcRootObj) )
+			{
+				.x = item.x;
+				.y = item.y;
+				.z = item.z;
+			}
+			break;
+		// HP回復
+		case ITEM_ケーキ:
+		case ITEM_パフェ:
+		case ITEM_リンゴ:
+		case ITEM_ミカン:
+		case ITEM_サンドイッチ:
+		case ITEM_バーガー:
+			servant.hp += 20;
+			break;
+		// MP回復
+		case ITEM_スープ:
+		case ITEM_ようかん:
+		case ITEM_パン:
+			servant.mp += 20;
+			break;
+		// 速度上昇
+		case ITEM_おにぎり:
+		case ITEM_たいやき:
+			servant.condition = CONDITION_RAPID;
+			servant.conditionTimeLeft = FRAME_PER_SEC*5;
+			break;
+		// ダメージ無効
+		case ITEM_ハンバーグ:
+		case ITEM_麻婆豆腐:
+			servant.condition = CONDITION_NODAMAGE;
+			servant.conditionTimeLeft = FRAME_PER_SEC*5;
+			break;
+		// HP,MP回復
+		case ITEM_焼魚定食:
+			servant.hp += 60;
+			servant.mp += 60;
+			break;
+		// それ以外のアイテム（＝レアアイテム）
+		default:
+			break;
+		}
+	}
+}
+

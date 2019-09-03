@@ -1,0 +1,387 @@
+/*-----------------------------------------------------------------------------/
+/	Copyright (C) TYPE-MOON All Rights Reserved.
+/		ポップアップメッセージ
+/-----------------------------------------------------------------------------*/
+if(typeof global.popup_object == "undefined")
+{
+Scripts.execStorage("subroutine.tjs");
+Scripts.execStorage("FadeLayer.tjs");
+
+//	ポップアップするレイヤー
+class PopUpLayer extends FadeLayer
+{
+	var defmovetime		= 400;			//	表示、消去の移動時間
+	var defdisappeartime= 1200;			//	表示されてから消えるまでの時間
+	var defaccel		= -2;
+
+	var margin			= [ 16, 16 ];	//	画面右、画面下とのマージン
+
+	var textcolor		= 0x000000;
+	var edgecolor		= void;
+
+	var disappeartimer;					//	消去までのタイマー
+	var disappearsetting	= [];
+
+	var startpos;
+	var	disptop;
+
+	var	scrollstarttimer;
+	var	scrollWait				= 1000;
+	var	scrollPixelPerMilliSec	= 10;
+
+	var popupSoundFile	= "";
+	var popupImageFiles = [
+		"ポップアップ左",
+		"ポップアップ中",
+		"ポップアップ右"
+	];
+	var popupImages = [];
+
+	var erasing	= false;
+
+	function PopUpLayer(win, par, fontheight=16)
+	{
+		super.FadeLayer(win, par);
+
+		hitType		= htMask;
+		hitThreshold= 64;
+		opacity		= 192;
+		name		= "PopUp";
+
+		var imf = popupImageFiles;
+		for(var i=0; i<imf.count; i++)
+		{
+			var img = popupImages[i] = new global.Layer(win, par);
+			img.name = "ポップアップ用画像: ";
+			img.loadImages(imf[i]);
+			img.setSizeToImageSize();
+		}
+
+		font.height	= fontheight;
+	}
+
+	function finalize()
+	{
+		release(scrollstarttimer);
+		release(disappeartimer);
+		release(popupImages[2]);
+		release(popupImages[1]);
+		release(popupImages[0]);
+		super.finalize();
+		eraseFromPopUpList(this);
+	}
+
+	function popup(msg, posno, time=defmovetime, disappeartime=defdisappeartime, accel=defaccel)
+	{
+		name	+= "「"+msg+"」";
+		//	サイズを決定
+		var img = popupImages;
+		var i0w = img[0].width;
+		var i2w = img[2].width;
+		var w = font.getTextWidth(msg)+i0w+i2w;
+		var h = img[0].height;
+		setSize(w, h);
+
+		//	背景を描画
+		copyRect(0, 0, img[0], 0, 0, i0w, img[0].height);
+		copyRect(w-i2w, 0, img[2], 0, 0, i2w, img[2].height);
+		face	= dfOpaque,	holdAlpha	= false;
+		operateStretch(i0w, 0, w-i0w-i2w, height, img[1], 0, 0, img[1].width, img[1].height, omOpaque);
+		face	= dfAlpha;
+
+		//	メッセージ描画位置を計算
+		var l = i0w;
+		var t = (height - font.getTextHeight(msg)) >> 1;
+
+		//	メッセージを描画
+		if(edgecolor!=void)
+			drawText(l, t, msg, textcolor,,,1024,edgecolor,1);
+		else
+			drawText(l, t, msg, textcolor);
+
+		//	消去準備
+		with(disappeartimer	= new Timer(erase, ""))
+			.interval	= disappeartime;
+
+		//	出現処理
+		var par = parent;
+		var l = par.width - (w + margin[0]);
+		var t = par.height - (h + margin[1]) * (posno + 1);
+		startpos	= par.height;
+		if(l<0)
+		{
+			//	左端が隠れてしまっている
+			setPos(margin[0], par.height);	//	左がわが見えるように
+			move(margin[0], t, 255, time, accel, preliminal);	//	移動後、スクロールを始める
+		}
+		else
+		{
+			//	すべてが見えている状態
+			setPos(l, par.height);	//	初期位置設定
+			move(l, t, 255, time, accel);	//	移動先設定
+
+			disappeartimer.enabled	= true;	//	消去タイマー開始
+		}
+		disptop	= t;
+		dm("visual start.");
+
+		disappearsetting[0]	= time;
+		disappearsetting[1]	= accel;
+	}
+
+	function preliminal()
+	{
+		with(scrollstarttimer = new Timer(scrollstart, ""))
+		{
+			.interval	= scrollWait;
+			.enabled	= true;
+		}
+	}
+
+	function scrollstart()
+	{
+		//	スクロール開始
+		release(scrollstarttimer);	scrollstarttimer	= void;
+		var	l		= parent.width - width - margin[0];
+		var	stime	= (margin[0] - l) * scrollPixelPerMilliSec;	//	スクロール時間
+		move(l, top, 255, stime, 0);
+
+		//	消去準備
+		if(disappeartimer != void && disappeartimer isvalid)
+		{
+			with(disappeartimer)
+			{
+				.interval	+= stime;	//	スクロールする時間分遅らせる
+				.enabled	= true;
+			}
+		}
+	}
+
+	function erase()
+	{
+		dm("erase start.");
+		//	消去時間がきた
+		release(scrollstarttimer);	scrollstarttimer= void;
+		release(disappeartimer);	disappeartimer	= void;
+		move(left, startpos, 0, disappearsetting[0], disappearsetting[1]);
+
+		with(disappeartimer = new Timer(invalidateThis, ""))
+			.interval = disappearsetting[0], .enabled = true;
+
+		erasing	= true;	//	消去が開始されたら、posnoが負の値を返すように
+	}
+
+	function invalidateThis()
+	{
+		release(disappeartimer);	disappeartimer	= void;
+		dispose(this);
+	}
+
+	function onMouseDown()
+	{
+		dm("click popup.");
+		//	クリックされた
+		eraseMessage();	//	消去を開始する
+	}
+
+	property posno
+	{
+		getter
+		{
+			if(erasing)
+				return -1;
+			else
+				return int((disptop - (parent == null ? 600 : parent.height)) / -(height + margin[1])) - 1;
+		}
+	}
+}
+
+class PopUpPlugin extends KAGPlugin
+{
+	var window;
+	var list;
+
+	function PopUpPlugin(window)
+	{
+		super.KAGPlugin();
+		list	= [];
+		this.window	= window;
+	}
+
+	function finalize()
+	{
+		clear();	//	全消去
+		super.finalize(...);
+	}
+
+	function popup(msg, par = kag.fore.base, time, dtime)
+	{
+		//	すべて削除開始
+		erase();
+
+		//	空いている場所を探す
+		var	nums	= [];
+		for(var i=0; i<list.count; i++)
+		{
+			var	no	= list[i].posno;
+			nums[no]	= true if no >= 0;
+		}
+		var	no;
+		for(no=0; no<nums.count; no++)
+		{
+			if(nums[no] != true)
+				break;
+		}
+
+		create(msg, par, time, dtime, no);//	新しく作成
+		if(par == kag.fore.base)
+			create(msg, kag.back.base, time, dtime, no);	//	裏画面にも作成
+		else
+			create(msg, kag.fore.base, time, dtime, no);	//	表画面にも作成
+	}
+
+	function create(msg, par, time, dtime, posno)
+	{
+//		dm(@"${msg}, ${par.name}");
+		var item	= new PopUpLayer(kag, par);
+		item.popup(msg, posno, time, dtime);
+
+		//	本体の解放にあわせて解放されるように
+		if(typeof par.addFinalizer != "undefined")
+			par.addFinalizer(releaseMessage, popup);
+
+		list.add(item);
+	}
+
+	function getLayerNo(layer)
+	{
+		for(var i=0; i<list.count; i++)
+		{
+			if(list[i] == layer)
+			{
+				invalidate layer;
+				list.erase(i);
+				return i;
+			}
+		}
+		return list.count;
+	}
+
+	function erase(layer_or_no)
+	{
+		if(layer_or_no === void)
+		{
+			for(var i=list.count-1; i >= 0; i--)
+				list[i].erase();
+			list.clear();
+		}
+		else 
+		{
+			if(typeof layer_or_no == "Object")
+				layer_or_no	= getLayerNo(layer_or_no);
+			if(layer_or_no < list.count)
+			{
+				list[layer_or_no].erase();
+				list.erase(layer_or_no);
+			}
+		}
+	}
+
+	function clear(layer_or_no)
+	{
+		if(layer_or_no === void)
+		{
+			for(var i=0; i<list.count; i++)
+				invalidate list[i];
+			list.clear();
+		}
+		else
+		{
+			if(typeof layer_or_no == "Object")
+				layer_or_no	= getLayerNo(layer_or_no);
+			if(layer_or_no < list.count)
+			{
+				invalidate list[layer_or_no];
+				list.erase(layer_or_no);
+			}
+		}
+	}
+
+	//	ポップアップの表示/非表示を設定
+	function setVisible(v)
+	{
+		for(var i=0; i<list.count; i++)
+			list[i].visible	= v;
+	}
+
+	function onStore(f, elm)
+	{
+		// 栞を保存する際に呼ばれる
+		// f = 保存先の栞データ ( Dictionary クラスのオブジェクト )
+		// elm = tempsave 時のオプション ( 現在は常に void )
+	}
+
+	function onRestore(f, clear, elm)
+	{
+		// 栞を読み出すときに呼ばれる
+		// f = 読み込む栞データ ( Dictionary クラスのオブジェクト )
+		// clear = メッセージレイヤをクリアするか ( tempload の時のみ false )
+		// elm = tempload 時のオプション ( tempload でない場合は 常に void,
+		//                                 tempload の時は Dictionary クラスのオブジェクト )
+		this.clear();	//	すべてのポップアップメッセージを消去
+	}
+
+	function onStableStateChanged(stable)
+	{
+		// 安定 ( s l p タグで停止中 ) または 走行中 ( それ以外 )
+		// の状態が変化したときに呼ばれる
+		// stable = 安定の状態に true, それ以外の場合に false
+	}
+
+	function onMessageHiddenStateChanged(hidden)
+	{
+		// 右クリックなどでメッセージレイヤが隠されたり、または
+		// その状態から抜ける時に呼ばれる
+		// hidden = メッセージが隠された場合に true, 現れた場合に false
+	}
+
+	function onCopyLayer(toback)
+	{
+		// backlay タグ / forelay タグがすべてのレイヤに対して実行される時、
+		// あるいは layer=base chidlren=true exchange=false のトランジションの終了時に、
+		// 裏画面の内容を表画面にコピーする
+		// 必要が発生すると呼び出される
+		// toback = 表画面の内容を裏画面にコピーする時に true,
+		//          裏画面の内容を表画面にコピーするときに false
+		// layer=base children=true のトランジション終了時には toback = false で呼ばれる。
+	}
+
+	function onExchangeForeBack()
+	{
+		// layer=base children=true のトランジションの終了時に呼ばれ、
+		// 表レイヤと裏レイヤの情報を交換する目的で呼ばれる
+		// この時点ですでにレイヤのツリー構造は入れ替わっているので、
+		// 通常、ここでは、ツリー構造の入れ替えを行うと情報が矛盾するもの
+		// ( レイヤの名前とか、レイヤへの参照とか ) を裏画面と面画面の間で入れ替える
+		// トランジション終了時の onCopyLayer はこのイベントより前に呼ばれるので
+		// 注意
+	}
+
+	function onSaveSystemVariables()
+	{
+		// システム変数に情報が保存され時に呼ばれる
+		// このタイミングで kag.scflags に情報を書き込めば
+		// 確実にシステム変数に情報を書くことができる
+	}
+}
+// プラグインオブジェクトを作成し、登録する
+kag.addPlugin(global.popup_object = new PopUpPlugin(kag));
+
+}
+
+function popupMessage()			{	popup_object.popup(...);	}
+function createPopUp()			{	popup_object.create(...);	}
+function eraseMessage()			{	popup_object.erase();	}
+function releaseMessage()		{	popup_object.clear(...);	}
+function eraseFromPopUpList()	{	popup_object.erase(...);	}
+function setPopupVisible()		{	popup_object.setVisible(...);	}

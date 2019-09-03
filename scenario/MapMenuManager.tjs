@@ -1,0 +1,1773 @@
+/*-----------------------------------------------------------------------------
+/	Copyright (C) TYPE-MOON All Rights Reserved.
+/		マップ管理
+/	FateFD用マップの表示
+/----------------------------------------------------------------------------*/
+@if(__MAPMENUMANAGER_DEFINED__==0)
+@set(__MAPMENUMANAGER_DEFINED__=1)
+
+//	次に進むとき、waitTime(ms)だけ待つ
+@set(WAIT_TONEXT=1)
+
+//	選択出来ないキャラクターを表示可能にする(キャラ名前に"&"を付加)
+@set(DISP_UNSELECTABLE_CHARA=1)
+
+Scripts.execStorage("ScenePlayMenuLayer.tjs");
+Scripts.execStorage("HFChipLayer.tjs");
+
+var MapDataFileFormat	= "map%02d.csv";	//	マップデータのCSVファイル名
+var	MapFlagnameFormat	= "map_%d-%d-%s";	//	マップ既読表示のフォーマット
+class MapMenuManager extends KAGPlugin
+{
+	var name	= "Map menu manager Plugin";
+	var MapImages	= %[		//	マップ背景画像名
+		衛宮邸:	%[ 午前:"mp_衛宮邸(昼)", 午後:"mp_衛宮邸(昼)", 夜:"mp_衛宮邸(夜)"],
+		冬木市:	%[ 午前:"mp_冬木市(昼)", 午後:"mp_冬木市(昼)", 夜:"mp_冬木市(夜)"],
+		学校:	%[],
+		柳洞寺:	%[],
+		アインツベルン城:	%[],
+		裏衛宮邸:	%[],
+		裏冬木市:	%[],
+	];
+	var defaultMapImage	= %[
+		衛宮邸:	"mp_衛宮邸(昼)",
+		冬木市:	"mp_冬木市(昼)",
+		学校:	"mp_穂群原学園",
+		柳洞寺:	"mp_柳洞寺",
+		アインツベルン城:	"oアインツ洋館-(曇)",
+		裏衛宮邸:	"mp_裏衛宮邸",
+		裏冬木市:	"mp_裏冬木市",
+	];
+	var TitleImages	= %[		//	マップタイトル画像等の情報
+		衛宮邸:	[ "mp_title-衛宮邸",			248, 7 ],
+		冬木市:	[ "mp_title-冬木市周辺",		248, 7 ],
+		学校:	[ "mp_title-穂郡原学園",		248, 7 ],
+		柳洞寺:	[ "mp_title-柳洞寺",			248, 7 ],
+		アインツベルン城:	[ "mp_title-アインツベルン城",	248, 7 ],
+		裏衛宮邸:	[ "mp_title-衛宮邸",			248, 7 ],
+		裏冬木市:	[ "mp_title-冬木市周辺",		248, 7 ],
+	];
+	var TimeZoneImages	= %[	//	時間帯表示の情報
+		午前:	[ "mp_tz-午前",		158, 12 ],
+		午後:	[ "mp_tz-午後",		158, 12 ],
+		放課後:	[ "mp_tz-放課後",	158, 12 ],
+		夜:		[ "mp_tz-夜",		158, 12 ],
+	];
+	var fuyukiplaceicon	= true;
+	var charaplacewidth	= 280;
+	var Places	= %[		//	マップに登場する場所の詳細情報
+		衛宮邸:	%[
+			// 場所			場所座標		空	キャラ配置
+			自室:			[ [ 671, 290 ],	,	[ 725, 309, charaplacewidth ] ],
+			居間:			[ [ 440, 404 ],	,	[ 509, 420, charaplacewidth ] ],
+			中庭:			[ [ 210, 168 ],	,	[ 280, 192, charaplacewidth ] ],
+			セイバーの部屋:	[ [ 166, 394 ],	,	[ 245, 523, charaplacewidth ] ],
+			桜の部屋:		[ [  23, 304 ],	,	[  90, 396, charaplacewidth ] ],
+			ライダーの部屋:	[ [ 171, 319 ],	,	[ 255, 363, charaplacewidth ] ],
+			空室:			[ [  19, 464 ],	,	[  85, 575, charaplacewidth ] ],
+			凛の部屋:		[ [  19, 464 ],	,	[  85, 575, charaplacewidth ] ],
+			土蔵:			[ [  43, 168 ],	,	[ 100, 192, charaplacewidth ] ],
+			玄関:			[ [ 330, 548 ],	,	[ 395, 585, charaplacewidth ] ],	//	「誰かを連れて行くか」の選択肢へ移動する
+//			外へ:			[ [ 660, 562 ],	,	[ 660, 562, charaplacewidth ] ]	//	"冬木市"マップへ移動する
+		],
+		冬木市:	%[
+			// 場所			場所座標		空	キャラ配置			アイコンの要不要
+			衛宮邸:			[ [ 294, 167 ],	,	[ 351, 180, charaplacewidth ],	true ],
+			商店街:			[ [ 322, 336 ],	,	[ 383, 346, charaplacewidth ],	true ],
+			交差点:			[ [ 262, 331 ],	,	[ 319, 343, charaplacewidth ],	true ],
+			遠坂邸:			[ [ 529, 482 ],	,	[ 637, 532, charaplacewidth ],	[ 25,  19] ],
+			間桐邸:			[ [ 451, 368 ],	,	[ 512, 380, charaplacewidth ],	[  0, -26] ],
+			住宅地北:		[ [ 452, 243 ],	,	[ 508, 256, charaplacewidth ],	true ],
+			住宅地南:		[ [ 420, 437 ],	,	[ 477, 450, charaplacewidth ],	true ],
+			大橋:			[ [ 642, 197 ],	,	[ 700, 209, charaplacewidth ],	[-43, -36] ],
+			渡る:			[ [ 678, 330 ],	,	[ 755, 368, charaplacewidth ],	false ],
+			港:				[ [ 911, 150 ],	,	[ 969, 164, charaplacewidth ],	true ],
+			駅前:			[ [1023, 324 ],	,	[1079, 339, charaplacewidth ],	true ],
+			"幽霊洋館(姉)"=>[ [ 359, 540 ],	,	[ 420, 553, charaplacewidth ],	true ],
+			"幽霊洋館(妹)"=>[ [ 984, 540 ],	,	[1041, 553, charaplacewidth ],	true ],
+			教会:			[ [1187, 473 ],	,	[1245, 487, charaplacewidth ],	true ],
+			学校:			[ [ 131, 374 ],	,	[ 187, 388, charaplacewidth ],	true ],
+			柳洞寺:			[ [  16, 262 ],	,	[  71, 276, charaplacewidth ],	true ],
+			郊外:			[ [  28, 532 ],	,	[  84, 543, charaplacewidth ],	true ]
+		],
+		学校:	%[
+			// 場所		場所座標		空	キャラ配置
+			アルバイト:	[ [ 643, 307 ],	,	[ 714, 327, charaplacewidth ] ],
+			屋上:		[ [ 198, 352 ],	,	[ 257, 380, charaplacewidth ] ],
+			弓道場:		[ [ 362, 146 ],	,	[ 435, 185, charaplacewidth ] ],
+			校庭:		[ [ 430, 345 ],	,	[ 511, 370, charaplacewidth ] ],
+			三年教室:	[ [  63, 195 ],	,	[ 131, 222, charaplacewidth ] ],
+			三年廊下:	[ [ 286, 392 ],	,	[ 379, 480, charaplacewidth ] ],
+			生徒会室:	[ [  35, 401 ],	,	[  97, 487, charaplacewidth ] ],
+		],
+		柳洞寺:	%[
+			// 場所		場所座標		空	キャラ配置
+			境内:		[ [ 412, 405 ],	,	[ 576, 419, charaplacewidth ] ],
+			山門:		[ [ 189, 504 ],	,	[ 256, 526, charaplacewidth ] ],
+			堂内:		[ [ 201, 257 ],	,	[ 264, 272, charaplacewidth ] ],
+			裏の林:		[ [ 586,  46 ],	,	[ 651, 215, charaplacewidth ] ],
+			//	使わないかも
+//			葛木の部屋:	[ [ 85, 217 ],	,	[ 85, 217, charaplacewidth ] ],
+//			廊下:		[ [ 85, 217 ],	,	[ 85, 217, charaplacewidth ] ],
+//			女子部屋:	[ [ 85, 217 ],	,	[ 85, 217, charaplacewidth ] ],
+//			男子部屋:	[ [ 85, 217 ],	,	[ 85, 217, charaplacewidth ] ],
+		],
+		アインツベルン城:	%[
+			// 場所		場所座標	空	キャラ配置
+			ロビー:		[ [ 536, 468 ],	,	[ 598,  485, charaplacewidth ] ],
+			城中庭:		[ [ 201, 353 ],	,	[ 262,  370, charaplacewidth ] ],
+			サロン:		[ [ 479, 251 ],	,	[ 545,  262, charaplacewidth ] ],
+			森の廃墟:	[ [  33, 500 ],	,	[  94,  517, charaplacewidth ] ],
+		],
+		裏衛宮邸:	%[
+			自室:			[ [ 671, 290 ],	,	[ 725, 309, charaplacewidth ] ],
+			居間:			[ [ 440, 404 ],	,	[ 509, 420, charaplacewidth ] ],
+			中庭:			[ [ 210, 168 ],	,	[ 280, 192, charaplacewidth ] ],
+			セイバーの部屋:	[ [ 166, 394 ],	,	[ 245, 523, charaplacewidth ] ],
+			桜の部屋:		[ [  23, 304 ],	,	[  90, 396, charaplacewidth ] ],
+			ライダーの部屋:	[ [ 171, 319 ],	,	[ 255, 363, charaplacewidth ] ],
+			空室:			[ [  19, 464 ],	,	[  85, 575, charaplacewidth ] ],
+			土蔵:			[ [  43, 168 ],	,	[ 100, 192, charaplacewidth ] ],
+//			玄関:			[ [ 330, 548 ],	,	[ 395, 585, charaplacewidth ] ],
+			"return" =>		[ [ 162, 584 ],	,	[ 162, 584, charaplacewidth ] ],
+		],
+		裏冬木市:	%[
+			衛宮邸:			[ [ 294, 167 ],	,	[ 351, 180, charaplacewidth ],	true ],
+			商店街:			[ [ 322, 336 ],	,	[ 383, 346, charaplacewidth ],	true ],
+			交差点:			[ [ 262, 331 ],	,	[ 319, 343, charaplacewidth ],	true ],
+			遠坂邸:			[ [ 529, 482 ],	,	[ 637, 532, charaplacewidth ],	[ 25,  19] ],
+			間桐邸:			[ [ 451, 368 ],	,	[ 512, 380, charaplacewidth ],	[  0, -26] ],
+			住宅地北:		[ [ 452, 243 ],	,	[ 508, 256, charaplacewidth ],	true ],
+			住宅地南:		[ [ 420, 437 ],	,	[ 477, 450, charaplacewidth ],	true ],
+			大橋:			[ [ 642, 197 ],	,	[ 700, 209, charaplacewidth ],	[-43, -36] ],
+			渡る:			[ [ 678, 330 ],	,	[ 755, 368, charaplacewidth ],	false ],
+			港:				[ [ 911, 150 ],	,	[ 969, 164, charaplacewidth ],	true ],
+			駅前:			[ [1023, 324 ],	,	[1079, 339, charaplacewidth ],	true ],
+//			クレーター:		[ [1119, 187 ],	,	[1185, 326, charaplacewidth ],	true ],
+			クレーター:		[ [ 162, 584 ],	,	[ 162, 584, charaplacewidth ],	true ],
+			"幽霊洋館(姉)"=>[ [ 359, 540 ],	,	[ 420, 553, charaplacewidth ],	true ],
+			"幽霊洋館(妹)"=>[ [ 984, 540 ],	,	[1041, 553, charaplacewidth ],	true ],
+			教会:			[ [1187, 473 ],	,	[1245, 487, charaplacewidth ],	true ],
+			学校:			[ [ 131, 374 ],	,	[ 187, 388, charaplacewidth ],	true ],
+			柳洞寺:			[ [  16, 262 ],	,	[  71, 276, charaplacewidth ],	true ],
+			郊外:			[ [  28, 532 ],	,	[  84, 543, charaplacewidth ],	true ]
+		],
+	];
+	var ReturnIcon	= %[ 外へ:1, 戻る:1 ];	//	街へ移動するという場所
+	var ReturnIconPos	= %[left:634,top:538,barleft:490,bartop:581];
+	var ReturnIconName	= "街に出る";
+	var ReturnMap		= "冬木市";
+	var charaCorrectLeft	= %[	//	キャラクターの左右位置補正値
+		"default"	=> %[
+			セイバー:	 7,	//	中心をずらす
+			凛私服:		 13,
+			凛制服:		 13,
+			カレン:		-5,
+			キャスター:	-11,
+			ライダー:	-18,
+			ランサー:	 6,
+			桜私服:		-6,
+			小次郎:		 14,
+		],
+		s:%[
+			"大橋-夜" =>-22,
+			"大橋" =>	-22,
+		],
+	];
+	var sizeByMap	= %[ 冬木市:"s", 裏冬木市:"s" ];	//	マップ毎のキャラクターサイズ
+	var defaultTitleBase	= [ "mp_namebase", 0, 0 ];
+	var TransferIconName	= "go";
+
+	var	defaultmenumode	= [ "map", "normal" ];
+	var	mapsMenumode	= %[
+//		裏冬木市:	[ "mapnosave", "nosave" ],
+//		裏衛宮邸:	[ "mapnosave", "nosave" ],
+	];
+	var	currentmenumode;
+
+	var	fadetime	= 300;
+	var	method		= "crossfade";
+
+	var placeAbsolute	= 10000;	//	場所名(一番手前)
+	var iconAbsolute= [				//	キャラクターアイコン
+		[ 5000, 4000, 3000, 2000 ],
+		[ 4000, 5000, 3000, 2000 ],
+		[ 3000, 4000, 5000, 2000 ],
+		[ 2000, 3000, 4000, 5000 ]
+	];
+	var otherAbsolute	= 1000;		//	その他のアイテム(一番奥)
+	var titleAbsolute	= 20000;	//	タイトルなど
+	var newiconAbsolute	= 50000;	//	New!アイコン
+	var scrollinfo	= %[time:300,accel:-3,interval:16];	//	スクロール設定
+
+@if(WAIT_TONEXT==0)
+	var	waitTime	= 0;
+@endif
+@if(WAIT_TONEXT==1)
+	var	waitTime	= 1000;	//	マップからシナリオへ移るときの待ち時間
+@endif
+
+	var enterse	= "";
+	var clickse	= "";
+	var changese= "";	//	マップ切替の効果音
+
+	var window, parent, owner;
+
+	var mapno;		//	開いたマップの番号
+	var mapdata;	//	csvファイルから読み込んだマップ表示のデータ
+	var placedata;	//	マップごとの場所リスト
+	var timezone;	//	時間帯
+	var flags;		//	現在の状態を示すフラグ集合体
+
+	var current;	//	現在の操作対象番号(0 or 1)
+	var layers;		//	マップレイヤー
+	var placeicons;	//	場所アイコンレイヤー
+	var charaicons;	//	キャラクターアイコン
+	var others;		//	その他アイテム
+	var othersCount;//	その他の数
+
+	var currentMap;	//	現在使用しているマップデータ
+
+	var next_storage;	//	移動先のフローチャートファイル
+	var next_sceneid;	//	移動先のシーンID
+
+	var onexchangeforeback;	//	トランジション終了後に実行するメソッドへの参照
+
+	var scrolltimer;	//	スクロール管理タイマー
+	var scrollstate	= %[startleft:0,endleft:0,starttick:0];	//	スクロールの状態
+//	var	scrollhint	= "深山町 ⇔ 新都 のマップスクロールを行います";
+	var	scrollhint	= "大橋を渡って深山町と新都を行き来します";
+
+//	var	lastHistoryEnabled;	//	直前のテキスト履歴有効/無効状態
+	var	lastAutomodeEnabled;//	直前の自動実行
+
+	var new_image;
+
+	var	scenename;
+
+	var	timezone2;
+	//	午前なら「午後へ」、午後/放課後なら「夜へ」(1日目、学校、午後の場合は「放課後へ」)、そして4日目以外では「次の日へ」
+
+	var	firsttime	= true;	//	マップに切り替わった初回か？
+@if(DISP_UNSELECTABLE_CHARA==1)
+	var	cantselection;		//	「選択不可」
+@endif
+	//	no		: マップファイル番号
+	//	first	: 最初に表示するマップ名
+	function MapMenuManager(win, par, own, no, flags, first="衛宮邸", timezone2="午前")
+	{
+		super.KAGPlugin(win);
+		window	= win;
+		parent	= par;
+		owner	= own;
+		this.flags	= flags;
+		this.timezone2	= timezone2;
+
+		placeicons	= [ %[], %[] ];
+		charaicons	= [ [], [] ];
+		others		= [ %[], %[] ];
+		othersCount	= [];
+
+		first	= global.tf.firstMap if global.tf.firstMap != void;	//	最初のマップ
+		dm("tf.firstMap: "+tf.firstMap);
+		dm("first: "+first);
+		first	= loadMap(no, first);	//	CSVファイルの読み込み
+
+		current	= 0;	//	現在の表示レイヤー
+
+//		lastHistoryEnabled	= kag.historyEnabled;
+//		kag.setHistoryOptions(%[enabled:false]);
+		lastAutomodeEnabled	= kag.enabledAutoMode;
+		kag.enabledAutoMode	= false;
+		kag.tagHandlers.textoff(%[]);	//	テキストレイヤーを隠す
+
+		scenename	= getSceneDictionary();	//	シーン名
+
+		hideCursorSetting(false);	//	カーソルを自動的に隠さない
+
+		if(timezone == "夜")
+			change(first);	//	画面切り替え
+		else
+			start(first, 800);	//	マップ画面の表示
+
+		win.keyDownHook.add( stopKeyDown );
+	}
+
+	function finalize()
+	{
+		for(var i=0; i<window.keyDownHook.count; i++)
+		{
+			if(window.keyDownHook[i] == stopKeyDown)
+			{
+				window.keyDownHook.erase(i);
+				break;
+			}
+		}
+		release(scenename);
+		releaseDictionary(mapdata);
+		invalidateItems(curPlaceIcons, curCharaIcons, curOthers);
+		release(charaicons);
+		release(placeicons);
+		release(others);
+		super.finalize(...);
+	}
+
+	function invalidateItems(icons, charas, others)
+	{
+		var keys = []; keys.assign(icons);
+		dm("invalidate icons: "+(keys.count\2));
+		for(var i=0; i<keys.count; i+=2)
+		{
+			with(keys[i+1])
+			{
+				if(typeof .charas != "undefined")
+				{
+					for(var i=0; i<.charas.count; i++)
+						invalidate .charas[i];
+					invalidate .charas;
+				}
+			}
+			invalidate keys[i+1];
+		}
+		(Dictionary.clear incontextof icons)();
+
+		dm("invalidate charas: "+charas.count);
+		for(var i=0; i<charas.count; i++)
+			invalidate charas[i] if charas[i] != void;
+		charas.clear();
+
+		keys.clear(); keys.assign(others);
+		dm("invalidate others: "+(keys.count\2));
+		for(var i=0; i<keys.count; i+=2)
+			invalidate keys[i+1];
+		(Dictionary.clear incontextof others)();
+		invalidate keys;
+	}
+
+	//	マップデータの読み込み
+	function loadMap(no, firstmap)
+	{
+		var	result	= global.loadMapData(mapno = no);	//	読み込む
+		mapdata		= result[0];
+		placedata	= result[1];
+		var mapnames= result[2];
+		timezone	= result[3];
+
+		//	初期設定のマップが存在しないときは、最頻出のマップを最初のマップとする
+		if(mapnames[firstmap] == void)
+		{
+			var keys	= [];
+			keys.assign(mapnames);
+			var max		= 0;
+			for(var i=0; i<keys.count; i+=2)
+			{
+				if(keys[i+1] > max)
+				{
+					firstmap= keys[i];
+					max		= keys[i+1];
+				}
+			}
+		}
+		return firstmap;
+	}
+
+	//	場所名アイコンを作る
+	function makePlaceIcon(place)
+	{
+		var fname = "mp_place-"+place;
+		var layer;
+		with(layer = new global.FadeLayer(window, window.back.base))
+		{
+			.name	= "場所名: "+place;
+			.loadImages(fname);
+			.setSize(.imageWidth >> 1, .imageHeight);
+			.absolute	= placeAbsolute;
+			.charas		= [];	//	キャラアイコンを格納する配列
+			.hitThreshold	= 256;
+			layer["originalLeft"]	= void;
+			layer["icon"]	= void;
+			.opacity	= 255;
+			.visible	= true;
+		}
+		return layer;
+	}
+
+	//	キャラクターアイコンを作る
+	function makeCharaIcon(place, name, id, mapname="default", hint="", setsize=true)
+	{
+		var layer	= new global.CharacterIconLayer(window, window.back.base, this, name, setsize ? sizeByMap[mapname] : "");
+		with(layer)
+		{
+			.id		= id;	//	このマップでの番号/場所名
+			if(place != "")
+			{
+				var pl = curPlaceIcons[place];
+				.place	= pl;	//	キャラのいる場所のアイコン
+				.no		= pl.charas.count;	//	この場所にいるキャラの中での順番
+				.hint	= hint;
+				pl.charas.add(layer);
+			}
+		}
+		curCharaIcons.add(layer);
+		return layer;
+	}
+
+	//	街への移動ボタンを作る
+	function makeReturnIcon(mapname, retmap=ReturnMap)
+	{
+		//	戻るアイコン(整列させないために、Othersに追加)
+		var	pos		= ReturnIconPos;
+		with(curOthers["reticon"] = makeCharaIcon(, ReturnIconName, retmap, mapname, "冬木市マップへ移動します。"))
+		{
+			.setPos(pos.left, pos.top);
+			.hitThreshold	= 0;
+			.absolute	= otherAbsolute + curOthersCount;
+			.show_magnify	= false;	//	伸び縮みしながら表示させない
+		}
+
+		//	下線
+		addOthers("line", "mp_retunder", pos.barleft, pos.bartop);
+	}
+
+	//	飾りを作る
+	function addOthers(name, storage, l, t, abs=otherAbsolute)
+	{
+		if(curOthers[name] == void)
+			curOthersCount++;
+		with(curOthers[name] = new global.FadeLayer(window, window.back.base))
+		{
+			.name	= name;
+			.loadImages(storage);
+			.setSizeToImageSize();
+			.setPos(l, t);
+			.hitThreshold	= 256;
+			.absolute	= abs + curOthersCount;
+			.opacity	= 255;
+			.visible	= true;
+		}
+		return curOthers[name];
+	}
+
+	//	キャラアイコンの前後位置をデフォルトに戻す
+	function setDefaultAbsolute(place)
+	{
+		if(curPlaceIcons[place] == void)
+			return;
+		var charas	= curPlaceIcons[place].charas;
+		if(charas == void)
+			return;
+		for(var i=0; i<charas.count; i++)
+			charas[i].absolute	= charas[i].defabs;
+	}
+
+	//	タイトル部分
+	function initTitle(mapname)
+	{
+		//	日付、地名のベース
+		addOthers("base", defaultTitleBase[0], defaultTitleBase[1], defaultTitleBase[2], titleAbsolute);
+
+		if(mapsMenumode[mapname] == void)
+		{
+			//	日付
+			var day	= global.tf.gameDate != void ? global.tf.gameDate : 8;
+			addOthers("date", "mp_date-10月"+day+"日", 11, 10, titleAbsolute);
+
+			//	時間帯
+			var	tz	= timezone2 != "" ? timezone2 : timezone;
+			global.sf.gameTimezone[CurrentTicketNo]	= tz;
+			tz	= TimeZoneImages[tz];
+			addOthers("timezone", tz[0], tz[1], tz[2], titleAbsolute);
+		}
+
+		//	地名
+		var title	= TitleImages[mapname];
+		addOthers("place", title[0], title[1], title[2], titleAbsolute);
+	}
+
+	//	マップの作成
+	function init(mapname)
+	{
+		if(mapsMenumode[mapname] == void)
+			global.tf.firstMap	= mapname;	//	現在開いているマップ名を記録
+@if(DISP_UNSELECTABLE_CHARA==1)
+		release(cantselection);	cantselection	= void;
+@endif
+		//	マップ画像の読み込み
+		with(window.back.base)
+		{
+			var elm	= %[storage:MapImages[mapname][timezone]];
+			if(elm.storage == "")
+			{
+//				throw new Exception(mapname+"の"+timezone+"には、対応するマップが存在しません。");
+				elm.storage	= defaultMapImage[mapname];	//	マップが存在しない場合は、デフォルトの画像を使用する
+			}
+			//	凛が帰国していれば、"空室→凛の部屋"になる。
+			if(mapname == "衛宮邸" && tf["凛帰国"])
+				elm.storage	+= "-凛帰国";
+			.loadImages(elm);
+			.setSize(window.scWidth, window.scHeight);	//	トランジションのため、サイズを制限
+		}
+
+		//	"日付/地名/ライン"を表示(others)
+		initTitle(mapname);
+
+		//	場所名アイコンを用意(placeicons)
+		var places	= curPlaceIcons;
+		var	pnames	= [];
+		pnames.assign(placedata[mapname]);
+		var pdata	= Places[mapname];
+		var	tz		= timezone == "夜" ? "-夜" : "";
+		for(var i=0; i<pnames.count; i+=2)
+		{
+			var	place	= pnames[i];	//	場所名
+			var	cond	= pnames[i+1];	//	表示条件
+			var pinfo	= pdata[place];
+
+			dm("make place: "+place);
+			if(!ReturnIcon[place])
+			{
+				if(pinfo == void)
+					throw new Exception(@"未定義の場所名 \"${place}\" が${mapname}で見つかりました。");
+				if(cond != "" && !global.checkCondition(flags, cond))
+					continue;	//	条件が存在して且つ成立しなければ、場所は表示しない
+				with(places[place] = makePlaceIcon(place))
+				{
+					.setPos(pinfo[0][0], pinfo[0][1]);
+					if(pinfo[3] != void)
+					{//	場所を示すアイコンを作成する
+						var	icon	= addOthers("icon-"+place, "mp_picon-"+place+tz, 0, 0);
+						icon.width	= icon.imageWidth >> 1;
+						var	l	= .left + ((.width - icon.width)>>1);
+						var	t	= .top + (.height>>1) - icon.height;
+						if(pinfo[3] !== true)
+						{
+							l	+= pinfo[3][0];
+							t	+= pinfo[3][1];
+						}
+						icon.setPos(l, t);		//	場所名の位置を参考にして、アイコンを配置する
+						icon["originalLeft"]	= void;
+						.icon	= icon;
+					}
+				}
+			}
+		}
+
+		//	キャラアイコンを用意(charaicons)
+		var curmap	= currentMap = mapdata[mapname];	//	開くマップの状態データを取得
+		for(var i=0; i<curmap.count; i++)
+		{
+			var	data	= curmap[i];
+			var	place	= data[0];	//	キャラクターのいる場所
+			if(place != "" && places[place] == void && !ReturnIcon[place])	//	このマップに場所が存在しないなら、
+				continue;				//	このキャラクターは無視する
+
+			dm("place = "+place+" / chara = "+data[1]+" / target = "+data[2]+" / file = "+data[3]);
+			if(place == "")
+			{//	午前へ、夜へなどの移動用
+				if(data[1] == void)
+					continue;	//	情報がないので登録不可
+				if(tf.playCount < 1)
+					continue;	//	1週目は表示しない
+
+				with(makeCharaIcon(, data[1], i, mapname, data[1]+"進みます", false))
+				{
+					.setPos(data[1] == "次の日へ" ? 669 : 557, 5);
+					.hitThreshold	= 0;
+					.absolute	= titleAbsolute + 1000;
+					.show_magnify	= false;
+				}
+			}
+			else if(data[2] == int(data[2]))
+			{//	番号指定なら、キャラクターを選ぶと特定のシーンへ移動する
+				var chara	= data[1];	//	キャラクターの名前
+				var	target	= data[2];	//	移動先シーンID
+				var	file	= data[3];	//	移動先フローチャート
+				if(chara == void)			//	キャラクター名が指定されていなければ、
+					continue;				//	キャラクターは居ない
+				var	hint	= scenename["%s-%02d".sprintf(Storages.chopStorageExt(file), target)];
+
+				//	キャラクター名に追加された指示を拾う
+				var	pos;
+				var	search;
+				if((pos = chara.indexOf("/")) > 0)
+				{
+					search	= + chara.substr(pos + 1);	//	チェック段数(深度)
+					chara	= chara.substr(0, pos);
+				}
+
+//				dm("go to: "+data[3]+"-"+data[2]+"("+data[4]+")");
+				if(data[1] == "scroll")
+				{//	アーチャーの待ち構える大橋
+					chara	= "大橋"+(timezone == "夜" ? "-夜" : "");
+					hint	= scrollhint;
+				}
+
+				with(makeCharaIcon(place, chara, i, mapname, hint))
+				{
+					.name	+= "("+place+")";
+					.placename	= place;
+					if(data[1] == "scroll")
+						.show_magnify	= false;
+					if(data[1] == "戻る")
+						.show_magnify	= false, .hitThreshold	= 0;
+
+					//	キャラクターを選択した先の未読状態までチェックして表示するなら
+					var	newimage	= "";
+					if(search > 0)
+					{
+						var	flowchart	= new FlowChart();
+						flowchart.load(file);
+						dm("--- start check: "+.name+" ---");
+						var	beread	= flow_tracker_object.checkBeRead(target, search, flowchart);
+						invalidate flowchart;
+						dm("--- end check ---");
+
+						//	指定の深度までに未読があれば、
+						if(beread>0)
+						{
+							//	アイコンを追加する
+							if(beread == 3)
+								newimage	= "mp_exclamation";
+							else if(beread == 1)
+							{//	未読で、
+								if(data[4] == "exclamation")		//	このキャラクターに「！」マークがついていれば
+									newimage	= "mp_exclamation";	//	「！」マークにする
+								else
+									newimage	= "mp_new3";
+							}
+							.hint	= "???";
+						}
+					}
+					//	未読探索をしない場合は、
+					else
+					{
+						//	今までにクリックされたことがないなら、
+						var	key	= getFlagname(target, file);
+//						dm(key+"("+target+","+file+","+data[4]+") = "+global.tf[key]);
+						if(global.tf[key] < 1)
+						{
+							dm(data[4]+": "+(data[4] == "exclamation"));
+							if(data[4] == "exclamation")
+								newimage	= "mp_exclamation";	//	"!"アイコンを付与する
+							else if(data[4] == "new" && newimage == "")	//	mp_exclamationを優先して表示
+								newimage	= "mp_new3";	//	キャラクターに"New"アイコンを付与する
+							.hint	= "???";//	hintは表示しない
+						}
+					}
+					if(newimage != "")
+						.addNewIcon(newimage, data[1] == "scroll" ? 255 : 0);	//	スクロールボタンのみ最初から表示されているので、同時に現れるという処理が不要
+
+					//	IN/Goなら
+					if(chara == "in" || chara == "go")
+						.hitThreshold	= 0;	//	何処でも拾う
+
+@if(DISP_UNSELECTABLE_CHARA==1)
+					//	選べないキャラ
+					if(data[4] == "phantom")
+					{
+						.clickable	= false;
+						if(cantselection == void)
+						{
+							with(cantselection = new global.Layer(window, window.back.base))
+							{
+								.loadImages("選択不可");
+								.setSizeToImageSize();
+								.hitThreshold	= 256;
+								.visible		= false;
+							}
+						}
+					}
+@endif
+				}
+			}
+			else if(data[1] == "scroll")
+			{//	スクロールのための大橋
+				var	name	= "大橋"+(timezone == "夜" ? "-夜" : "");
+				with(makeCharaIcon(place, name, data[1], mapname, scrollhint))
+				{
+					.show_magnify	= false;
+					.nochange	= false;
+				}
+			}
+			else if(data[2] != "")
+			{//	番号指定でないなら、(矢印型)キャラクターを選ぶと別のマップへ移動する
+				dm("go to: "+data[2]);
+				if(typeof curPlaceIcons[place] == "Object")
+				{
+					with(makeCharaIcon(place, TransferIconName, data[2], mapname, data[2]+"マップへ移動します"))
+					{
+						.hitThreshold	= 0;	//	何処でも拾う
+
+						//	移動先マップに未読があるかどうか。あればNewとか!をつける
+						var	result	= 0;
+						var	targets	= mapdata[data[2]];
+						for(var i=0; i<targets.count; i++)
+						{
+							var	target	= targets[i];
+							if(target[0] == "" || target[1] == "" || target[1] == "scroll" || target[2] != int(target[2]))
+								continue;	//	時間移動用、非表示、スクロール用、マップ移動用は無視する
+
+							var	flowchart	= new FlowChart();
+							flowchart.load(target[3]);
+							var	cnt	= 1, pos;	//	通常はそのキャラクターを調べるだけ。
+							if((pos = target[1].indexOf("/")) > 0)	//	そのキャラクターに探索深度が設定されていたら
+								cnt	= + target[1].substr(pos + 1);	//	その分深く調べる。
+							result	|= flow_tracker_object.checkBeRead(target[2], cnt, flowchart);
+							if(result > 0 && target[4] == "exclamation")	//	未読が見つかって、"!"マーク指定が入っていたら、
+								result	= 3;								//	"!"マークにする
+/*							var	res	= flow_tracker_object.checkBeRead(target[2], cnt, flowchart);
+							dm("res = "+res+" / target[4] = "+target[4]);
+							if(res > 0 && target[4] == "exclamation")	//	未読が見つかって、"!"マーク指定が入っていたら、
+								res	= 3;								//	"!"マークにする
+							result	|= res;
+*/
+/*
+							var	key	= getFlagname(target[2], target[3]);
+							dm("check "+key+"["+target[1]+"] = "+(global.tf[key] > 0 ? "既読" : "未読"));
+							if(global.tf[key] < 1)
+							{
+								if(target[4] == "exclamation")
+									result	|= 3;
+								else if(target[4] == "new")
+									result	|= 1;
+							}
+*/						}
+						if(result == 3)
+							.addNewIcon("mp_exclamation");
+						else if(result == 1)
+							.addNewIcon("mp_new3");
+					}
+				}
+				else
+					makeReturnIcon(mapname, data[2]);
+			}
+		}
+
+		//	キャラクターアイコンの整列
+		for(var i=0; i<pnames.count; i+=2)
+		{
+			var	place	= pnames[i];
+			var	pi		= pdata[place];
+			if(pi == void)	continue;
+			pi	= pi[2];	//	場所ごとの整列用データ
+
+			if(!places[place] || places[place].charas.count < 1)
+				continue;	//	キャラクターアイコンが存在しなければ、次へ
+
+			with(places[place])
+			{
+				var l = pi[0], t = pi[1];
+				var step= pi[2] \ (.charas.count + 1);	//	指定の幅に満遍なく配置する
+				var	ol	= step;
+				var	hl	= pi[2] >> 1;
+				var	cnt	= .charas.count;
+				for(var i=0; i<cnt; i++)
+				{
+					with(.charas[i])
+					{
+						.setPos(l + ol - (.width >> 1) - hl - .correct, t - .height);	//	下端をあわせて、左右は中心を取る
+						.absolute	= iconAbsolute[cnt-1][i];
+						.defabs		= .absolute;
+						.startNewIcon();
+						ol	+= step;
+					}
+				}
+			}
+		}
+	}
+
+	//	ゲーム(右クリック)メニューの有効/無効を切り替える
+	function enableMenu(enabled, menu)
+	{
+		with(gamemenu)
+		{
+			.enabled	= enabled;	//	トランジション中はゲームメニューを無効に
+			if(enabled)
+				.changeMenuMode(menu);	//	ゲームメニューの変更
+		}
+	}
+
+	//	マップ表示の開始
+	var	nextmap;
+	var	eyecatch_count;
+	function start(mapname)
+	{
+		//	表示するマップを記憶
+		nextmap	= mapname;
+
+		//	トランジションの準備
+		currentmenumode	= menumode;	//	メニューモードを確定させる
+		enableMenu(false, currentmenumode[0]);
+		enabled	= false;	//	ボタンを押せなくする
+
+		//	まず、日付表示を行う
+		var	delay	= fadetime;
+		var	tz	= timezone2;
+		if(tz != "")
+		{
+			var	day		= tf.gameDate - 7;
+			var	infos	= [
+				[ "800x104xFF000000",	0,		0,		0,		-104 ],
+				[ "ec_day"+day,			"c",	"l311",	100,	0 ],
+				[ "ec_bar-day"+day,		"c",	314,	0,		0 ],
+				[ "ec_day"+day+"-"+tz,	"c",	354,	-100,	0 ],
+				[ "800x104xFF000000",	0,		"l600",	0,		104 ]
+			];
+			var	staytime	= 600, movetime	= 400;
+			for(var i=0; i<infos.count; i++)
+			{
+				var	pos	= infos[i];
+				addEyecatch("eye"+i, pos[0], pos[1], pos[2], 255, pos[3], pos[4], 0, movetime, -2, delay + staytime, eraseEyecatch);
+			}
+			eyecatch_count	= infos.count;
+		}
+
+		with(window)
+		{
+			//	背景読み込み
+			with(.back.base)
+			{
+				.setSize(window.scWidth, window.scHeight);
+				.fillRect(0, 0, .width, .height, 0xFFFFFFFF);	//	白で塗りつぶし
+			}
+
+			//	トランジション開始
+			.stopAllTransitions();
+			.fore.base.beginTransition(%[time:fadetime,method:method]);	//	トランジション
+		}
+	}
+
+	//	クリック又は時間でマップ切替を行う
+	function onChangeMap()
+	{
+		//	アイキャッチのレイヤーを閉じる
+		for(var i=0; i<eyecatch_count; i++)
+			nextMove("eye"+i);
+
+		//	マップ切替
+		change(nextmap);
+	}
+
+	//	マップを切り替える
+	function change(mapname, delay=0)
+	{
+		init(mapname);	//	初期化
+		show(delay);	//	表裏のトランジション
+	}
+
+	//	マップを表示する(切替時も)
+	function show(delay=0)
+	{
+		currentmenumode	= menumode;	//	メニューモードを確定させる
+		enableMenu(false, currentmenumode[0]);
+//		enabled	= false;	//	ボタンを押せなくする
+		enabled	= true;
+
+		//	キャラクターの表示指定
+		delay	+= fadetime;
+		var	step	= 80;
+		var	cci	= curCharaIcons;
+		for(var i=0; i<cci.count; i++)
+		{
+			cci[i].show(delay);
+			delay	+= step;
+		}
+
+		with(window)
+		{
+			.stopAllTransitions();
+			.fore.base.beginTransition(%[time:fadetime,method:method]);	//	トランジション
+		}
+
+		onexchangeforeback	= turnout;	//	トランジション終了時に turnout を実行する
+	}
+
+	//	アイキャッチのパーツを作成、移動させる
+	function addEyecatch(name, storage, l, t, opac, x, y, lopac, time, accel, delay, func)
+	{
+		if(curOthers[name] == void)
+			curOthersCount++;
+		var	reg	= new RegExp("([0-9]+)x([0-9]+)x([0-9a-fA-F]+)");
+		with(curOthers[name] = new global.ChipLayer(window, window.back.base))
+		{
+			.name	= name;
+			var	res = reg.exec(storage);
+			if(res.count > 0)
+			{
+//				dm(@"width = ${res[1]}, height = ${res[2]}, color = ${res[3]}");
+				.setImageSize(+res[1], +res[2]);
+				.fillRect(0, 0, .imageWidth, .imageHeight, hex2int(res[3]));
+			}
+			else
+				.loadImages(storage);
+			.setSizeToImageSize();
+			l	= (parent.width - .width) \ 2 if l == "c";
+			t	= (parent.height - .height) \ 2 if t == "c";
+			t	= int(t.substr(1)) - .height if typeof t == "String" && t[0] == "l";
+			.setPos(l, t);
+			.hitThreshold	= 256;
+			.absolute		= 3000000 + curOthersCount;
+			.opacity		= opac;
+			.visible		= true;
+
+//			.moveTo(.left+x, .top+y, lopac, time, accel, delay, func);
+			.nextparam	= %[left:.left+x, top:.top+y, opacity:lopac, time:time, accel:accel, delay:delay, func:func];
+		}
+		return curOthers[name];
+	}
+
+	//	次の動作をさせる
+	function nextMove(name)
+	{
+		with(curOthers[name].nextparam)
+			curOthers[name].moveTo(.left, .top, .opacity, .time, .accel, 0, .func);
+	}
+
+	//	アイキャッチパーツを破棄
+	function eraseEyecatch(layer)
+	{
+		delete curOthers[layer.name];
+		dispose(layer);
+	}
+
+	//	マップ表示/切替後の処理
+	function turnout()
+	{
+		enableMenu(true, currentmenumode[0]);	//	ゲームメニューを有効にして、マップ用メニューにする
+		enabled	= true;
+
+		//	使用済みのアイテムを削除
+		invalidateItems(anotherPlaceIcons, anotherCharaIcons, anotherOthers);
+	}
+
+	//	マップ消去処理
+	function hide()
+	{
+		release(delaytimer);
+
+		enableMenu(false, currentmenumode[0]);	//	ゲームメニューを無効にする
+		enabled	= false;
+
+		//	ゲームメニューで日付、時間帯などを表示する為の情報を記録
+		if(timezone2 != "")
+			f.gameTimezone	= timezone2;
+		f.gameMap	= tf.firstMap;
+
+		//	現在開いているマップ名を忘れる
+		//	※ 覚えていると、次に開いたときにそこが最初に表示されてしまうので
+		//	   正式に閉じようとしているときのみ、忘れる。
+		global.tf.firstMap	= "";
+
+		//	次の移動先シーン
+		next_sceneid	= currentMap[nextid][2];	//	シーンID
+		next_storage	= currentMap[nextid][3];	//	フローチャートファイル名
+
+		//	キャラクターが選ばれたことを記録
+		global.tf[getFlagname(next_sceneid, next_storage)]++;	//	回数をカウント
+
+		//	一度黒へトランジション
+		with(window)
+		{
+			.stopAllTransitions();
+			.back.base.loadImages(%[storage:"black"]);		//	裏へ黒を読み込む
+			.fore.base.beginTransition(%[time:fadetime,method:method]);
+		}
+
+		onexchangeforeback	= goNext;	//	トランジション終了時に goNext を実行する
+	}
+
+	//	次へ移動する
+	function goNext()
+	{
+		enableMenu(true, currentmenumode[1]);	//	ゲームメニューを有効にして、通常のシナリオ再生用メニューにする
+
+		//	使用済みのアイテムを削除
+		invalidateItems(anotherPlaceIcons, anotherCharaIcons, anotherOthers);
+
+//		kag.setHistoryOptions(%[enabled:lastHistoryEnabled]);	//	テキスト履歴の状態を戻す
+		kag.enabledAutoMode	= lastAutomodeEnabled;				//	自動実行の状態を戻す
+
+		//	フローチャート処理で次へ
+		dm("go next: "+next_storage+" - "+next_sceneid+" wait = "+waitTime);
+		global.flow_tracker_object.goNext(next_storage, next_sceneid, waitTime);	//	goNext時に、これ自体が破棄される
+	}
+
+	//	スクロール開始
+	function startScroll()
+	{
+		if(!gamemenu.enabled)
+			return;	//	ゲームメニューが使えないときは、スクロールも出来ない
+
+		stopScroll();
+
+		//	開始、終了位置を設定
+		var layer	= kag.fore.base;
+		if((scrollstate.startleft = layer.imageLeft) < 0)
+			scrollstate.endleft	= 0;
+		else
+			scrollstate.endleft	= layer.width - layer.imageWidth;
+
+		//	スクロール開始
+		scrollstate.starttick	= System.getTickCount();
+		with(scrolltimer = new Timer(onTimerScroll, ""))
+			.interval = scrollinfo.interval, .enabled = true;
+	}
+
+	function onTimerScroll()
+	{
+		//	時間チェック
+		var past	= System.getTickCount() - scrollstate.starttick;
+		if(past > scrollinfo.time)
+		{
+			stopScroll();
+			return;
+		}
+
+		//	スクロール量を計算
+		var il;
+		with(scrollstate)
+			il	= .startleft + int((.endleft - .startleft) * calcAccel(past/scrollinfo.time, scrollinfo.accel));
+
+		//	スクロール処理
+		setScrollPos(il);
+	}
+
+	function stopScroll()
+	{
+		if(scrolltimer == void)
+			return;
+
+		//	最終位置へ
+		setScrollPos(scrollstate.endleft);
+
+		//	スクロール終了
+		invalidate scrolltimer;
+		scrolltimer	= void;
+	}
+
+	//	スクロール位置の設定
+	function setScrollPos(il)
+	{
+		kag.fore.base.imageLeft	= il;
+
+		var keys	= [];
+		keys.assign(curPlaceIcons);
+		for(var i=0; i<keys.count; i+=2)
+		{
+			with(keys[i+1])
+			{
+				.originalLeft	= .left if .originalLeft === void;
+				.left	= .originalLeft + il;
+				if(.icon != void)
+				{
+					.icon.originalLeft	= .icon.left if .icon.originalLeft === void;
+					.icon.left	= .icon.originalLeft + il;
+				}
+				for(var i=0; i<.charas.count; i++)
+				{
+					with(.charas[i])
+					{
+						.originalLeft	= .left if .originalLeft === void;
+						.left	= .originalLeft + il;
+					}
+				}
+			}
+		}
+		invalidate keys;
+	}
+
+	//	アイコンにカーソルが乗った
+	function onIconEnter(icon)
+	{
+		if(!enabled)
+			return;
+
+		//	音を鳴らす
+		playSound("コンフィグ-決定",, 50);
+
+		//	キャラクターに対応する場所を点灯
+		if(typeof icon.place == "undefined")
+			return;
+		with(icon.place)
+		{
+			.imageLeft	= -.width;	//	光らす
+			if(.icon)
+				.icon.imageLeft	= -.icon.width;
+
+			//	他のキャラクターを後ろへ
+			if(typeof icon.id == "Integer")
+			{
+				var ia = iconAbsolute[icon.no];
+				for(var i=0; i<.charas.count; i++)
+					.charas[i].absolute	= ia[i];
+			}
+		}
+	}
+
+	//	アイコンからカーソルが離れた
+	function onIconLeave(icon)
+	{
+		if(!enabled)
+			return;
+
+		//	場所を消灯
+		if(typeof icon.place == "undefined")
+			return;
+
+		with(icon.place)
+		{
+			.imageLeft	= 0;
+			.icon.imageLeft	= 0 if .icon != void;
+		}
+	}
+
+	//	アイコン押下後の処理
+	var delaytime	= 300;
+	var delaytimer;
+	var nextid;
+	function onIconSelection(icon)
+	{
+		if(!enabled)
+			return;
+
+		dm("choice icon: "+icon.id);
+		if(icon.id == "scroll")
+		{
+			startScroll();
+		}
+		else
+		{
+			//	現在表示されているアイコンは無効にする
+			var	cci	= curCharaIcons;
+			for(var i=0; i<cci.count; i++)
+				cci[i].enabled	= false;
+
+			current	= (current + 1) & 1;
+			if(typeof icon.id == "Integer")
+			{//	キャラクターアイコンを選択 → 次のシーンへ移動する
+//				hide(icon.id);	//	マップをフェードアウトする
+				nextid	= icon.id;
+				with(delaytimer = new Timer(hide, ""))
+					.interval	= delaytime, .capacity	= 1, .enabled	= true;
+
+				if(timezone != "夜")
+					playSound("マップ-決定-昼");	//	夜以外での選択時効果音
+				else
+					playSound("マップ-決定");
+			}
+			else
+			{//	Goアイコンを選択 → 別のマップへ移動する
+				change(icon.id);	//	新しいマップに切り替える
+			}
+		}
+	}
+
+	//	アイコンなどで右クリックされたら、ゲームメニューを表示する
+	function onMouseDown(x, y, button, shift)
+	{
+		if(button == mbRight)
+		{
+			kag.lockSnapshot();
+			global.gamemenu.show(false);	//	「トリガを設定しない」
+		}
+	}
+
+	//	トランジションが終了して、表裏のレイヤーが入れ替わった
+	function onExchangeForeBack()
+	{
+		if(onexchangeforeback != void)
+		{
+			var func	= onexchangeforeback;
+			onexchangeforeback	= void;
+			func();	//	指定のメソッドを実行
+		}
+	}
+
+	//	マップのキャラクターを、選んだことを示すフラグ
+	function getFlagname(sceneid, storage)
+	{
+		return MapFlagnameFormat.sprintf(mapno, int sceneid, storage);
+	}
+
+	//	アクションの有効/無効
+	var _enabled;
+	property enabled
+	{
+		setter(e)
+		{
+			if(e !== enabled)
+			{
+				_enabled	= e;
+				var icons	= curCharaIcons;
+				for(var i=0; i<icons.count; i++)
+					icons[i].focusable	= e;
+			}
+		}
+		getter	{ return _enabled; }
+	}
+
+	//	現在の操作対象となるアイテムリストへのアクセス
+	property curPlaceIcons		{ getter { return placeicons[current & 1]; } }
+	property curOthers			{ getter { return others[current & 1]; } }
+	property curCharaIcons		{ getter { return charaicons[current & 1]; } }
+
+	//	もう一方の操作対象へのアクセス
+	property anotherPlaceIcons	{ getter { return placeicons[(current + 1) & 1]; } }
+	property anotherOthers		{ getter { return others[(current + 1) & 1]; } }
+	property anotherCharaIcons	{ getter { return charaicons[(current + 1) & 1]; } }
+
+	property curOthersCount
+	{
+		setter(c)	{	othersCount[current & 1] = c;	}
+		getter		{	return othersCount[current & 1];	}
+	}
+
+	property menumode
+	{
+		getter
+		{
+			if(nextmap != "")
+				return mapsMenumode[nextmap] == void ? defaultmenumode : mapsMenumode[nextmap];
+			else
+				return mapsMenumode[tf.firstMap] == void ? defaultmenumode : mapsMenumode[tf.firstMap];
+		}
+	}
+
+	//	日付表示のとき、クリックを待つ必要があるか
+	property needClick
+	{
+		getter	{	return tf.playCount < 1 && timezone2 != "";	}
+	}
+}
+
+//	キャラクターアイコン(マウスオンすると明るくなり、クリックするとそのシーンへ移動する)
+class CharacterIconLayer extends ChipLayer
+{
+	var owner;
+
+	var correct;
+	var newicon;
+
+	var placename;
+	var defabs;		//	基本の前後位置
+
+	var selected;
+	var nochange;
+
+	var trace	= false;
+
+	var	show_magnify	= true;
+
+	var	clickable;		//	クリック可能か？
+	var	entered;
+
+	function CharacterIconLayer(win, par, owner, name, size, storage=void)
+	{
+		super.ChipLayer(...);
+		this.owner	= owner;
+		this.name	= name;
+		if(storage == void)
+			storage = "mp_char-"+name+size;
+		loadImages(storage);
+		setSize(imageWidth >> 2, imageHeight);
+		saveOriginal();
+		org.width	= width;
+		this["originalLeft"]	= void;
+		correct		= -owner.charaCorrectLeft[size == "" ? "default" : size][name] + 0;
+		selected	= false;
+		nochange	= true;	//	選択後は変化させない
+		focusable	= true;
+		hitThreshold= 128;	//	半透過
+//		hitThreshold= 0;	//	非透過
+		opacity		= 0;
+		clickable	= true;
+		visible		= true;
+	}
+
+	function finalize()
+	{
+		release(newicon);
+		super.finalize();
+	}
+
+	function setPos(l, t)
+	{
+		super.setPos(...);
+		newicon.setPos(...) if newicon;	//	Newアイコンを移動
+		if(entered)
+			with(owner.cantselection)
+				.left	= l + (width - .width) \ 2;
+	}
+
+	//	表示(大きくなって、ちょっと小さくなる)
+	function show(delay)
+	{
+		if(show_magnify)
+		{
+			var	mag	= 1.3;
+			var	w	= imageWidth >> 2, h = imageHeight;
+			delaySound("irse008.wav", delay);	//	キャラ表示の
+			magnifyToWithOpacity2(int(w * mag), int(h * mag), 255, 100, -1.5, delay);
+			magnifyToWithOpacity2(w, h, 255, 100, 1.5);
+		}
+		else
+			opacity	= 255;
+	}
+
+	//	"New"アイコンを追加
+	function addNewIcon(storage, startopac=0)
+	{
+		if(newicon)
+			return;
+
+//		dm("new icon: "+name+"."+storage);
+		with(newicon = new NewPointIconLayer(window, parent, owner, storage))
+		{
+			.opacity	= startopac;
+			.updatePos(this);
+		}
+	}
+
+	//	"New"アイコンの動作を開始
+	function startNewIcon()
+	{
+		if(newicon)
+			newicon.start(this);
+	}
+
+	property left
+	{
+		setter(l)
+		{
+			super.left	= l;
+			if(newicon)
+				newicon.updatePos(this);
+			if(entered)
+			{
+				with(owner.cantselection)
+					.left	= l + (width - .width) \ 2;
+			}
+		}
+		getter	{ return super.left; }
+	}
+
+	property state
+	{
+		setter(s)
+		{
+			var	il	= -width * s;
+
+			if(elements.count > 0)
+				org.imageLeft	= il;	//	拡縮中は転送元レイヤーの転送位置を変える
+			else
+				copyRect(0, 0, org, -il, 0, width, height);	//	拡縮していないなら、画像を転送する
+		}
+	}
+
+	function magnifyToWithOpacity2(w, h, o, time=500, accel=0, delay=0, func=void, name="magnify&opacity")
+	{
+		var elm = %[];
+		with(elm)
+		{
+			.ew			= int(w + 0.5);
+			.eh			= int(h + 0.5);
+			.eo			= o;
+			.time		= time;
+			.accel		= accel;
+			.construct	= magnify_opacity_construct2;
+			.func		= func;
+			.init		= magnify_opacity_init2;
+		}
+
+		start(name, elm, delay);
+	}
+
+	function magnify_opacity_init2(elm)
+	{
+		with(elm)
+		{
+			.sw		= width;
+			.sh		= height;
+			.so		= opacity;
+			.ew		= width if .ew === void;
+			.eh		= height if .eh === void;
+			.eo		= opacity if .eo === void;
+		}
+		visible	= true;
+	}
+
+	function magnify_opacity_construct2(elm, per)
+	{
+		with(elm)
+		{
+			var w = int((.ew - .sw) * per + .sw + 0.5), h = int((.eh - .sh) * per + .sh + 0.5);
+			setPos(centerleft - (w >> 1), centertop - (h >> 1));
+			opacity	= int((.eo - .so) * per + .so + 0.5);
+			setSize(w, h);
+			face	= dfOpaque;	holdAlpha	= false;
+			operateStretch(0, 0, w, h, org, -org.imageLeft, 0, org.width, org.height, omOpaque,, window.currentInterpolationMode);
+			if(newicon)
+			{
+				newicon.opacity	= opacity;
+				newicon.updatePos(this);
+			}
+		}
+	}
+
+	function onFocus()
+	{
+		dm(name+".onFocus(): "+selected+", "+nochange+", "+elements.count);
+		if(selected && nochange)
+			return;		//	選択後は変化させない
+
+		if(elements.count > 0)
+			return;		//	動き中も変化させない
+
+		state	= 1;
+		owner.onIconEnter(this);
+	}
+
+	function onMouseEnter()
+	{
+		focus();
+
+@if(DISP_UNSELECTABLE_CHARA==1)
+		//	クリックできないなら、選択不可を表示
+		if(!clickable)
+		{
+			with(owner.cantselection)
+			{
+				.setPos(left + (width - .width) \ 2, top + (height - .height) \ 2);
+				.visible	= true;
+			}
+			entered	= true;
+		}
+@endif
+	}
+
+	function onBlur()
+	{
+		if(selected && nochange)
+			return;		//	選択後は変化させない
+
+		if(elements.count > 0)
+			return;		//	動き中も変化させない
+
+		state	= 0;
+		owner.onIconLeave(this);
+	}
+
+	function onMouseLeave()
+	{
+		kag.focusedLayer	= null;
+
+		//	並べ方をデフォルトに戻す
+		owner.setDefaultAbsolute(placename) if placename != "";
+
+@if(DISP_UNSELECTABLE_CHARA==1)
+		//	選択不可を隠す
+		if(!clickable)
+		{
+			owner.cantselection.visible	= false;
+			entered	= false;
+		}
+@endif
+	}
+
+	function onMouseDown(x, y, button, shift)
+	{
+		if(!clickable)
+			return;
+
+		if(button == mbLeft)
+		{
+			if(elements.count > 0)
+				return;		//	動き中も変化させない
+
+			state		= 2;
+			selected	= true;
+			owner.onIconSelection(this) if enabled;
+		}
+		else
+			owner.onMouseDown(...);
+	}
+
+	function onMouseUp(x, y, button, shift)
+	{
+		if(!clickable)
+			return;
+
+		if(button == mbLeft)
+		{
+			if(elements.count > 0)
+				return;		//	動き中も変化させない
+
+			state	= 1 if !nochange;
+		}
+	}
+
+	function onKeyDown(key, shift)
+	{
+		switch(key)
+		{
+		case VK_RETURN:
+		case VK_SPACE:
+			onMouseDown(,, mbLeft);
+			return;
+		case VK_ESCAPE:
+		case VK_BACK:
+		case VK_DELETE:
+		case VK_HOME:
+			onMouseDown(,, mbRight);
+			return;
+
+		case VK_LEFT:
+			search(0);
+			return;
+		case VK_RIGHT:
+			search(2);
+			return;
+		case VK_UP:
+			search(1);
+			return;
+		case VK_DOWN:
+			search(3);
+			return;
+		}
+		super.onKeyDown(key, shift, true);
+	}
+
+	function search(dir)
+	{
+		dm("search: "+dir);
+		var addmissible_error = 5;
+		var	l = left + (width >> 1), t = top + (height >> 1);
+		var distance= 0x7fffffff;
+		var target;
+		var charas	= owner.curCharaIcons;
+		var w = parent.width << 1, h = parent.height << 1;
+		var pw	= parent.width;
+		for(var i=0; i<charas.count; i++)
+		{
+			
+			//	元のボタンか選択不可能なボタンは無視する
+			if(charas[i] == this || !charas[i].focusable)
+				continue;
+
+			var d, rd;
+			var cl, ct;
+			with(charas[i])
+				cl = .left + (.width >> 1), ct = .top + (.height >> 1);
+
+			//	ボタンが画面内に入っていない場合は無視する
+			if(cl < 0 || cl >= pw)
+				continue;
+
+			//	指定の方向に居ない場合は無視する
+			var	d;
+			if(dir == 0)
+			{
+				if(cl >= l)	continue;
+				d	= Math.pow((cl - l)/2, 2) + Math.pow(ct - t, 2);	//	左右方向を優先
+			}
+			else if(dir == 2)
+			{
+				if(cl <= l)	continue;
+				d	= Math.pow((cl - l)/2, 2) + Math.pow(ct - t, 2);	//	左右方向を優先
+			}
+			else if(dir == 1)
+			{
+				if(ct >= t)	continue;
+				d	= Math.pow(cl - l, 2) + Math.pow((ct - t)/2, 2);	//	上下方向を優先
+			}
+			else if(dir == 3)
+			{
+				if(ct <= t)	continue;
+				d	= Math.pow(cl - l, 2) + Math.pow((ct - t)/2, 2);	//	上下方向を優先
+			}
+
+			//	距離を測って、これまでのものより近ければ変える
+			if(distance > d)
+			{
+				distance= d;
+				target	= charas[i];
+			}
+		}
+		if(target)
+		{
+			dm("target = "+target.name);
+			target.focus();	//	見つかったら、フォーカスを渡す
+		}
+		return target;
+	}
+}
+
+//	「New!」アイコン
+//	画像によるアニメーションの方が、毎回計算するより圧倒的に早い(CPU占有率が、XP2500で8%前後→1%程度になる)
+@set(__NEW_CELL_ANIMATION=1)
+@if(__NEW_CELL_ANIMATION==0)
+class NewPointIconLayer extends FadeLayer
+@endif
+@if(__NEW_CELL_ANIMATION==1)
+class NewPointIconLayer extends AnimationLayer
+@endif
+{
+	var owner;
+	var time	= 1000;
+	var opac	= 192;
+@if(__NEW_CELL_ANIMATION==0)
+//	var path	= @"(0,0,${opac},20000,+0.0,0.32,86,35)(31,3,${opac},20000,-12.724,0.22,86,35)(0,0,${opac},20000,+0.0,0.32,86,35)(-33,2,${opac},20000,13.134,0.22,86,35)(0,0,${opac},20000,+0.0,0.32,86,35)";
+	var	path	= @"(0,0,${opac},20000,+0.0,0.15,122,50)(26,0,${opac},20000,0,0.2,122,50)(0,0,${opac},20000,+0.0,0.25,122,50)(-26,0,${opac},20000,0,0.2,122,50)(0,0,${opac},20000,+0.0,0.15,122,50)";
+@endif
+
+	function NewPointIconLayer(win, par, own, storage)
+	{
+		name	= "New icon("+storage+")";
+		owner	= own;
+@if(__NEW_CELL_ANIMATION==0)
+		super.FadeLayer(...);
+
+		loadImages("mp_new");
+@endif
+@if(__NEW_CELL_ANIMATION==1)
+		super.AnimationLayer(...);
+
+		owner.new_image	= %[] if owner.new_image == void;
+		if(owner.new_image[storage])
+		{
+			assign(owner.new_image[storage]);
+			loadAnimInfo(0, '');	//	assignでは開始しないので、アニメーションを開始させる
+		}
+		else
+		{
+			loadImages(%[storage:storage]);
+			owner.new_image[storage]	= this;
+		}
+@endif
+		setSizeToImageSize();
+		hitThreshold	= 256;	//	透過
+		absolute		= own.newiconAbsolute;
+		opacity			= opac;
+		visible			= true;
+	}
+
+	function finalize()
+	{
+@if(__NEW_CELL_ANIMATION==1)
+		if(owner.new_image[storage] == this)
+			owner.new_image[storage]	= void;
+@endif
+		stop();
+		super.finalize(...);
+	}
+
+	function start(obj)
+	{
+@if(__NEW_CELL_ANIMATION==0)
+		beginLoopMove(%[mover:"AttachRestiveMover2",target:obj,both:false,x:(obj.width>>1)-(imageWidth>>1)+obj.correct,y:-(imageHeight>>1),spline:true,time:time,path:path]);
+@endif
+		updatePos(obj);
+	}
+
+	function stop()
+	{
+		stopMove();
+	}
+
+	function updatePos(obj)
+	{
+@if(__NEW_CELL_ANIMATION==1)
+		setPos(obj.left+((obj.width-width)>>1)-obj.correct, obj.top-(height-10));
+@endif
+	}
+}
+
+function loadMapData(no, flags=tf)
+{
+	var	mapdata		= %[];
+	var	placedata	= %[];
+
+	var lines	= [].load(MapDataFileFormat.sprintf(no));
+	var mapnames	= %[];
+	var	timezone = "default", mapname, place, chara, flowfile;
+	for(var i=0; i<lines.count; i++)
+	{
+		if(lines[i] == void)
+			continue;
+		var tmp = lines[i].split(",");
+		for(var i=0; i<tmp.count; i++)
+			tmp[i]	= tmp[i].substr(1, tmp[i].length - 2) if tmp[i][0] == "\"";	//	ダブルクォーテーションで開始している要素は、前後のダブルクォーテーションを削除する
+
+		timezone= tmp[0] != "" ? tmp[0] : "default";
+		mapname	= tmp[1] if tmp[1] != "";	//	指定がなければ直前のものを継続する
+		place	= tmp[2];					//	指定がなければそのまま
+		if(tmp[3] != "" && !checkCondition(flags, tmp[3]))
+			chara	= "";	//	条件が成立しないときは、キャラクターは"居ない"
+		else
+			chara	= tmp[4];	//	キャラクターは"いない"ことも考えられる
+		var	newtype	= "new";
+		if(chara[0] == "!")
+		{
+			chara	= chara.substr(1);
+			newtype	= "exclamation";
+		}
+@if(DISP_UNSELECTABLE_CHARA==1)
+		else if(chara[0] == "&")
+		{
+			chara	= chara.substr(1);
+			newtype	= "phantom";
+		}
+@endif
+		chara	= "unknown"+chara.substr(1) if chara[0] == "?";
+		flowfile= tmp[6] if tmp[6] != "";
+		mapdata[mapname]	= [] if mapdata[mapname] == void;
+		//					  場所,	人物,	移動先シーンID/マップ名,	移動先フローファイル
+		mapdata[mapname].add([place, chara, tmp[5], flowfile, newtype]);
+//		dm(@"${place}, ${chara}, ${tmp[5]}, ${flowfile}");
+
+		if(place != "")
+		{
+			placedata[mapname]	= %[] if placedata[mapname] == void;
+			placedata[mapname][place]	= tmp[7];	//	場所リストを生成(tmp[7]は表示条件)
+		}
+		mapnames[mapname]++;
+	}
+
+	return [ mapdata, placedata, mapnames, timezone ];
+}
+
+//	条件文を解析して、結果を得る
+function checkCondition(flags=tf, condition)
+{
+	var	cond	= condition;
+	var names	= cond.split("!()|&<>=");
+	var value, pos;
+	var	numreg	= new RegExp("^[0-9]+$");
+	for(var i=0; i<names.count; i++)
+	{
+		//	名称に対応したフラグの値を取得
+		var name = names[i];
+		if(name == "" || numreg.test(name))
+			continue;
+		value	= flags[name] + 0;
+//		dm(name+" = "+value+"("+flags[name]+")");
+
+		//	値を式に入力する(一度だけ)
+		pos		= cond.indexOf(name);
+		cond	= cond.substr(0, pos) + value + cond.substr(pos+name.length);
+	}
+	var res	= cond!;
+	dm(condition+" -> "+cond+" = "+res);
+	return res;
+}
+
+//	ウィンドウのキー処理を止める
+function stopKeyDown()
+{
+	return true;
+}
+
+/*-----------------------------------------------------------------------------
+/	End of File
+/----------------------------------------------------------------------------*/
+@endif

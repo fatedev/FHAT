@@ -1,0 +1,261 @@
+/*-----------------------------------------------------------------------------
+/	Copyright (C) TYPE-MOON All Rights Reserved.
+/		Hash生成
+/----------------------------------------------------------------------------*/
+@if(__HASH_INCLUDED__==0)
+@set(__HASH_INCLUDED__=1)
+
+//	ハッシュ生成クラス
+//		TJS実装なので、処理時間大。間違ってもファイルデータに対して使ってはならない
+class Hash
+{
+	var	md5;
+
+	function Hash()
+	{
+	}
+
+	function finalize()
+	{
+		invalidate md5 if md5 != void;
+	}
+
+	function getMD5(buf)
+	{
+		md5_init();
+		md5_process(buf);
+		return md5_done();
+	}
+
+	function convertString(result)
+	{
+		var	str;
+		var	c2s	= "0123456789abcdef";
+		for(var i=0; i<result.count; i++)
+			str	+= c2s[(result[i]>>4)&0xF] + c2s[result[i] & 0xF];
+		return str;
+	}
+
+	function getMD5String(buf)
+	{
+		return convertString(getMD5(buf));
+	}
+
+	function md5_init()
+	{
+		if(md5 == void)
+			md5	= %[curlen:0,length:0,state:[],buf:[]];
+		with(md5)
+		{
+			.curlen = .length = 0;
+			.state[0]	= 0x67452301;
+			.state[1]	= 0xefcdab89;
+			.state[2]	= 0x98badcfe;
+			.state[3]	= 0x10325476;
+			.buf.clear();
+		}
+	}
+
+	function md5_process(buf)
+	{
+		//	文字列が渡されたら、数値配列に変換する
+		var	len;
+		if(typeof buf == "String")
+		{
+			var	array	= [];
+			for(var i=0; i<buf.length; i++)
+				array.add(#buf[i]);
+			buf	= array;
+		}
+		len	= buf.count;
+
+		with(md5)
+		{
+			var	n;
+			var	bp	= 0;
+			while(len > 0)
+			{
+				n	= Math.min(len, (64 - .curlen));
+				for(var i=0; i<n; i++)
+					.buf[i + .curlen]	= buf[i + bp];
+				.curlen	+= n;
+				bp		+= n;
+				len		-= n;
+
+				if(.curlen == 64)
+				{
+					md5_compress();
+					.length	+= 512;
+					.curlen	= 0;
+				}
+			}
+		}
+	}
+
+	function md5_done()
+	{
+		with(md5)
+		{
+			.length	+= .curlen * 8;
+			.buf[.curlen ++]	= 0x80;
+			if(.curlen > 56)
+			{
+				while(.curlen < 64)
+					.buf[.curlen ++]	= 0;
+				md5_compress();
+				.curlen	= 0;
+			}
+
+			while(.curlen < 56)
+				.buf[.curlen ++]	= 0;
+
+			var	st	= 56;
+			.buf[st++]	= (.length >>  0) & 0xFF;
+			.buf[st++]	= (.length >>  8) & 0xFF;
+			.buf[st++]	= (.length >> 16) & 0xFF;
+			.buf[st++]	= (.length >> 24) & 0xFF;
+			.buf[st++]	= 0;
+			.buf[st++]	= 0;
+			.buf[st++]	= 0;
+			.buf[st++]	= 0;
+			md5_compress();
+
+			var	hash	= [];
+			for(var i=0; i<4; i++)
+			{
+				var	state	= .state[i];
+				var	shift	= 0;
+				for(var i=0; i<4; i++)
+				{
+					hash.add((state >> shift) & 0xFF);
+					shift	+= 8;
+				}
+			}
+			return hash;
+		}
+	}
+
+	function md5_compress()
+	{
+		with(md5)
+		{
+			var	W = [], a, b, c, d;
+			for(var i=0, ip=0; i<16; i++, ip+=4)
+			{
+				W[i] = ((.buf[ip + 3] & 0xFF) << 24) |
+					   ((.buf[ip + 2] & 0xFF) << 16) |
+					   ((.buf[ip + 1] & 0xFF) <<  8) |
+						(.buf[ip + 0] & 0xFF);
+			}
+
+			a	= .state[0];
+			b	= .state[1];
+			c	= .state[2];
+			d	= .state[3];
+
+			a	= FF(a,b,c,d,W[0],	7,	0xd76aa478);
+			d	= FF(d,a,b,c,W[1],	12,	0xe8c7b756);
+			c	= FF(c,d,a,b,W[2],	17,	0x242070db);
+			b	= FF(b,c,d,a,W[3],	22,	0xc1bdceee);
+			a	= FF(a,b,c,d,W[4],	7,	0xf57c0faf);
+			d	= FF(d,a,b,c,W[5],	12,	0x4787c62a);
+			c	= FF(c,d,a,b,W[6],	17,	0xa8304613);
+			b	= FF(b,c,d,a,W[7],	22,	0xfd469501);
+			a	= FF(a,b,c,d,W[8],	7,	0x698098d8);
+			d	= FF(d,a,b,c,W[9],	12,	0x8b44f7af);
+			c	= FF(c,d,a,b,W[10],	17,	0xffff5bb1);
+			b	= FF(b,c,d,a,W[11],	22,	0x895cd7be);
+			a	= FF(a,b,c,d,W[12],	7,	0x6b901122);
+			d	= FF(d,a,b,c,W[13],	12,	0xfd987193);
+			c	= FF(c,d,a,b,W[14],	17,	0xa679438e);
+			b	= FF(b,c,d,a,W[15],	22,	0x49b40821);
+			a	= GG(a,b,c,d,W[1],	5,	0xf61e2562);
+			d	= GG(d,a,b,c,W[6],	9,	0xc040b340);
+			c	= GG(c,d,a,b,W[11],	14,	0x265e5a51);
+			b	= GG(b,c,d,a,W[0],	20,	0xe9b6c7aa);
+			a	= GG(a,b,c,d,W[5],	5,	0xd62f105d);
+			d	= GG(d,a,b,c,W[10],	9,	0x02441453);
+			c	= GG(c,d,a,b,W[15],	14,	0xd8a1e681);
+			b	= GG(b,c,d,a,W[4],	20,	0xe7d3fbc8);
+			a	= GG(a,b,c,d,W[9],	5,	0x21e1cde6);
+			d	= GG(d,a,b,c,W[14],	9,	0xc33707d6);
+			c	= GG(c,d,a,b,W[3],	14,	0xf4d50d87);
+			b	= GG(b,c,d,a,W[8],	20,	0x455a14ed);
+			a	= GG(a,b,c,d,W[13],	5,	0xa9e3e905);
+			d	= GG(d,a,b,c,W[2],	9,	0xfcefa3f8);
+			c	= GG(c,d,a,b,W[7],	14,	0x676f02d9);
+			b	= GG(b,c,d,a,W[12],	20,	0x8d2a4c8a);
+			a	= HH(a,b,c,d,W[5],	4,	0xfffa3942);
+			d	= HH(d,a,b,c,W[8],	11,	0x8771f681);
+			c	= HH(c,d,a,b,W[11],	16,	0x6d9d6122);
+			b	= HH(b,c,d,a,W[14],	23,	0xfde5380c);
+			a	= HH(a,b,c,d,W[1],	4,	0xa4beea44);
+			d	= HH(d,a,b,c,W[4],	11,	0x4bdecfa9);
+			c	= HH(c,d,a,b,W[7],	16,	0xf6bb4b60);
+			b	= HH(b,c,d,a,W[10],	23,	0xbebfbc70);
+			a	= HH(a,b,c,d,W[13],	4,	0x289b7ec6);
+			d	= HH(d,a,b,c,W[0],	11,	0xeaa127fa);
+			c	= HH(c,d,a,b,W[3],	16,	0xd4ef3085);
+			b	= HH(b,c,d,a,W[6],	23,	0x04881d05);
+			a	= HH(a,b,c,d,W[9],	4,	0xd9d4d039);
+			d	= HH(d,a,b,c,W[12],	11,	0xe6db99e5);
+			c	= HH(c,d,a,b,W[15],	16,	0x1fa27cf8);
+			b	= HH(b,c,d,a,W[2],	23,	0xc4ac5665);
+			a	= II(a,b,c,d,W[0],	6,	0xf4292244);
+			d	= II(d,a,b,c,W[7],	10,	0x432aff97);
+			c	= II(c,d,a,b,W[14],	15,	0xab9423a7);
+			b	= II(b,c,d,a,W[5],	21,	0xfc93a039);
+			a	= II(a,b,c,d,W[12],	6,	0x655b59c3);
+			d	= II(d,a,b,c,W[3],	10,	0x8f0ccc92);
+			c	= II(c,d,a,b,W[10],	15,	0xffeff47d);
+			b	= II(b,c,d,a,W[1],	21,	0x85845dd1);
+			a	= II(a,b,c,d,W[8],	6,	0x6fa87e4f);
+			d	= II(d,a,b,c,W[15],	10,	0xfe2ce6e0);
+			c	= II(c,d,a,b,W[6],	15,	0xa3014314);
+			b	= II(b,c,d,a,W[13],	21,	0x4e0811a1);
+			a	= II(a,b,c,d,W[4],	6,	0xf7537e82);
+			d	= II(d,a,b,c,W[11],	10,	0xbd3af235);
+			c	= II(c,d,a,b,W[2],	15,	0x2ad7d2bb);
+			b	= II(b,c,d,a,W[9],	21,	0xeb86d391);
+
+			.state[0]	+= a;
+			.state[1]	+= b;
+			.state[2]	+= c;
+			.state[3]	+= d;
+		}
+	}
+
+	function FF(a,b,c,d,M,s,t)
+	{
+		a = (a + (d ^ (b & (c ^ d))) + M + t);
+		a = ( ((a<<(s&31)) | ((a&0xFFFFFFFF)>>(32-(s&31)))) & 0xFFFFFFFF);
+		return (b + a);
+	}
+
+	function GG(a,b,c,d,M,s,t)
+	{
+		a = (a + (c ^ (d & (c ^ b))) + M + t);
+		a = ( ((a<<(s&31)) | ((a&0xFFFFFFFF)>>(32-(s&31)))) & 0xFFFFFFFF);
+		return (b + a);
+	}
+
+	function HH(a,b,c,d,M,s,t)
+	{
+		a = (a + (b ^ c ^ d) + M + t);
+		a = ( ((a<<(s&31)) | ((a&0xFFFFFFFF)>>(32-(s&31)))) & 0xFFFFFFFF);
+		return (b + a);
+	}
+
+	function II(a,b,c,d,M,s,t)
+	{
+		a = (a + (c ^ (b | (~d))) + M + t);
+		a = ( ((a<<(s&31)) | ((a&0xFFFFFFFF)>>(32-(s&31)))) & 0xFFFFFFFF);
+		return (b + a);
+	}
+}
+
+
+/*-----------------------------------------------------------------------------
+/	End of File
+/----------------------------------------------------------------------------*/
+@endif

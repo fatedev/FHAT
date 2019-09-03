@@ -1,0 +1,44 @@
+/*-----------------------------------------------------------------------------/
+/	Copyright (C) TYPE-MOON All Rights Reserved.
+/		廃棄物を処分するプラグイン
+/-----------------------------------------------------------------------------*/
+if(typeof global.disposer_object == 'undefined')
+{
+Scripts.execStorage("subroutine.tjs");
+
+function dispose(garbage)
+{
+	dm("add garbage box");
+	.garbages.add(garbage);
+	.disposer_object.trigger();
+}
+
+function disposeObjects()
+{
+	dm("dispose garbage");
+	for(var i=0; i<.garbages.count; i++)
+		release(.garbages[i]);
+	.garbages.clear();
+}
+
+.disposer_object = new AsyncTrigger(disposeObjects, "");
+.garbages	= [];
+
+//	廃棄する予定のもの
+.heapedGarbages	= [];
+function heapGarbage(garbage)
+{
+	.heapedGarbages.add(garbage);
+}
+
+//	予定された廃棄を実行可にする
+function teardownGarbage()
+{
+	dm("add garbage box(tear down)");
+	for(var i=0; i<.heapedGarbages.count; i++)
+		.garbages.add(.heapedGarbages[i]);
+	.disposer_object.trigger();
+}
+
+/* End of  */
+}

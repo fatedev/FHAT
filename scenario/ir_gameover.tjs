@@ -1,0 +1,725 @@
+/*******************************************************************************
+	風雲イリヤ城 - ゲームオーバー
+*******************************************************************************/
+
+
+class CIriyaGameOver extends CIriyaSceneEx
+{
+var		CallSceneID;
+	function CIriyaGameOver( parent, scene_id, old_scene_id )
+	{
+		@if (DEBUG_MODE)
+		dm( "ゲームオーバー" );
+		@endif
+
+		CallSceneID = old_scene_id;
+
+		init_buffer();
+		super.CIriyaSceneEx( ... );
+
+		with ( parentLayer )
+		{
+			.fillRect( 0, 0, .width, .height, RGBA_MAKE(0,0,0,255) );
+		}
+	}
+	
+	function finalize()
+	{
+		super.finalize( ... );
+		release_data();
+	}
+
+
+
+	@if (DEBUG_MODE  ==  1)
+	var		key_state;
+	@endif;
+	var FirstCameraPosX	= SCREEN_SIZE_W/2;
+	var FirstCameraPosY	= SCREEN_SIZE_H/2;
+
+
+	var		LAYER_YES_NO_DIALOG	= -100;
+	var		LAYER_MESSAGE		= -150;
+	var		LAYER_GAME_OVER		= -200;
+	var		LAYER_FUJI_CHARA	= -300;
+
+
+
+	var		mode;
+		// 基本開始処理
+		var	MODE_START					= 0;		// 開始
+		var	MODE_START_GAME_OVER_TITLE	= 1;		// GAME OVER タイトル表示
+		var MODE_GAME_OVER_TITLE_WAIT	= 2;		// 表示終了待ちウェイト
+		var MODE_GAME_OVER_TITLE_END	= 3;		// 終了後の強制ウェイト
+						var	GAME_OVER_TITLE_END_TIME	= FRAME_PER_SEC*2;
+		var	MODE_GAME_OVER_TITLE_END_WAIT	= 4;	// キー入力待ち処理
+						var	GAME_OVER_TITLE_END_WAIT_TIME	= FRAME_PER_SEC*5;
+
+		// 通常終了処理
+		var	MODE_GAME_OVER_FADE_OUT			= 100;	// フェードアウト
+						var	GAME_OVER_FADE_OUT_TIME		= FRAME_PER_SEC*2;
+		var	MODE_GAME_OVER_FADE_END_WAIT	= 101;	// フェードアウト終了ウェイト
+						var	GAME_OVER_FADE_END_WAIT_TIME1	= 20;
+						var	GAME_OVER_FADE_END_WAIT_TIME2	= 1;
+
+
+		// ADV呼び出し用処理
+		var	MODE_ADV_INFO_IN_START_WAIT		= 200;	// フレームイン開始ウェイト
+						var	ADV_INFO_IN_START_WAIT		= (int)(1*FRAME_PER_SEC + FRAME_PER_SEC/2);
+		var	MODE_ADV_INFO_IN				= 201;	// フレームイン
+						var	MODE_ADV_INFO_IN_NEXT_DELAY	= 10;
+
+		var	MODE_ADV_INFO_MESSAGE_IN		= 250;	// Messageイン
+						var	ADV_INFO_MESSAGE_IN_NEXT_DELAY = 30;
+
+
+		var	MODE_ADV_INFO_YES_NO_DLG_IN		= 300;	// YesNoダイアログのフレームイン
+						var	ADV_INFO_YES_NO_DLG_IN_SELECT_DELAY	= 20; // 終了後のディレイ時間
+		var	MODE_ADV_INFO_YES_NO_DLG		= 301;	// YesNoダイアログによる選択
+		var	MODE_ADV_INFO_YES_NO_END_WAIT	= 302;	// 選択後ウェイト
+						var	ADV_INFO_YES_NO_END_WAIT	= (int)(FRAME_PER_SEC*0.5);
+
+
+	function init_buffer()
+	{
+		init_sys_fade();
+		init_gameover_obj();
+		init_fuji_obj();
+		init_yes_no_dialog();
+		init_message();
+
+		mode = MODE_START;
+		return;
+	}
+	function release_data()
+	{
+		@if (DEBUG_MODE  ==  1)
+		if (CheckValid(key_state)  ==  true) {
+			EasyObjectInvalidate( key_state );
+			key_state = void;
+		}
+		@endif
+
+		release_sys_fade();
+		release_yes_no_dialog();
+		release_fuji_chara();
+		release_message();
+		release_click_layer();
+		return;
+	}
+
+
+	function init()
+	{
+		super.init( ... );
+
+
+		// カメラのデータ設定
+		normalCamera.mode = CAMERAMODE_CUSTOM;
+		normalCamera.motionType = MOTIONTYPE_DEFAULT;
+		normalCamera.limitRectEnabled = false;
+		normalCamera.x = SCREEN_CENTER_X;
+		normalCamera.y = SCREEN_CENTER_Y;
+
+
+
+
+		EasyObjectInvalidate( gameover_obj );
+		gameover_obj = void;
+
+
+		@if (DEBUG_MODE  ==  1)
+		key_state = new CIriyaKeyState();
+		key_state.UpdateState();
+		@endif
+	}
+	function initPlayers()
+	{
+		return;
+	}
+	function initField()
+	{
+		createScreen = false;
+		super.initField();
+		fadeIn(0);
+		return;
+	}
+	function servantUpdate( servant )
+	{
+		return;
+	}
+	function dammy_func( my_obj )
+	{
+	}
+	function servantAnimation( servant )
+	{
+		return;
+	}
+	function normalCameraUpdate( camera )
+	{
+		return;
+	}
+
+
+
+
+	var		gameover_obj;
+	// GameOverの初期化
+	function init_gameover_obj()
+	{
+		gameover_obj = void;
+		return;
+	}
+	// GameOver表示
+	function start_gameover_title()
+	{
+		EasyObjectInvalidate( gameover_obj );
+		gameover_obj = new CIrGameOver(this,systemRootObj);
+		gameover_obj.priority = LAYER_GAME_OVER;
+
+		PlaySE( SE_GAMEOVER_PRN_TITLE );
+		return;
+	}
+	// GameOverのアニメ終了確認
+	function check_gameover_title_anime()
+	{
+		return ( gameover_obj.checkAnimeEnd() );
+	}
+
+
+
+	var		fuji_obj;
+	// 藤ねぇ初期化
+	function init_fuji_obj()
+	{
+		fuji_obj = void;
+		return;
+	}
+	// 藤ねぇ表示
+	function startup_fuji_chara()
+	{
+		fuji_obj = new CIryaFujiCharaPrn( parentWindow, parentLayer );
+		fuji_obj.Init( LAYER_FUJI_CHARA );
+		fuji_obj.SetupFrameInData();
+		PlaySE( SE_GAMEOVER_START_FUJI );
+		return;
+	}
+	// 藤ねぇ開放
+	function release_fuji_chara()
+	{
+		EasyObjectInvalidate( fuji_obj );
+		fuji_obj = void;
+		return;
+	}
+	function update_fuji_chara()
+	{
+	var		ret;
+		fuji_obj.UpdateFrameIn();
+		ret = fuji_obj.UpdateFrameInData();
+		return ( ret );
+	}
+
+
+
+
+	// メッセージ表示処理
+	var		END_MESSAGE_PY			= 24;
+	var		game_over_message;
+	var		go_message_frame_in;
+	function init_message()
+	{
+		game_over_message = void;
+		go_message_frame_in = void;
+		return;
+	}
+	function release_message()
+	{
+		EasyObjectInvalidate( game_over_message );
+		game_over_message = void;
+
+		EasyObjectInvalidate( go_message_frame_in );
+		go_message_frame_in = void;
+		return;
+	}
+	function startup_message()
+	{
+		game_over_message = EasyCreateLayerObject( parentWindow,parentLayer, "ir_g_over_mes00",
+								 clAdapt, true, 0,0, LAYER_MESSAGE );
+		game_over_message.setPos( CalcCenterPosX(parentLayer, game_over_message), 0 );
+
+
+		with ( go_message_frame_in = new CSinAnime() )
+		{
+			.SetAnimeParam( 0-game_over_message.imageHeight, END_MESSAGE_PY, 0, DEF_FRAME_IN_OBJ_TIME,DEF_FRAME_IN_OBJ_TIME );
+			.Start();
+		}
+		set_message_pos();
+
+		PlaySE( SE_GAMEOVER_START_MESSAGE );
+		return;
+	}
+	function set_message_pos()
+	{
+		with ( game_over_message )
+		{
+			.setPos( .left, go_message_frame_in.GetNowNum() );
+		}
+		return;
+	}
+	function update_message_pos()
+	{
+		with ( go_message_frame_in )
+		{
+			if (.CheckUpdateState()  !=  "UPDATE")
+				return ( false );
+			.Update();
+		}
+		set_message_pos();
+		return ( true );
+	}
+
+
+
+	var		yn_dialog;
+	var		yn_dialog_frame_in;
+	var		YN_SELECT_YES	=0;
+	var		YN_SELECT_NO	=1;
+	// YesNoダイアログ初期化
+	function init_yes_no_dialog()
+	{
+		yn_dialog = void;
+		yn_dialog_frame_in = void;
+		return;
+	}
+	// YesNoダイアログ作成
+	var		YN_DLG_PRN_BASE_X=SCREEN_SIZE_W-532;
+	var		YN_DLG_PRN_BASE_Y=SCREEN_SIZE_H-128;
+	var		YN_DLG_PRN_YES_OFF_X=(0+128);
+	var		YN_DLG_PRN_YES_OFF_Y=64;
+	var		YN_DLG_PRN_NO_OFF_X =(512-128-112);
+	var		YN_DLG_PRN_NO_OFF_Y =64;
+	function startup_yes_no_dialog()
+	{
+	var		prn_x,prn_y;
+
+		prn_x = YN_DLG_PRN_BASE_X;
+		prn_y = YN_DLG_PRN_BASE_Y;
+		with ( yn_dialog = new CIriyaYesNoDialog(parentWindow,parentLayer) )
+		{
+			.Init( LAYER_YES_NO_DIALOG );
+			.SetCancelUseFlag( false );
+			.LoadBackCG( "ir_menu03_00",YN_DLG_PRN_BASE_X,0 );
+
+			.LoadButton( YN_SELECT_YES, "ir_menu02_09", "ir_menu01_09", YN_DLG_PRN_BASE_X+YN_DLG_PRN_YES_OFF_X,0 );
+			.SetClickSEPlayFile( YN_SELECT_YES, SE_GAMEOVER_YN_DLG_YES );
+			.SetFocusSEPlayFile( YN_SELECT_YES, SE_GAMEOVER_YN_DLG_FOCUS );
+
+			.LoadButton( YN_SELECT_NO, 	"ir_menu02_10",  "ir_menu01_10",  YN_DLG_PRN_BASE_X+YN_DLG_PRN_NO_OFF_X,0 );
+			.SetClickSEPlayFile( YN_SELECT_NO, SE_GAMEOVER_YN_DLG_NO );
+			.SetFocusSEPlayFile( YN_SELECT_NO, SE_GAMEOVER_YN_DLG_FOCUS );
+
+			.Print();
+		}
+
+		with ( yn_dialog_frame_in = new CSinAnime() )
+		{
+			.SetAnimeParam( SCREEN_SIZE_H, YN_DLG_PRN_BASE_Y, 0, DEF_FRAME_IN_OBJ_TIME,DEF_FRAME_IN_OBJ_TIME );
+			.Start();
+		}
+		set_yes_no_dialog_pos();
+
+		PlaySE( SE_GAMEOVER_START_YN_DLG );
+		return;
+	}
+	// YesNoダイアログ開放
+	function release_yes_no_dialog()
+	{
+		EasyObjectInvalidate( yn_dialog );
+		yn_dialog = void;
+		EasyObjectInvalidate( yn_dialog_frame_in );
+		yn_dialog_frame_in = void;
+		return;
+	}
+	function start_select_yes_no_dialog()
+	{
+		yn_dialog.Start();
+		return;
+	}
+	function check_yes_no_dialog_end()
+	{
+		with ( yn_dialog )
+		{
+			if (.GetSelectID()  ==  .SEL_ID_NONE)
+				return ( false );
+		}
+		return ( true );
+	}
+	function stop_yes_no_dialog()
+	{
+		with ( yn_dialog )
+		{
+			.Stop();
+			.Print();
+		}
+		return;
+	}
+	function get_yes_no_dialog_type()
+	{
+		return ( yn_dialog.GetSelectID() );
+	}
+	function set_yes_no_dialog_pos()
+	{
+	var		base_pos_y;
+		base_pos_y = yn_dialog_frame_in.GetNowNum();
+		with ( yn_dialog )
+		{
+			.SetBackPos( , base_pos_y+0 );
+			.SetTitlePos( , base_pos_y+YN_DLG_PRN_YES_OFF_Y );
+			.SetButtonPos( YN_SELECT_YES, , base_pos_y+YN_DLG_PRN_NO_OFF_Y );
+			.SetButtonPos( YN_SELECT_NO,  , base_pos_y+YN_DLG_PRN_NO_OFF_Y );
+		}
+		return;
+	}
+	function update_yes_no_dialog_pos()
+	{
+		with ( yn_dialog_frame_in )
+		{
+			if (.CheckUpdateState()  !=  "UPDATE")
+				return ( false );
+			.Update();
+		}
+		set_yes_no_dialog_pos();
+		return ( true );
+	}
+
+
+
+
+	var		sys_fade;
+	// 画面フェード初期化
+	function init_sys_fade()
+	{
+		sys_fade = void;
+		return;
+	}
+	// 画面フェード開始
+	function starup_sys_fade()
+	{
+		sys_fade = EasyCreateFadeLayer( parentWindow,parentLayer, "BLACK", "FADE_IN", GAME_OVER_FADE_OUT_TIME );
+		SetLayerPriority( sys_fade, PRIORITY_SYSTEM_FADE );
+		return;
+	}
+	// 画面フェード開放
+	function release_sys_fade()
+	{
+		EasyReleaseFadeLayer( sys_fade );
+		sys_fade = void;
+		return;
+	}
+	function update_sys_fade()
+	{
+		if (ProcessFadeAnime(sys_fade)  ==  "UPDATING")
+			return ( true );
+		return ( false );
+	}
+
+
+
+
+
+	var		click_flag;
+	var		click_layer;
+	function create_click_layer()
+	{
+		release_click_layer();
+
+		click_flag = false;
+		with (click_layer = new CSpriteLayer(parentWindow, parentLayer) )
+		{
+			.setSize( SCREEN_SIZE_W, SCREEN_SIZE_H );
+			.fill( RGBA_MAKE(0,0,0,0) );
+			.setMouseDownCallback( button_skip );
+			.setHitCheckAlphaLimit( "ALL" );
+			.visible = true;
+		}
+		return;
+	}
+	function release_click_layer()
+	{
+		if (CheckValid(click_layer)  ==  false)
+			return;
+
+		with ( click_layer )
+		{
+			.setMouseDownCallback( void );
+			.setHitCheckAlphaLimit( "NONE" );
+			.visible = false;
+		}
+		EasyReleaseLayer( click_layer );
+		click_layer = void;
+		return;
+	}
+	function button_skip( _layer, _x,_y, _button,_shift )
+	{
+		if (_button  ==  mbLeft) {
+			PlaySE( SE_GAMEOVER_CLICK );
+			click_flag = true;
+			release_click_layer();
+		}
+		return;
+	}
+	function get_click_flag()
+	{
+		return ( click_flag );
+	}
+
+
+
+	function set_normal_break_data()
+	{
+		mode = MODE_GAME_OVER_TITLE_END_WAIT;
+
+		set_tmp_counter( GAME_OVER_TITLE_END_WAIT_TIME );
+
+		// キャンセル可能レイヤを生成する。
+		create_click_layer();
+		return;
+	}
+
+	// 通常終了処理開始設定
+	function start_fade_out()
+	{
+		mode = MODE_GAME_OVER_FADE_OUT;
+		starup_sys_fade();
+		fadeOutAll( GAME_OVER_FADE_OUT_TIME*TIMER_INTERVAL );
+		return;
+	}
+
+
+
+
+	// ADV呼び出し用開始処理
+	function set_adv_start_data()
+	{
+		mode = MODE_ADV_INFO_IN_START_WAIT;
+		set_tmp_counter( ADV_INFO_IN_START_WAIT );
+		return;
+	}
+	function set_adv_data()
+	{
+		mode = MODE_ADV_INFO_IN;
+		startup_fuji_chara();
+		set_tmp_counter( MODE_ADV_INFO_IN_NEXT_DELAY );
+		return;
+	}
+
+	// ADV呼び出し用終了データ
+	function set_adv_end_end_data()
+	{
+
+		// ゲームオーバーだった
+		if (parentLayer.getClearFlag()  ==  false) {
+			next = SCENE_CLOSE;
+			return;
+		}
+
+
+		// 終了だった場合
+		if (get_yes_no_dialog_type()  ==  YN_SELECT_NO) {
+			next = SCENE_CLOSE;
+			return;
+		}
+
+		// コンティニューする場合
+		parentLayer.ResetCharaStageData();
+		next = SCENE_STAGE1;
+		return;
+	}
+
+
+
+
+
+
+	// TMPカウンタ処理
+	var		tmp_counter;
+	function set_tmp_counter( _count )
+	{
+		tmp_counter = _count;
+		return;
+	}
+	function update_tmp_counter()
+	{
+		if (tmp_counter  ==  0)
+			return ( false );
+
+		tmp_counter -= 1;
+		return ( true );
+	}
+
+
+	function gameProc()
+	{
+
+		@if (DEBUG_MODE  ==  1)
+		if (CheckValid(key_state)  ==  true) {
+			with ( key_state )
+			{
+				.UpdateState();
+				if (.GetCtrlKeyState()  ==  .KEY_FIRAST)
+				{
+					stopAll();
+					next = SCENE_TITLE;
+					return true;
+				}
+			}
+		}
+		@endif
+
+
+		switch ( mode )
+		{
+		case MODE_START:
+		case MODE_START_GAME_OVER_TITLE:
+			start_gameover_title();
+
+			mode = MODE_GAME_OVER_TITLE_WAIT;
+			break;
+		case MODE_GAME_OVER_TITLE_WAIT:
+			if (check_gameover_title_anime()  ==  false)
+				break;
+
+			if (parentLayer.getClearFlag()  ==  false) {
+				mode = MODE_GAME_OVER_TITLE_END;
+				set_tmp_counter( GAME_OVER_TITLE_END_TIME );
+			} else {
+				set_adv_start_data();
+			}
+/*			if (parentLayer.getCallType()  ==  CALLTYPE_NORMAL) {
+				mode = MODE_GAME_OVER_TITLE_END;
+				set_tmp_counter( GAME_OVER_TITLE_END_TIME );
+			} else	set_adv_start_data();
+*/			break;
+		case MODE_GAME_OVER_TITLE_END:
+			if (update_tmp_counter()  ==  true)
+				break;
+			set_normal_break_data();
+			break;
+		case MODE_GAME_OVER_TITLE_END_WAIT:
+			if (update_tmp_counter()  ==  false) {
+				if (get_click_flag()  ==  false) {
+					break;
+				}
+			}
+			release_click_layer();
+			start_fade_out();
+			break;
+
+
+		// 通常終了処理
+		case MODE_GAME_OVER_FADE_OUT:
+			if (update_sys_fade()  ==  true)
+				break;
+			mode = MODE_GAME_OVER_FADE_END_WAIT;
+
+			if ((parentLayer.getCallType()  ==  CALLTYPE_ADV)
+			&&	(parentLayer.getClearFlag()  ==  false))
+					set_tmp_counter( GAME_OVER_FADE_END_WAIT_TIME2 );
+			else	set_tmp_counter( GAME_OVER_FADE_END_WAIT_TIME1 );
+			break;
+		case MODE_GAME_OVER_FADE_END_WAIT:
+			if (update_tmp_counter()  ==  true)
+				break;
+
+			if (parentLayer.getCallType()  ==  CALLTYPE_NORMAL)
+					next = SCENE_TITLE;
+			else	set_adv_end_end_data();
+			break;
+
+
+		// ADV用ゲームオーバー処理
+/*
+		case MODE_ADV_INFO_IN_START_WAIT:
+			if (update_tmp_counter()  ==  true)
+				break;
+			set_adv_data();
+			break;
+		case MODE_ADV_INFO_IN:
+			if (update_fuji_chara()  ==  true)
+				break;
+			if (update_tmp_counter()  ==  true)
+				break;
+			mode = MODE_ADV_INFO_MESSAGE_IN;
+			startup_message();
+			set_tmp_counter( ADV_INFO_MESSAGE_IN_NEXT_DELAY );
+			break;
+		case MODE_ADV_INFO_MESSAGE_IN:
+			if (update_message_pos()  ==  true)
+				break;
+			if (update_tmp_counter()  ==  true)
+				break;
+			mode = MODE_ADV_INFO_YES_NO_DLG_IN;
+			startup_yes_no_dialog();
+			set_tmp_counter( ADV_INFO_YES_NO_DLG_IN_SELECT_DELAY );
+			break;
+
+
+		case MODE_ADV_INFO_YES_NO_DLG_IN:
+			if (update_yes_no_dialog_pos()  ==  true)
+				break;
+			if (update_tmp_counter()  ==  true)
+				break;
+			mode = MODE_ADV_INFO_YES_NO_DLG;
+			start_select_yes_no_dialog();
+			break;
+*/
+		case MODE_ADV_INFO_IN_START_WAIT:
+			if (update_tmp_counter()  ==  true)
+				break;
+			set_adv_data();
+			break;
+		case MODE_ADV_INFO_IN:
+			if (update_fuji_chara()  ==  true)
+				break;
+			if (update_tmp_counter()  ==  true)
+				break;
+			mode = MODE_ADV_INFO_YES_NO_DLG_IN;
+			startup_message();
+			startup_yes_no_dialog();
+			set_tmp_counter( ADV_INFO_YES_NO_DLG_IN_SELECT_DELAY );
+			break;
+		case MODE_ADV_INFO_YES_NO_DLG_IN:
+			{
+			var	ret = false;
+				ret |= update_message_pos();
+				ret |= update_yes_no_dialog_pos();
+				if (ret  ==  true)
+					break;
+			}
+			if (update_tmp_counter()  ==  true)
+				break;
+			mode = MODE_ADV_INFO_YES_NO_DLG;
+			start_select_yes_no_dialog();
+			break;
+
+		case MODE_ADV_INFO_YES_NO_DLG:
+			if (check_yes_no_dialog_end()  ==  false)
+				break;
+			mode = MODE_ADV_INFO_YES_NO_END_WAIT;
+			stop_yes_no_dialog();
+			set_tmp_counter( ADV_INFO_YES_NO_END_WAIT );
+			break;
+		case MODE_ADV_INFO_YES_NO_END_WAIT:
+			if (update_tmp_counter()  ==  true)
+				break;
+			start_fade_out();
+			break;
+		}
+		return true;
+	}
+	function onEventPlaying()
+	{
+		return;
+	}
+}
+

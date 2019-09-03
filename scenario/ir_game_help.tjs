@@ -1,0 +1,998 @@
+/*******************************************************************************
+
+	風雲イリヤ城 - ゲームヘルプ
+
+*******************************************************************************/
+class CIryaFujiCharaPrn
+{
+var		parWin,parLayer;
+	function CIryaFujiCharaPrn( _pr_win, _pr_layer )
+	{
+		parWin   = _pr_win;
+		parLayer = _pr_layer;
+	}
+	function finalize()
+	{
+		release_data();
+	}
+
+
+	var		prn_layer;
+	var		frame_in_data;
+	function release_data()
+	{
+		if (CheckValid(prn_layer)  ==  true) {
+			EasyReleaseLayer( prn_layer );
+			prn_layer = void;
+		}
+
+		if (CheckValid(frame_in_data)  ==  true) {
+			EasyObjectInvalidate( frame_in_data );
+			frame_in_data = void;
+		}
+		return;
+	}
+
+
+	function Init( _layer_offset )
+	{
+		with (prn_layer = EasyCreateLayerObject(parWin,parLayer, "ir_game_help_fuji00",clNone, false, 0,0, _layer_offset))
+		{
+			.setPos( -.imageWidth, SCREEN_SIZE_H-.imageHeight );
+		}
+		frame_in_data = new CSinAnime();
+		return;
+	}
+	function SetupFrameInData()
+	{
+		with ( frame_in_data )
+		{
+			.SetAnimeParam( prn_layer.left, 0, 0, DEF_FRAME_IN_OBJ_TIME,DEF_FRAME_IN_OBJ_TIME );
+			.Start();
+		}
+		prn_layer.visible = true;
+		return;
+	}
+	function UpdateFrameInData()
+	{
+		with ( frame_in_data )
+		{
+			if (.CheckUpdateState()  !=  "UPDATE")
+				return ( false );
+			.Update();
+		}
+		return ( true );
+	}
+	function UpdateFrameIn()
+	{
+	var		pos;
+		if (CheckValid(frame_in_data)  ==  false)
+			return;
+		with ( prn_layer )
+		{
+			.setPos( (int)frame_in_data.GetNowNum(), .top );
+		}
+		return;
+	}
+}
+
+
+class CIriyaGameHelpID
+{
+	function CIriyaGameHelpID()
+	{
+	}
+	function finalize()
+	{
+	}
+
+
+	var		TUTORIAL_BASIC = "TUTORIAL_BASIC";
+
+	// ステージ名称IDからHELPステージIDへ変換
+	function  ConvertSceneIDToStageNo( _scene_id )
+	{
+		switch ( _scene_id )
+		{
+		case TUTORIAL_BASIC:
+			return ( 0 );
+		case SCENE_STAGE1:
+			return ( 1 );
+		case SCENE_STAGE2:
+			return ( 2 );
+		case SCENE_STAGE3:
+			return ( 3 );
+		case SCENE_BOSS:
+			return ( 4 );
+		default:
+//			throw new Exception( "！！！無いステージを渡された！！！" );
+			return ( -1 );
+		}
+	}
+	function GetMaxHelpStageNo()
+	{
+		return ( 5 );
+	}
+
+	// HELPステージIDからステージ名称IDへ変換
+	function  ConvertStageNoToSceneID( _stage_no )
+	{
+		switch ( _stage_no )
+		{
+		case 0:
+			return ( TUTORIAL_BASIC );
+		case 1:
+			return ( SCENE_STAGE1 );
+		case 2:
+			return ( SCENE_STAGE2 );
+		case 3:
+			return ( SCENE_STAGE3 );
+		case 4:
+			return ( SCENE_BOSS );
+		default:
+//			throw new Exception( "！！！無いステージを渡された！！！" );
+			return ( void );
+		}
+	}
+
+}
+
+
+class CIriyaGameHelp
+{
+var		parWin,parLayer;
+
+	function CIriyaGameHelp( _par_win, _par_layer )
+	{
+		parWin   = _par_win;
+		parLayer = _par_layer;
+
+		init_buffer();
+	}
+	function finalize()
+	{
+		Release();
+	}
+
+	// 各種表示位置情報
+	var		TOP_OBJ_PRN_BOTTOM_Y	= 88;
+	var		TITLE_POS_X				= 32;
+
+	var		PAGE_NO_POS_X			= SCREEN_SIZE_W-128;
+			var		PRN_PAGE_NOW_X	=16;
+			var		PRN_PAGE_MAX_X	=64;
+			var		PRN_PAGE_NOW_Y	=16;
+			var		PRN_PAGE_MAX_Y	=16;
+
+
+	var		BOTTOM_OBJ_PRN_TOP_Y	= SCREEN_SIZE_H-64;
+
+	var		NEXT_BTN_POS_X			= SCREEN_SIZE_W-180;
+	var		PREV_BTN_POS_X			= NEXT_BTN_POS_X-172;
+	var		RET_BTN_POS_X			= SCREEN_SIZE_W/2-160;
+
+
+
+
+
+	var		LAYER_HELP_CG			=0;
+	var		LAYER_BACK				=-1;
+
+	// prn_help内ローカルレイヤ優先度
+	var		LAYER_LOCAL_BUTTON		=-100;
+	var		LAYER_LOCAL_TITLE		=-198;
+	var		LAYER_LOCAL_PAGE_NO		=-199;
+	var		LAYER_LOCAL_CHARA		=-200;
+	var		LAYER_LOCAL_HELP_OLD	=-500;
+	var		LAYER_LOCAL_HELP_NOW	=-501;
+	var		LAYER_LOCAL_BACK		=-600;
+
+
+	var		HELP_FADE_TIME		=10;
+	var		NORMAL_FADE_TIME	=12;
+
+	var		FRAME_IN_OBJ_TIME	= DEF_FRAME_IN_OBJ_TIME;
+
+	var		DAMMY_HELP_PAGE=99;
+
+	// ボタン読みi込み
+	var		ID_PREV		= 0;
+	var		ID_NEXT		= 1;
+	var		ID_RET		= 2;
+	var		MAX_ID_BTN	= 3;
+	var		button_cg_data = 
+	[
+		%[
+			uf_cg:		"ir_tutorial04_01",
+			f_cg:		"ir_tutorial05_01",
+			prn_x:		PREV_BTN_POS_X,
+			prn_y:		BOTTOM_OBJ_PRN_TOP_Y,
+			call_id:	ID_PREV,
+		],
+		%[
+			uf_cg:		"ir_tutorial04_02",
+			f_cg:		"ir_tutorial05_02",
+			prn_x:		NEXT_BTN_POS_X,
+			prn_y:		BOTTOM_OBJ_PRN_TOP_Y,
+			call_id:	ID_NEXT,
+		],
+		%[
+			uf_cg:		"ir_tutorial04_00",
+			f_cg:		"ir_tutorial05_00",
+			prn_x:		RET_BTN_POS_X,
+			prn_y:		BOTTOM_OBJ_PRN_TOP_Y,
+			call_id:	ID_RET,
+		],
+	];
+
+
+	var		prn_layer_offset;
+	var		prn_px,prn_py;
+
+
+	var		prn_help;
+	var		prn_back;
+
+	var		now_help;
+	var		old_help;
+
+	var		prn_chara;
+	var		prn_title;
+
+
+	var		prn_page_no;
+	var		prn_page_base;
+	var		prn_page_now;
+	var		prn_page_max;
+
+
+	var		now_prn_page;
+
+	var		prn_button;
+
+
+	var		frame_in_data;
+
+	var		help_stage_no;
+	var		max_help_page;
+
+
+	var		mode;
+		var		MODE_NONE			=0;
+		var		MODE_FRAME_IN		=10;
+		var		MODE_FRAME_IN_OBJ	=15;
+		var		MODE_CHANGE_PAGE	=20;
+		var		MODE_NORMAL_WAIT	=30;
+		var		MODE_FADE_OUT		=40;
+		var		MODE_END			=100;
+
+	function init_buffer()
+	{
+		mode = MODE_NONE;
+
+		prn_layer_offset = 0;
+		prn_px = 0;
+		prn_py = 0;
+
+		help_stage_no = 0;;
+		max_help_page = 0;;
+
+		prn_help = void;
+
+		now_help = void;
+		old_help = void;
+
+		prn_chara = void;
+		prn_title = void;
+
+		prn_page_no   = void;
+		prn_page_base = void;
+		prn_page_now  = void;
+		prn_page_max  = void;
+
+		frame_in_data = void;
+		return;
+	}
+
+	function Init()
+	{
+	var		i;
+		Release();
+		// 表示用レイヤ作成
+		with (prn_help = new CSpriteLayer(parWin, parLayer))
+		{
+			.setPriority( prn_layer_offset+LAYER_HELP_CG );
+			.setPos( prn_px, prn_py );
+			.setSize( 0, 0 );
+		}
+
+		prn_button = new Array();
+		for (i=0;  i<MAX_ID_BTN;  i++) {
+			with (prn_button[i] = new CIriyaNormalButton(parWin,prn_help))
+			{
+				.Init();
+				.SetLayerPriority( LAYER_LOCAL_BUTTON );
+				.LoadUnFocusCG( button_cg_data[i].uf_cg );
+				.LoadFocusCG( button_cg_data[i].f_cg );
+				.SetLayerPosition( button_cg_data[i].prn_x, button_cg_data[i].prn_y );
+				.SetClickCallbackFunc( push_btn_callback, button_cg_data[i].call_id );
+				.SetCancelCallback( cancel_call_back );
+
+
+				.SetFocusSEPlayFile( SE_TUTORIAL_FOCUS );
+			}
+		}
+
+
+		prn_chara = new CIryaFujiCharaPrn( parWin, prn_help );
+		prn_chara.Init( LAYER_LOCAL_CHARA );
+		return;
+	}
+
+
+	function Release()
+	{
+		release_prn_back();
+
+
+		if (CheckValid(prn_help)  ==  true) {
+			ReleaseFadeAnime( prn_help );
+			EasyReleaseLayer( prn_help );
+			prn_help = void;
+		}
+
+
+		release_page_no();
+
+		release_help_cg();
+		relese_button();
+
+		release_title();
+		release_chara();
+
+		ReleaseArray( frame_in_data );
+		frame_in_data = void;
+		return;
+	}
+
+
+
+
+	function relese_button()
+	{
+	var		i;
+		if (CheckValid(prn_button)  ==  true) {
+			for (i=0;  i<prn_button.count;  i++) {
+				if (CheckValid(prn_button[i])  ==  false)
+					continue;
+				prn_button[i].Release();
+				EasyObjectInvalidate( prn_button[i] );
+				prn_button[i] = void;
+			}
+			prn_button = void;
+		}
+		return;
+	}
+
+
+
+
+
+
+	function release_help_cg()
+	{
+		invalidate_help_cg( old_help );
+		old_help = void;
+		invalidate_help_cg( now_help );
+		now_help = void;
+		return;
+	}
+
+	function release_chara()
+	{
+		if (CheckValid(prn_chara)  ==  true) {
+			EasyObjectInvalidate( prn_chara );
+			prn_chara = void;
+		}
+		return;
+	}
+
+	function release_title()
+	{
+		if (CheckValid(prn_title)  ==  true) {
+			EasyReleaseLayer( prn_title );
+			prn_title = void;
+		}
+		return;
+	}
+
+
+	function release_prn_back()
+	{
+		if (CheckValid(prn_back)  ==  true) {
+			EasyReleaseLayer( prn_back );
+			prn_back = void;
+		}
+		return;
+	}
+
+
+	function release_prn_now_page()
+	{
+		if (CheckValid(prn_page_now)  ==  true) {
+			ReleaseFadeAnime( prn_page_now );
+			EasyReleaseLayer( prn_page_now );
+			prn_page_now = void;
+		}
+		return;
+	}
+	function release_page_no()
+	{
+		if (CheckValid(prn_page_no)  ==  true) {
+			release_prn_now_page();
+			if (CheckValid(prn_page_max)  ==  true) {
+				EasyReleaseLayer( prn_page_max );
+				prn_page_now = void;
+			}
+			if (CheckValid(prn_page_base)  ==  true) {
+				EasyReleaseLayer( prn_page_base );
+				prn_page_base = void;
+			}
+
+			EasyReleaseLayer( prn_page_no );
+			prn_page_no = void;
+		}
+		return;
+	}
+
+
+
+
+
+
+
+	function InitGameHelp( _scene_id )
+	{
+	var		convert_id;
+
+		convert_id = new CIriyaGameHelpID();
+		@if (0)
+		// 背景CGレイヤの生成
+		release_prn_back();
+		with (prn_back = new CSpriteLayer(parWin, prn_help))
+		{
+			.setPriority( LAYER_LOCAL_BACK );
+			.layerImageFromFill( 0,0, SCREEN_SIZE_W, SCREEN_SIZE_H, RGBA_MAKE(0,0,0,0), false );
+		}
+		@endif
+
+		// HELPのCG情報を設定
+		help_stage_no = convert_id.ConvertSceneIDToStageNo( _scene_id );
+		for (max_help_page=0;  ;  max_help_page++) {
+			if (isImageFile(get_help_cg_name(max_help_page))  ==  false)
+				break;
+		}
+
+		// HELPタイトルの読み込み
+		release_title();
+		with (prn_title = EasyCreateLayerObject(parWin,prn_help,
+			"ir_tutorial03_%02d".sprintf(help_stage_no), clNone, false, 0,0, LAYER_LOCAL_TITLE))
+		{
+			.setPos( TITLE_POS_X, 0 );
+		}
+
+
+		create_page_no();
+
+		invalidate convert_id;
+		return;
+	}
+
+
+
+
+
+
+
+	// 表示レイヤの表示優先度オフセット位置を指定する
+	function SetPriorityOffset( _offset )
+	{
+		prn_layer_offset = _offset;
+		if (CheckValid(prn_help)  ==  true)
+			prn_help.setPriority( prn_layer_offset+LAYER_HELP_CG );
+		return;
+	}
+
+	function SetBasePosition( _px, _py )
+	{
+		prn_px = _px;
+		prn_py = _py;
+		if (CheckValid(prn_help)  ==  true)
+			prn_help.setPos( prn_px, prn_py );
+		return;
+	}
+
+
+	function SetUp()
+	{
+	var		i;
+		if (CheckValid(prn_help)  ==  false)
+			return;
+		if (CheckValid(prn_button)  ==  false)
+			return;
+
+
+		// ページ0からの表示設定
+		now_prn_page = 0;
+		setup_help_cg_page( DAMMY_HELP_PAGE );
+		StartFadeAnimeEx( now_help, HELP_FADE_TIME );
+
+
+		// 親レイヤの設定
+		with ( now_help )
+		{
+			prn_help.visible = false;
+			prn_help.setSize( .width, .height );
+		}
+		EasyStartFadeAnime( prn_help, 0,255, NORMAL_FADE_TIME );
+
+		mode = MODE_FRAME_IN;
+		return;
+	}
+
+	function Print()
+	{
+		prn_help.visible = true;
+		return;
+	}
+
+
+
+
+
+
+
+
+
+	function create_prn_page_no( _page_no )
+	{
+		release_prn_now_page();
+		prn_page_now = EasyCreateLayerObject( parWin,prn_page_no, "ir_tutorial06_%02d".sprintf(1+_page_no),
+							clNone, true, PRN_PAGE_NOW_X,PRN_PAGE_NOW_Y, prn_page_base.absolute+1 );
+		return;
+	}
+	function create_page_no()
+	{
+		release_page_no();
+
+		prn_page_no = new CSpriteLayer( parWin, prn_help );
+
+		prn_page_base = EasyCreateLayerObject( parWin,prn_page_no,
+								"ir_tutorial03_05", clNone, true, 0,0, 0 );
+
+		prn_page_max  = EasyCreateLayerObject( parWin,prn_page_no, "ir_tutorial06_%02d".sprintf(max_help_page),
+								clNone, true, PRN_PAGE_MAX_X,PRN_PAGE_MAX_Y, prn_page_base.absolute+1 );
+
+		create_prn_page_no( now_prn_page );
+
+		with ( prn_page_no )
+		{
+			.setPriority( LAYER_LOCAL_PAGE_NO );
+			.setPos( PAGE_NO_POS_X, 0 );
+			.setSize( prn_page_base.imageWidth, prn_page_base.imageHeight );
+		}
+		return;
+	}
+	function change_page_now_no( _page )
+	{
+		create_prn_page_no( _page );
+		EasyStartFadeAnime( prn_page_now, 0,255, HELP_FADE_TIME );
+		return;
+	}
+
+
+
+
+
+
+
+
+
+
+
+
+
+	function get_help_cg_name( _page_no )
+	{
+		return ( "ir_game_help_%02d_%02d".sprintf( help_stage_no, _page_no ) );
+	}
+
+	// HELPのCGを開放する
+	function invalidate_help_cg( _help_cg )
+	{
+		if (CheckValid(_help_cg)  ==  true) {
+			ReleaseFadeAnime( _help_cg );
+			EasyReleaseLayer( _help_cg );
+		}
+		return;
+	}
+
+	function setup_help_cg_page( _page )
+	{
+		invalidate_help_cg( now_help );
+		now_help = EasyCreateLayerObject( parWin,prn_help, get_help_cg_name(_page),
+								clNone, false, 0,0, LAYER_LOCAL_HELP_NOW );
+		EasyStartFadeAnime( now_help, 0,255, HELP_FADE_TIME );
+		StartFadeAnimeEx( now_help, HELP_FADE_TIME );
+		now_help.FadeAnime.Stop();
+		now_help.visible = true;
+		return;
+	}
+
+	function help_fade_out( _layer )
+	{
+		with ( _layer.FadeAnime )
+		{
+			.SetDirectionDec();
+			.Restart();
+		}
+		with ( _layer )
+		{
+			.setPriority( LAYER_LOCAL_HELP_OLD );
+			.visible = true;
+		}
+		return;
+	}
+	// HELPのCGのページ変更
+	function change_page( _next_page )
+	{
+		invalidate_help_cg( old_help );
+		old_help = now_help;
+		now_help = void;
+
+		setup_help_cg_page( _next_page );
+
+
+		help_fade_out( old_help );
+		return;
+	}
+
+
+
+
+
+
+
+
+
+
+
+
+
+	function update_frame_in_data( _p_data )
+	{
+		with ( _p_data )
+		{
+			if (.CheckUpdateState()  !=  "UPDATE")
+				return ( false );
+			.Update();
+		}
+		return ( true );
+	}
+	function get_frame_in_data( _p_data )
+	{
+		return ( _p_data.GetNowNum() );
+	}
+
+
+	function setup_frame_in_obj()
+	{
+		ReleaseArray( frame_in_data );
+		frame_in_data = new Array();
+
+
+		prn_chara.SetupFrameInData();
+
+
+		with (frame_in_data[1] = new CSinAnime())
+		{
+			.SetAnimeParam( -prn_title.imageHeight, TOP_OBJ_PRN_BOTTOM_Y, 0, FRAME_IN_OBJ_TIME,FRAME_IN_OBJ_TIME );
+			.Start();
+		}
+		prn_title.visible = true;
+
+
+
+		with (frame_in_data[2] = new CSinAnime())
+		{
+			.SetAnimeParam( SCREEN_SIZE_H, BOTTOM_OBJ_PRN_TOP_Y, 0, FRAME_IN_OBJ_TIME,FRAME_IN_OBJ_TIME );
+			.Start();
+		}
+		// ボタンの表示設定
+		if (max_help_page  >  1) {
+		var		i;
+			for (i=0;  i<prn_button.count;  i++) {
+				prn_button[i].FadeIn(0,0,1);
+				prn_button[i].Print();
+			}
+			prn_button[ID_NEXT].FadeIn(255,255,1);
+		}
+		prn_button[ID_RET].FadeIn(255,255,1);
+
+
+		prn_page_no.visible = true;
+
+		set_frame_in_pos();
+		return;
+	}
+
+	function set_frame_in_pos()
+	{
+	var		pos;
+	var		i;
+		if (CheckValid(frame_in_data)  ==  false)
+			return;
+
+		prn_chara.UpdateFrameIn();
+
+
+		if (CheckValid(frame_in_data[1])  ==  true) {
+			pos = get_frame_in_data( frame_in_data[1] );
+			with ( prn_title )
+			{
+				.setPos( .left, (int)pos-.imageHeight );
+			}
+			with ( prn_page_no )
+			{
+				.setPos( .left, (int)pos-.imageHeight );
+			}
+
+		}
+
+		if (CheckValid(frame_in_data[2])  ==  true) {
+			pos = get_frame_in_data( frame_in_data[2] );
+			for (i=0;  i<prn_button.count;  i++) {
+				with ( prn_button[i] )
+				{
+					.SetLayerPosition( .GetLayerPositionX(), (int)pos );
+				}
+			}
+		}
+		return;
+	}
+
+
+	function process_frame_in_obj_all()
+	{
+	var		ret;
+	var		i;
+		ret = false;
+
+		if (CheckValid(frame_in_data)  ==  false)
+			return ( ret );
+
+		for (i=0;  i<frame_in_data.count;  i++) {
+			if (CheckValid(frame_in_data[i])  ==  false)
+				continue;
+			ret |= update_frame_in_data( frame_in_data[i] );
+		}
+
+		ret |= prn_chara.UpdateFrameInData();
+
+		set_frame_in_pos();
+		return ( ret );
+	}
+
+
+
+
+
+
+
+
+
+
+	function update_fade_object( _layer )
+	{
+		if (CheckValid(_layer)  ==  true) {
+			if (ProcessFadeAnime(_layer)  ==  "UPDATING")
+				return ( true );
+		}
+		return ( false );
+	}
+	function process_fade_anime()
+	{
+	var		i;
+	var		ret;
+		ret = false;
+
+
+		ret |= update_fade_object( prn_help );
+		ret |= update_fade_object( old_help );
+
+		if (CheckValid(prn_button)  ==  true) {
+			for (i=0;  i<prn_button.count;  i++) {
+				if (CheckValid(prn_button[i])  ==  false)
+					continue;
+				if (prn_button[i].UpdateFade()  ==  false)
+					ret |= true;
+			}
+		}
+
+		ret |= update_fade_object( prn_page_now );
+
+		return ( ret );
+	}
+	function Update()
+	{
+		switch ( mode )
+		{
+		case MODE_NONE:
+			break;
+
+		case MODE_FRAME_IN:
+			if (process_fade_anime()  ==  true)
+				break;
+			mode = MODE_FRAME_IN_OBJ;
+			setup_frame_in_obj();
+			break;
+
+		case MODE_FRAME_IN_OBJ:
+			{
+			var		ret;
+				ret = false;
+				ret |= process_frame_in_obj_all();
+				ret |= process_fade_anime();
+				if (ret  !=  false)
+					break;
+				mode = MODE_NORMAL_WAIT;
+//				start_button_click();
+				change_page( now_prn_page );
+				mode = MODE_CHANGE_PAGE;
+			}
+			break;
+
+		case MODE_CHANGE_PAGE:
+			if (process_fade_anime()  ==  true)
+				break;
+			mode = MODE_NORMAL_WAIT;
+			start_button_click();
+			break;
+
+		case MODE_NORMAL_WAIT:
+			break;
+
+		case MODE_FADE_OUT:
+			if (process_fade_anime()  ==  true)
+				break;
+			mode = MODE_END;
+			break;
+		}
+
+		return;
+	}
+
+
+
+
+
+
+	// 表示されているボタンの受付開始
+	function start_button_click()
+	{
+	var		i;
+
+
+		with ( now_help )
+		{
+			.setMouseDownCallback( back_button_hit );
+			.setHitCheckAlphaLimit( "ALL" );
+		}
+
+
+		for(i=0;  i<prn_button.count;  i++) {
+			if (prn_button[i].GetButtonAlpha()  ==  255) {
+				prn_button[i].Start();
+			}
+		}
+		UpdateCursorPos2( parLayer );
+		return;
+	}
+	// すべてのボタンの受付停止
+	function stop_button_click()
+	{
+	var		i;
+
+		with ( now_help )
+		{
+			.setMouseDownCallback( void );
+			.setHitCheckAlphaLimit( "NONE" );
+		}
+
+
+		for(i=0;  i<prn_button.count;  i++) {
+			prn_button[i].Stop();
+			prn_button[i].Print();
+		}
+		return;
+	}
+
+
+	function button_fade_in( _id )
+	{
+		prn_button[_id].FadeIn( 0,255, HELP_FADE_TIME );
+		return;
+	}
+	function button_fade_out( _id )
+	{
+		prn_button[_id].FadeIn( 255,0, HELP_FADE_TIME );
+		return;
+	}
+	// ボタン上でのプッシュ割り込み
+	function push_btn_callback( _id )
+	{
+		// 戻るボタンだったらキャンセル処理
+		if (_id  ==  ID_RET) {
+			cancel_call_back();
+			return;
+		}
+
+
+		// 全ボタンをリセット
+		stop_button_click();
+		mode = MODE_CHANGE_PAGE;
+
+		stopSound( ,, );
+		PlaySE( SE_TUTORIAL_CHANGE_PAGE );
+
+		if (_id  ==  ID_PREV) {
+			if (now_prn_page  >  0) {
+				now_prn_page -= 1;
+				change_page( now_prn_page );
+				change_page_now_no( now_prn_page );
+				if (now_prn_page  ==  0)
+					button_fade_out( ID_PREV );
+				if (prn_button[ID_NEXT].GetButtonAlpha()  ==  0)
+					button_fade_in( ID_NEXT );
+			}
+		} else {
+			if ((now_prn_page+1)  <  max_help_page) {
+				now_prn_page += 1;
+				change_page( now_prn_page );
+				change_page_now_no( now_prn_page );
+				if ((now_prn_page+1)  ==  max_help_page)
+					button_fade_out( ID_NEXT );
+				if (prn_button[ID_PREV].GetButtonAlpha()  ==  0) {
+					button_fade_in( ID_PREV );
+				}
+
+			}
+		}
+
+		return;
+	}
+	function back_button_hit( _layer, _x,_y, _button,_shift )
+	{
+		if (_button  ==  mbRight)
+			cancel_call_back();
+		return;
+	}
+
+	// ボタン上でのキャンセル
+	function cancel_call_back()
+	{
+
+
+		stopSound( ,, );
+		PlaySE( SE_TUTORIAL_MENU_CANCEL );
+
+		mode = MODE_FADE_OUT;
+		stop_button_click();
+		EasyStartFadeAnime( prn_help, 255,0, NORMAL_FADE_TIME );
+		return;
+	}
+
+}
+
+
+

@@ -1,0 +1,565 @@
+/*-----------------------------------------------------------------------------/
+/	Copyright (C) TYPE-MOON All Rights Reserved.
+/		遠坂神社用ルーチン
+/-----------------------------------------------------------------------------*/
+if(typeof global.jinja_object == "undefined")
+{
+Scripts.execStorage("subroutine.tjs");
+Scripts.execStorage("HFChipLayer.tjs");
+
+class JinjaPlugin extends KAGPlugin
+{
+	var	window;
+	var	spacing	= 5;
+	var	margin	= 6;
+	var OmikujiDataFile	= "おみくじデータ.txt";			//	おみくじファイル名
+	var	FotuneDataFile	= "おみくじ運勢対応.txt";
+
+	var	layers	= %[];
+	var	rg;
+
+	var	OmikujiData;
+	var	FotuneScriptData, EmaScriptData;
+
+	var	lastFotuneScript;
+
+	function JinjaPlugin(win)
+	{
+		super.KAGPlugin();
+		window	= win;
+		rg		= new Math.RandomGenerator();
+	}
+
+	function finalize()
+	{
+		releaseDictionary(layers);
+		release(rg);
+		super.finalize(...);
+	}
+
+	//	金額を設定する
+	var	lastValue;	//	前回描画時の所持金
+	function setMoney()
+	{
+		//	レイヤーの有無をチェック
+		if(layers.money == void)
+		{
+			layers.money	= [];
+			with(layers.money[0] = new ChipLayer(window, window.back.base))
+				.visible	= false;
+			with(layers.money[1] = new ChipLayer(window, window.fore.base))
+				.visible	= false, .name	= "";
+			lastValue	= void;
+		}
+
+		var	value	= tf.pocketMoney;
+		if(value === void)
+			value	= tf.pocketMoney = 0;
+		if(lastValue === value)
+			return;
+
+		//	必要な画像を読み込む
+		var	layer_money, layer_yen, layer_num;
+		with(layer_money = new Layer(window, window.primaryLayer))
+			.loadImages("jj_money"), .setSizeToImageSize();
+		with(layer_yen = new Layer(window, window.primaryLayer))
+			.loadImages("jj_yen"), .setSizeToImageSize();
+		with(layer_num = new Layer(window, window.primaryLayer))
+			.loadImages("jj_number"), layer_num.setSize(layer_num.imageWidth \ 10, layer_num.imageHeight);
+
+		//	金額を描画
+		with(layers.money[0])
+		{
+			value	= string value;
+			var	len	= value.length;
+			.name	= "金額表示: "+value+"円";
+			.setImageSize(layer_money.width + spacing*2 + layer_num.width * len + spacing + layer_yen.width, layer_money.height);
+			.setSizeToImageSize();
+			.fillRect(0, 0, .width, .height, 0x00000000);
+			.copyRect(0, 0, layer_money, 0, 0, layer_money.width, layer_money.height);
+			var	l	= layer_money.width + spacing * 2;
+			var	t	= (layer_money.height - layer_num.height) \ 2;
+			for(var i=0; i<len; i++)
+			{
+				.copyRect(l, t, layer_num, value[i] * layer_num.width, 0, layer_num.width, layer_num.height);
+				l	+= layer_num.width;
+			}
+			.copyRect(.width - layer_yen.width, .height - layer_yen.height, layer_yen, 0, 0, layer_yen.width, layer_yen.height);
+
+			//	左下へ位置する
+//			.setPos(.parent.width - .width - margin, .parent.height - .height - margin);	//	右下
+			.setPos(margin, .parent.height - .height - margin);
+			.absolute	= 200000000;
+			.opacity	= 255;
+		}
+		with(layers.money[1])
+		{
+			.assignImages(layers.money[0], true);
+			.setSizeToImageSize();
+			.setPos(layers.money[0].left, layers.money[0].top);
+			.absolute	= 200000000;
+			.name	= "金額表示: "+value+"円";
+		}
+	}
+
+	//	裏の金額表示を設定
+	function visibleMoneyByBack(flag)
+	{
+		setMoney();
+
+		var	back	= layers.money[0].parent == kag.fore.base ? 1 : 0;
+		layers.money[back].visible	= flag;
+	}
+
+	//	金額表示レイヤーの破棄
+	function eraseMoney()
+	{
+		releaseArray(layers.money);
+		layers.money	= void;
+	}
+
+	//	おみくじデータの読込
+	function loadOmikujiData()
+	{
+		if(OmikujiData == void)
+		{
+			var	lines	= [].load(OmikujiDataFile);
+			var	omikuji	= [];
+			for(var i=0; i<lines.count; i++)
+			{
+				if(lines[i][0] == "#")
+					continue;
+				var	tmp	= lines[i].split("\t");
+				omikuji[tmp[1]]	= [] if(omikuji[tmp[1]] == void);
+				omikuji[tmp[1]].add([tmp[2], tmp[3]]);
+			}
+			OmikujiData	= omikuji;
+
+			lines	= [].load(FotuneDataFile);
+			var fotunes	= %[];
+			lastFotuneScript	= %[];
+			for(var i=0; i<lines.count; i++)
+			{
+				if(lines[i] == "" || lines[i][0] == "#")
+					continue;
+
+				var	tmp	= lines[i].split("\t");
+				tmp[0]	= "通常" if tmp[0] == "";
+				if(fotunes[tmp[0]] == void)
+				{//	指定の時間帯が未出
+					fotunes[tmp[0]]	= %[];
+					lastFotuneScript[tmp[0]]	= %[];
+				}
+				if(fotunes[tmp[0]][tmp[2]] == void)
+				{//	指定の運勢が未出
+					fotunes[tmp[0]][tmp[2]]	= [];
+				}
+				fotunes[tmp[0]][tmp[2]].add(tmp[1]);
+			}
+			FotuneScriptData	= fotunes;
+		}
+	}
+
+	//	おみくじデータの破棄
+	function releaseOmikujiData()
+	{
+		releaseArray(OmikujiData);
+		releaseArray(FotuneScriptData);
+		OmikujiData	= void;
+	}
+
+	//	おみくじを選ぶ
+	//	result[0〜2] に運勢の言葉が入り、result[3] に総合のポイントが入る
+	function choiceOmikujiData()
+	{
+		var	data	= OmikujiData;
+		var	result	= [];
+		var	choiced	= %[];
+		var	choice	= 3;
+		for(var i=0; i<choice; i++)
+		{
+			//	ジャンルを選択
+			var	genreno;
+			do {
+				genreno	= int(rg.random() * data.count);
+			} while(data[genreno]==void || choiced[genreno]);
+			choiced[genreno]	= true;	//	そのジャンルを既出とする
+
+			//	ポイントを選択
+			var	point	= int(rg.random() * data[genreno].count);
+
+			//	選んだものを登録する
+			result[choice]	+= +data[genreno][point][0];	//	総合ポイント
+			dm("point["+i+"] = "+data[genreno][point][0]);
+			result[i]		= data[genreno][point][1];	//	運勢
+		}
+		return result;
+	}
+
+	//	運勢に応じたスクリプトを選ぶ
+	function getFotuneScript(hour, fotune)
+	{
+		var	list	= FotuneScriptData[hour];
+		list	= FotuneScriptData[hour = "通常"] if list == void;
+		list	= list[fotune];
+
+		if(list != void)
+		{
+			//	重複しないようにスクリプトを選ぶ
+			var	no;
+			do
+			{
+				no	= int(Math.random() * list.count);
+			}
+			while(list.count > 1 && lastFotuneScript[hour][fotune] == no);
+			lastFotuneScript[hour][fotune]	= no;
+
+			return "おみくじ運勢%03d.ks".sprintf(list[no]);
+		}
+		else
+			return "おみくじ運勢FFF.ks";	//	存在しない
+	}
+
+	var	ema_menu;
+	function showEmaMenu(st, ret, disp, tm)
+	{
+		if(ema_menu !== void)
+			invalidate ema_menu;
+		ema_menu	= new EmaMenuLayer(kag, kag.fore.base, this, tm);
+		ema_menu.show();
+		ema_menu.return_storage	= st;
+		ema_menu.return_label	= ret;
+		ema_menu.disp_label		= disp;
+		return true;
+	}
+
+	function hideEmaMenu()
+	{
+		if(ema_menu === void)
+			return false;
+		kag.process(ema_menu.return_storage, ema_menu.return_label);
+		ema_menu.hide();
+		resetRClickExp();
+	}
+}
+kag.addPlugin(global.jinja_object = new JinjaPlugin(kag));
+
+//	指定のレイヤーへおみくじ文章を書き込む
+function drawOmikujiText(layer, l, t, w, h, str, ff, fh, fb, linespacing, spacing, color)
+{
+	with(layer)
+	{
+		//	現在の値を記録
+		var	lastheight	= .font.height;
+		var	lastface	= .font.face;
+		var	lastbold	= .font.bold;
+		var	lastangle	= .font.angle;
+
+		//	設定
+		.font.height= fh != void ? fh : 30;
+		.font.face	= ff != void ? "@"+ff : "@ＭＳ 明朝";
+		.font.bold	= fb != void ? fb : true;
+		.font.angle	= 2700;
+		spacing		= 2 if spacing === void;
+		linespacing	= 20 if linespacing === void;
+		color		= [ 0x000000, 0xFF0000 ] if color === void;
+
+		var	lines	= str;
+		var	mw		= .font.getTextWidth(lines[0][0]);
+		//	行数から描画位置を計算
+		var lw = mw * lines.count + linespacing * (lines.count - 1);	//	描画範囲
+		var cl = l + lw + ((w - lw) >> 1) + (mw>>1);	//	最初の描画行の中心座標
+
+		//	描画
+		var tcnt = 0;
+		for(var i=0; i<lines.count; i++)
+		{
+			var ct = t;
+			var line = lines[i];
+			var	col	= color[0];
+			for(var i=0; i<line.length; i++)
+			{
+				var c = line[i];
+				if(c == "『")
+				{
+					col	= color[1];
+					continue;
+				}
+				else if(c == "』")
+				{
+					col	= color[0];
+					continue;
+				}
+				var fw = .font.getTextWidth(c), fh = .font.getTextHeight(c);
+				var tl = cl - (fw >> 1), tt = ct;
+				.drawText(tl, tt, c, col);
+				ct	+= fh + spacing;
+				tcnt++;
+			}
+			cl	-= mw + linespacing;
+		}
+
+		//	元に戻す
+		.font.height= lastheight;
+		.font.face	= lastface;
+		.font.bold	= lastbold;
+		.font.angle	= lastangle;
+	}
+}
+
+var	kt	= kag.tagHandlers;
+kt.loadjinja	= function(elm)
+{
+	global.jinja_object.loadOmikujiData();
+	return 0;
+} incontextof kag;
+
+kt.releasejinja	= function(elm)
+{
+	global.jinja_object.releaseOmikujiData();
+	return 0;
+} incontextof kag;
+
+kt.showmoneyinfo	= function(elm){ global.jinja_object.visibleMoneyByBack(true); return 0;} incontextof kag;
+kt.hidemoneyinfo	= function(elm){ global.jinja_object.visibleMoneyByBack(false); return 0;} incontextof kag;
+kt.erasemoneyinfo	= function(elm){ global.jinja_object.eraseMoney(); return 0;} incontextof kag;
+kt.updatemoneyinfo	= function(elm){ global.jinja_object.setMoney(); return 0;} incontextof kag;
+kt.showemamenu	= function(elm)
+{
+	global.jinja_object.showEmaMenu(elm.storage, elm.target, elm.disp, elm.timezone);
+	return 0;
+} incontextof kag;
+/*
+kt.	= function(elm)
+{
+	return 0;
+} incontextof kag;
+*/
+
+//	絵馬購入
+Scripts.execStorage("MenuBackButtonLayer.tjs");
+class EmaMenuLayer extends ExtendMenuLayer
+{
+	var	enterse	= "";
+	var clickse	= "";
+	var	btndata	= [
+		"tf['trail_夜編2-26']&&tf['trail_学校・4日目-26']",			"ema01",	500,		//	フラグ、対応画像、価格
+		"tf['trail_衛宮邸・夜開始-15']",							"ema02",	800,
+		"tf['trail_衛宮邸・夜開始-15']",							"ema03",	800,
+		"tf['trail_街編・2日目-07']&&tf['trail_柳洞寺・4日目-07']",	"ema04",	500,
+		"tf['trail_衛宮邸・3日目-22']",								"ema05",	800,
+		"tf['trail_街・特別編-05']",								"ema06",	800,
+		"tf['trail_街・特別編-05']",								"ema07",	800,
+		"tf['trail_街編・4日目-04']",								"ema08",	500,
+		"tf['trail_街編・4日目-16']|tf['trail_街編・1日目-04']",	"ema09",	800,
+		"tf['trail_衛宮邸・夜マップ-15']",							"ema10",	1000,
+		"tf['trail_衛宮邸・4日目-04']",								"ema11",	1000,
+		"tf['trail_街・特別編-07']",								"ema12",	800,
+		"tf['trail_街・特別編-05']",								"ema13",	800,
+		"tf['trail_街・特別編-14']",								"ema14",	800,
+		"tf['trail_街・特別編-02']&&tf['trail_魔境編-15']",			"ema15",	800,
+		"tf['trail_学校・3日目-26']",								"ema16",	300,
+		"tf['trail_学校・3日目-26']",								"ema17",	100,
+		"",															"ema18",	300,
+		"tf['trail_柳洞寺・4日目-02']&&tf['trail_学校・3日目-11']",	"ema19",	300,
+		"tf['trail_衛宮邸・4日目-04']&&tf['trail_街編・2日目-24']",	"ema20",	500,
+		"tf['trail_街編・4日目-17']",								"ema21",	2000,
+		"tf['trail_街編・4日目-17']",								"ema22",	2000,
+		"tf['trail_街編・4日目-17']",								"ema23_01,ema23_02,ema23_03,ema23_04",	4000,
+		"",															"ema24",	1000,
+		"tf['trail_真・冒頭-05']",									"ema25",	300,
+		"tf['trail_真・冒頭-04']",									"ema26",	300,
+		"tf['trail_衛宮邸・夜開始-15']",							"ema27",	1000,
+		"tf['trail_衛宮邸・1日目-06']&&tf['trail_柳洞寺・4日目-02']","ema28",	2000,
+		"tf['trail_街編・4日目-04']",								"ema29",	2000,
+		"",															"ema30",	200,
+		"",															"ema31",	200,
+		"",															"ema32",	200,
+		"",															"ema33",	200,
+		"tf['trail_衛宮邸・夜開始-15']",							"ema34",	1000,
+		"tf['レベル']>=4",											"ema35",	1000,
+		"tf['trail_街編・4日目-04']&&tf['trail_衛宮邸・1日目-37']",	"ema36",	1000,
+		"tf['trail_街・特別編-08']",								"ema37",	50000,
+		"tf['trail_真・冒頭-10']",									"ema38",	50000,
+		"tf['trail_街・特別編-04']",								"ema39_01,ema39_02,ema39_03",	30000,
+		"global.emacnt>=39",										"ema40",	100		//	39枚の絵馬を見たら立つ
+	];
+	var	time	= 600;
+
+	var showed, acceptable;
+	var	plugin;
+
+	var	back;
+	var	buttons	= [];
+	var	ema;
+
+	var	return_storage, return_label;
+	var	disp_label;
+
+	function EmaMenuLayer(win, par, plugin, timezone)
+	{
+		super.ExtendMenuLayer(...);
+		name	= "絵馬購入メニューレイヤー";
+		this.plugin	= plugin;
+
+		loadImages("jj_emabg"+timezone);
+		setSizeToImageSize();
+		hitThreshold	= 0;
+		absolute		= 50000;
+
+		//	"Back"ボタン作成
+		with(back = new global.ExButtonLayer(win, this, "back", 675, 536, "jj_ret", "一つ戻ります。"))
+		{
+			.mode	= 3;
+			.entersound	= enterse;
+			.hitThreshold	= 0;
+			.readyVisible();
+		}
+
+		//	ボタン配置
+		var	bl = 80, bt = 145, stepx = 83, stepy = 71;
+		var	l = bl, t = bt;
+		var	data	= btndata;
+		var	btn;
+		global.emacnt	= 0;
+		for(var i=0; i<data.count && data[i] !== void; i+=3)
+		{
+			if(data[i] == "" || data[i]!)
+			{//	フラグの指定がないか、フラグが立っていれば絵馬を配置
+				var	storage	= data[i+1].split(",");
+				var	fin	= tf.displayedPictures[storage[0].toLowerCase()];	//	購入済なら買えない
+				with(btn = new global.PushButtonLayer(win, this, fin ? "jj_emabutton_e" : "jj_emabutton"))
+				{
+					.setPos(l, t);
+					.id		= i;
+					.name	= "ema button("+i+")";
+					.visible= true;
+					.finished	= fin;
+					.focusable	= .enabled = true;
+					if(fin)
+						.hint	= "購入済み";
+					else
+						.hint	= "価格: "+data[i+2]+" 円";	//	価格表示
+					global.emacnt++ if tf.displayedPictures[storage[0].toLowerCase()];	//	購入した絵馬の数
+				}
+				buttons.add(btn);
+			}
+			t	+= stepy;
+			if(t >= 500)
+			{
+				t	= bt;
+				l	+= stepx;
+			}
+		}
+		focusable	= false;
+		global.emacnt	= void;
+	}
+
+	function finalize()
+	{
+		release(ema);
+		releaseArray(buttons);
+		release(back);
+		super.finalize(...);
+	}
+
+	function show()
+	{
+		if(!showed)
+		{
+			setRClickExp("global.jinja_object.hideEmaMenu()");
+			showed	= acceptable	= true;
+			super.show(time, accel);
+			window.current.focusable= false;
+		}
+	}
+
+	function hide()
+	{
+		if(showed)
+		{
+			showed	= acceptable	= false;
+			window.current.focusable= true;
+			super.hide(time, accel);
+		}
+	}
+
+	function closeThis()
+	{
+		acceptable	= false;
+		plugin.hideEmaMenu();
+	}
+
+	function onMouseDown(x, y, button, shift)
+	{
+		if(!showed || !acceptable)
+			return;
+		if(button == mbRight)
+			closeThis();
+	}
+
+	var	buyno;
+	var	price;
+	function onButtonDown(btn)
+	{
+		if(!showed || !acceptable)
+			return;
+
+		if(btn.id == "back")
+		{
+			closeThis();
+			return;
+		}
+
+		buyno	= btn.id;
+		if(btn.finished)
+		{
+			openEma(buyno);
+		}
+		else
+		{
+			//	購入できる？
+			price	= btndata[buyno + 2];
+			if(tf.pocketMoney < price)
+			{
+				popupMessage("所持金が足りないので購入できません。");
+				return;
+			}
+
+			//	確認
+			MYaskYesNo(,, "この絵馬は "+price+" 円です。購入しますか？", buyit);
+		}
+	}
+
+	function buyit(result)
+	{
+		if(!result)
+			return;
+
+		//	支払
+		tf.pocketMoney	-= price;
+		plugin.setMoney();
+
+		openEma(buyno);
+	}
+
+	function openEma(no)
+	{
+		//	画像表示
+		global.ema_storages	= btndata[no + 1].split(",");
+		global.ema_script	= "絵馬%03d.ks".sprintf(no \ 3 + 1);
+		return_label	= disp_label;	//	絵馬表示のシーンへ移動
+		closeThis();
+	}
+}
+
+function resetEma()
+{
+	for(var i=0; i<40; i++)
+		tf.displayedPictures["ema%02d".sprintf(i)]	= 0;
+}
+
+/*-----------------------------------------------------------------------------/
+/	End of File
+/-----------------------------------------------------------------------------*/
+}

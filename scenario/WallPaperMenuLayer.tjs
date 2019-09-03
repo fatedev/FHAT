@@ -1,0 +1,437 @@
+/*-----------------------------------------------------------------------------
+/	Copyright (C) TYPE-MOON All Rights Reserved.
+/		ギャラリーメニュー
+/----------------------------------------------------------------------------*/
+@if(__WALLPAPERMENULAYER_DEFINED__==0)
+@set(__WALLPAPERMENULAYER_DEFINED__=1)
+
+Scripts.execStorage("ExButtonLayer.tjs");
+Scripts.execStorage("subroutine.tjs");
+Scripts.execStorage("ShrinkLayer.tjs");
+Scripts.execStorage("SlideUpLayer.tjs");
+Scripts.execStorage("WallPaperThumbnailsLayer.tjs");	//	サムネールを表示するレイヤー
+Scripts.execStorage("GalleryImageLayer.tjs");		//	全画面の画像を表示するレイヤー
+
+var WallPaperListFile	= "壁紙リスト.txt";
+
+//	ギャラリーメニュー
+class WallPaperMenuLayer extends FadeLayer
+{
+	var bgimage	= "wp_bg";
+	var buttons;
+	var buttondata = [
+		[ 3, "leftpage",	"wp_leftpage",	"左ページを表示します。", 270, 477 ],
+		[ 3, "rightpage",	"wp_rightpage",	"右ページを表示します。", 457, 477 ],
+		[ 3, "back",		"gl_back",		"タイトルメニューに戻ります。", 522*1.25, 424*1.25 ],
+	];
+	var GalleryImageListFiles	= %[
+		"default"	=> WallPaperListFile,
+	];
+	var cantopen	= "";
+	var name_extension	= "wp_name-";
+	var enter_se	= "タイトル-ボタンオン.wav";
+	var return_se	= "";
+	var openwp_se	= "";
+
+	var _gid;
+	var showed, acceptable;
+
+	var thumbnails;
+	var imagelayer;
+	var namecard;
+	var pageno;
+	var curpage, pagecount;
+//	var pageno_width_3;
+	var whisker		= 6;
+	var last_position;
+
+	var filenames;
+	var filecount;
+
+	var default_time	= 300;
+	var default_accel	= 0;
+
+	var slide_time	= 200;
+	var slide_accel	= -3;
+
+	function WallPaperMenuLayer(win, par)
+	{
+		super.FadeLayer(...);
+		var w, h;
+		setSize(w = win.scWidth, h = win.scHeight);
+		loadImages(bgimage);
+		hitType		= htMask;
+		hitThreshold= 0;	//	すべて非透過
+
+//		global.tf["wallpaperFlag"]	= %[] if global.tf["wallpaperFlag"] == void;
+
+		//	サムネイル表示
+		thumbnails = new WallPaperThumbnailsLayer(win, this);
+		thumbnails.visible	= true;
+
+		//	その他ボタン
+		buttons = createButtons(win, this, buttondata);
+		buttons.setAll("entersound", enter_se);
+		buttons.setAll("hitThreshold", 0);
+
+		//	ページ番号
+/*		pageno	= new global.Layer(win, this);
+		with(pageno)
+		{
+			.loadImages("wp_pageno");
+			.setPos(292*1.25, 362*1.25);
+			pageno_width_3	= .imageWidth \ 3;
+			.setSize(pageno_width_3, .imageHeight);
+			.setImagePos(0, 0);
+			.visible	= true;
+		}
+*/
+		with(pageno = new global.Layer(win, this))
+		{
+			.loadImages("wp_number");
+			.setPos(363, 486);
+			.setSize(.imageWidth \ 10, .imageHeight);
+			.setImagePos(-.width, 0);
+			.visible	= true;
+		}
+
+		curpage	= 1;
+
+		//	名札
+		namecard	= new SlideUpLayer(win, this, 0, 0);
+
+		//	画像表示(壁紙機能ON)
+		imagelayer = new GalleryImageLayer(win, this, this, true);
+
+		//	フォーカス移動指定
+		thumbnails.upperitem	= buttons.get("back");
+		thumbnails.loweritem	= buttons.get("leftpage");
+
+		_gid	= "default";
+		name	= "壁紙ギャラリー["+galleryid+"]";
+	}
+
+	function finalize()
+	{
+		release(filenames);
+		release(imagelayer);
+		release(thumbnails);
+		release(buttons);
+		super.finalize(...);
+	}
+
+	function show(time=default_time, accel=default_accel)
+	{
+		if(showed)
+			return;
+		showed	= acceptable = true;
+
+		reload();
+		super.show(time, accel);
+//		delayFocus(50, thumbnails);
+
+//		thumbnails.changeOrifice();
+//		setMode();
+	}
+
+	function hide(time=default_time, accel=default_accel, func)
+	{
+		if(!showed)
+			return;
+		showed	= acceptable = false;
+
+//		removeMode();
+//		super.hide(time, accel, func);
+//		thumbnails.changeOrifice(0);
+		func() if func != void;
+		playSound(return_se);
+	}
+
+	//	galleryidにあわせたサムネール・タイトルを読み込む
+	function reload()
+	{
+		dm("reload: "+galleryid);
+		//	表示する画像をリストアップする
+		release(filenames);
+		filenames	= [];
+		filecount	= 0;
+		var file;
+		if((file = GalleryImageListFiles[galleryid])!=void)
+		{
+			var lines = [].load(file);
+			for(var i=0; i<lines.count; i++)
+			{
+				var name	= lines[i];
+				if(name.length < 1 || name[0] == "#")
+					continue;
+
+				//	表示許可の出ている作家さんのみ、リストに追加する
+				if(global.tf["wp-"+name])
+					filenames.add(name);
+				else
+					filenames.add(cantopen);
+			}
+		}
+		//	総ページ数を表示
+		pagecount	= 1 + (filenames.count-1) \ 8;
+		operateRect(421, 486, pageno, pageno.width * pagecount, 0, pageno.width, pageno.height, omAlpha);
+
+		//	一番表示されている画像が多いページを最初のページにする
+
+		//	終わったら開く
+		thumbnails.loadThumbnails(filenames);
+//		thumbnails.changeOrifice();
+		thumbnails.orifice	= 255;
+	}
+
+	//	画像を表示する
+	function displayImage(itemno)
+	{
+		if(filenames[itemno] != cantopen)
+		{
+			imagelayer.show(filenames[itemno], 300);
+			playSound(openwp_se);
+
+			setFocusable(false);
+		}
+	}
+
+	//	画像が閉じられた
+	function onImageClosed()
+	{
+		setFocusable(true);
+	}
+
+	function setFocusable(flag)
+	{
+		buttons.setAll("focusable", flag);
+		thumbnails.focusable	= flag;
+	}
+
+	//	フォーカスを受け取るか
+	function setFocusable(flag=true)
+	{
+		buttons.setAll("focusable", flag);
+		thumbnails.focusable	= flag;
+	}
+
+	//	一つ前の画像を取得
+	function getPrevImage(storage)
+	{
+		var st = Storages;
+		storage	= st.chopStorageExt(st.extractStorageName(storage));
+
+		//	指定画像の番号を得る
+		var	no;
+		for(var i=0; i<filenames.count; i++)
+		{
+			var fn	= st.chopStorageExt(st.extractStorageName(filenames[i]));
+			if(storage == fn)
+			{
+				no	= i;
+				break;
+			}
+		}
+//		dm(storage+" = "+no);
+
+		//	遡って調べる
+		for(var i=no-1; i>=0; i--)
+		{
+//			dm(i+": "+filenames[i]);
+			if(filenames[i] != "")
+				return filenames[i];
+		}
+		for(var i=filenames.count-1; i>no; i--)
+		{
+//			dm(i+": "+filenames[i]);
+			if(filenames[i] != "")
+				return filenames[i];
+		}
+
+		//	見つからなかった = 唯一だった
+		return filenames[no];
+	}
+
+	//	次の画像を取得
+	function getNextImage(storage)
+	{
+		var st = Storages;
+		storage	= st.chopStorageExt(st.extractStorageName(storage));
+
+		//	指定画像の番号を得る
+		var	no;
+		for(var i=0; i<filenames.count; i++)
+		{
+			var fn	= st.chopStorageExt(st.extractStorageName(filenames[i]));
+			if(storage == fn)
+			{
+				no	= i;
+				break;
+			}
+		}
+//		dm(storage+" = "+no);
+
+		//	順番に進んでいく
+		for(var i=no+1; i<filenames.count; i++)
+		{
+//			dm(i+": "+filenames[i]);
+			if(filenames[i] != "")
+				return filenames[i];
+		}
+		for(var i=0; i<no; i++)
+		{
+//			dm(i+": "+filenames[i]);
+			if(filenames[i] != "")
+				return filenames[i];
+		}
+
+		//	見つからなかった = 唯一だった
+		return filenames[no];
+	}
+
+	function onMouseDown(x, y, button, shift)
+	{
+		if(!showed || !acceptable)
+			return;
+		if(button == mbRight)
+			closeThis();
+	}
+
+	function onButtonDown(btn)
+	{
+		if(!showed || !acceptable)
+			return;
+		switch(btn.id)
+		{
+		case "back":
+			//	タイトルメニューへ戻る
+			closeThis();
+			break;
+
+		case "leftpage":
+			//	左のページを表示
+			thumbnails.move("right");
+			curpage--;
+			curpage	= pagecount if curpage<=0;
+//			pageno.imageLeft	= -curpage * pageno_width_3;
+			pageno.imageLeft	= -curpage * pageno.width;
+			break;
+
+		case "rightpage":
+			//	右のページを表示
+			thumbnails.move("left");
+			curpage++;
+			curpage	= 1 if curpage>pagecount;
+//			pageno.imageLeft	= -curpage * pageno_width_3;
+			pageno.imageLeft	= -curpage * pageno.width;
+			break;
+		}
+	}
+
+	function closeThis()
+	{
+		//	ボタン類を押せなくする
+		acceptable	= false;
+//		buttons.enableAll(false);
+//		thumbnails.enabled	= false;
+
+//		thumbnails.orifice	= 0;	//	閉じる
+		hideWallPaperMenu();
+	}
+
+	function onIndicate(no, l, t)
+	{
+		//	壁紙作者名の表示
+		if(filenames[no] != cantopen)
+		{
+			namecard.loadImages(name_extension+filenames[no]);
+			namecard.setBasePosition(l+thumbnails.left-whisker, t+thumbnails.top-namecard.imageHeight);
+			namecard.slideUp(slide_time, slide_accel);
+		}
+		else if(namecard.isup)
+		{
+			namecard.slideDown(slide_time, slide_accel);
+		}
+	}
+
+	function onDigress()
+	{
+		//	作者名表示を閉じる
+		namecard.slideDown(slide_time, slide_accel);
+	}
+
+	function onReIndicate(no)
+	{
+		//	再度同じ作者名表示を行う
+		if(filenames[no] != cantopen)
+			namecard.slideUp(slide_time, slide_accel);
+		else if(namecard.isup)
+			namecard.slideDown(slide_time, slide_accel);
+	}
+
+	property galleryid
+	{
+		setter(id)
+		{
+			if(galleryid != id)
+			{
+				_gid = id;
+
+				//	タイトル・サムネール変更開始
+				thumbnails.changeOrifice(0,,,reload);
+			}
+		}
+		getter	{ return _gid; }
+	}
+}
+
+//	KAGから開く
+var wallpaper_menu;
+function showWallPaperMenu(st, ret, route="", wallpapermode=false)
+{
+	if(wallpaper_menu !== void)
+		return false;
+
+	wallpaper_menu	= new WallPaperMenuLayer(kag, kag.fore.base);
+	wallpaper_menu.show();
+	wallpaper_menu["return_storage"]= st;
+	wallpaper_menu["return_label"]	= ret;
+	return true;
+}
+
+function hideWallPaperMenu()
+{
+	//	次の処理を実行開始
+	kag.process(wallpaper_menu.return_storage, wallpaper_menu.return_label);
+
+	//	閉じる
+	wallpaper_menu.hide(,, closeWallPaperMenu);
+}
+
+function closeWallPaperMenu()
+{
+//	dispose(wallpaper_menu);
+	heapGarbage(wallpaper_menu);
+	wallpaper_menu	= void;
+}
+
+
+//	いずれかの壁紙が閲覧可能な状況になっているか？
+function checkWallPaperFlag()
+{
+	var	lines	= [].load(WallPaperListFile);
+	for(var i=0; i<lines.count; i++)
+	{
+		var	name	= lines[i];
+		if(name.length < 1 || name[0] == "#")
+			continue;
+		if(global.tf["wp-"+name])
+			return true;	//	いずれか一枚でも表示可能か？
+	}
+	return false;
+}
+
+/*----------------------------------------------------------------------------/
+/	
+/----------------------------------------------------------------------------*/
+@endif

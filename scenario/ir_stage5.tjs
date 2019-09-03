@@ -1,0 +1,2521 @@
+/*******************************************************************************
+
+	風雲イリヤ城 - イリヤ戦
+
+*******************************************************************************/
+
+var BOSS_HITPOINT = 400;
+var FieldXSize = 1000;
+var FieldYSize = 800;
+var 移動可能範囲 = %[ x1:30, y1:120, x2:FieldXSize-30, y2:FieldYSize-100 ];
+var ボス移動可能範囲 = %[ x1:220, y1:240, x2:FieldXSize-220, y2:FieldYSize-340 ];
+var ボス速度 = 6;
+var ボス突進速度 = 12;
+var ボス待機時間 = 40;
+var ボス移動時間 = 90;
+var タイヤ跡画像の切り出し幅 = 57;
+var タイヤ跡を置く時間間隔 = タイヤ跡画像の切り出し幅\ボス突進速度;
+var 炎持続時間 = FRAME_PER_SEC*5;
+var 突進時間 = FRAME_PER_SEC*1.5; 
+var 吹き飛び状態持続時間 = 15;
+var 吹き飛び速度 = 12;
+var サーバント攻撃力 = 1.0;
+var ショット速度 = 12;
+var ショット角度間隔 = 20;
+var ダメージ硬直時間 = 15;
+var COMが宝具使用する確率 = 80; // 立ち、移動のアニメの最初で判定する（単位は0.1%）
+
+var DAMAGE_LASER = 20;
+var DAMAGE_TIREFIRE = 0.2;
+var DAMAGE_SHOT = 10;
+var DAMAGE_BOSS = 8;
+var DAMAGE_SYOUGEKIHA = 20;
+
+var ANI_BOSS_DESTROYED	= ANI_BOSS|0x01;
+var ANI_BOSS_突進		= ANI_BOSS|0x02;
+var ANI_BOSS_LASER		= ANI_BOSS|0x03;
+var ANI_BOSS_SHOT		= ANI_BOSS|0x04;
+var ANI_BOSS_CHANGE		= ANI_BOSS|0x05;
+var ANI_BOSS_TARGET		= ANI_BOSS|0x06;
+var ANI_BOSS_STAND		= ANI_BOSS|0x07;
+var ANI_BOSS_MOVE		= ANI_BOSS|0x08;
+var ANI_BOSS_DAMAGE		= ANI_BOSS|0x09;
+var ANI_BOSS_DEAD		= ANI_BOSS|0x0A;
+var ANI_BOSS_必殺技		= ANI_BOSS|0x0B;
+var ANI_BOSS_NOIRIYA	= ANI_BOSS|0x0C;
+
+
+var ENDING_FIRST_WAIT		= FRAME_PER_SEC;
+var ENDING_CREDIT_開始		= FRAME_PER_SEC*2;
+var ENDING_CREDIT_WAIT		= FRAME_PER_SEC*8;
+var ENDING_赤色点滅回数 	= 6;
+var ENDING_ボタン出現WAIT	= FRAME_PER_SEC*1;
+var ENDING_ボタンオスWAIT	= FRAME_PER_SEC*2;
+
+
+class CIrTiremark extends CIriyaObject
+{
+	var ANI_FIRE_ACTIVE		= 0;
+	var ANI_FIRE_DISACTIVE	= 1;
+	var ANI_FIRE_FADEOUT	= 2;
+	
+	function CIrTiremark( _scene, _parent )
+	{
+		super.CIriyaObject( ... );
+		priority = PRIORITY_GROUNDOBJ;
+		animation = ANI_FIRE_ACTIVE;
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	function doUpdateCom()
+	{
+		super.doUpdateCom(...);
+		//
+		if( animation == ANI_FIRE_ACTIVE )
+		{
+			var list = findHitServants(HITTEST_ONSCREEN);
+			if ( list.count>0 )
+				doHit(list[0]);
+		}
+	}
+	
+	function doHit( target )
+	{
+		if ( onHit )
+			onHit( this, target );
+	}
+
+	function onAnimation()
+	{
+		var w=2;
+		switch( animation )
+		{
+		case ANI_FIRE_ACTIVE:
+			if ( timing < 炎持続時間 )
+				imageId = ( timing\w % 9 );
+			else
+				animation = ANI_FIRE_DISACTIVE;
+			break;
+			
+		case ANI_FIRE_DISACTIVE:
+			switch( timing\w )
+			{
+			case 0: imageId=9;	break;
+			case 1: imageId=10; break;
+			case 2: imageId=11; break;
+			case 3: imageId=12; break;
+			case 4: imageId=13; break;
+			case 5: animation=ANI_FIRE_FADEOUT; break;
+			}
+			break;
+			
+		case ANI_FIRE_FADEOUT:
+			switch( timing )
+			{
+			case 0: fadeOut(30); break;
+			case 30: enabled=false;
+			}
+			break;
+		}
+	}
+	
+	function getImageFileInfo()
+	{
+		var info = %[];
+		info.filename = "ir_eff_boss_fire%02d".sprintf(imageId);
+		info.adapt = true;
+		info.mirror = (direction==MUKI_LEFT) ? true : false;
+		info.centerX = 40;
+		info.centerY = 44;
+		info.hitRect = %[left:-20, top:-25, right:20, bottom:25];
+		return info;
+	}
+}
+
+
+
+class CIrLaser extends CIriyaObject
+{
+	var ANIWAIT_LASER = 3;
+
+	function CIrLaser( _scene, _parent )
+	{
+		super.CIriyaObject( ... );
+		priority = parent.priority+100;
+		type = "CIrLaser";
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	function doUpdateCom()
+	{
+		super.doUpdateCom(...);
+		//
+		var list = findHitServants(HITTEST_ONSCREEN);
+		if ( list.count>0 )
+			doHit(list[0]);
+	}
+	
+	function doHit( target )
+	{
+		if ( onHit )
+			onHit( this, target );
+	}
+	
+	function onAnimation()
+	{
+		var w = ANIWAIT_LASER;
+		switch( timing )
+		{
+		case 0*w: imageId=0; break;
+		case 1*w: imageId=1; break;
+		case 2*w:
+			imageId=2;
+			createExplosion(50,330);
+			break;
+		case 3*w:
+			imageId=3;
+			createExplosion(240,290);
+			break;
+		case 4*w: 
+			imageId=4;
+			createExplosion(350,280);
+			break;
+		case 5*w: 
+			imageId=5;
+			createExplosion(390,230);
+			break;
+		case 6*w: 
+			imageId=6;
+			createExplosion(400,180);
+			break;
+		case 7*w: imageId=7; break;
+		case 8*w: imageId=8; break;
+		case 9*w: imageId=9; break;
+		case 10*w:imageId=10; break;
+		case 11*w: enabled=false; break;
+		}
+		// 特定のアニメ以外の行動をしている場合はレーザーを解除する
+		if ( [ANI_BOSS_LASER,ANI_BOSS_STAND].find(parent.animation) < 0 )
+			enabled = false;
+	}
+	
+	function createExplosion( _x, _y )
+	{
+		var pos = getFieldPos();
+		with( new CIrLaserBomEffect(scene,scene.bossObj) )
+		{
+			if ( direction==MUKI_RIGHT)
+				.x = pos.x + _x;
+			else
+				.x = pos.x - _x;
+			.y = pos.y + _y;
+			.images = scene.systemImages;
+		}
+	}
+
+	function getImageFileInfo()
+	{
+		var info = %[];
+		info.filename = "ir_eff_boss_laser%02d".sprintf(imageId);
+		info.mirror = (direction==MUKI_LEFT) ? true : false;
+		info.adapt = true;
+		info.centerX = 58;
+		info.centerY = 70;
+		switch( imageId )
+		{
+		case 2:
+			info.hitRect = %[left:-38, top:-44, right:122, bottom:350];
+			break;
+		case 3:
+			info.hitRect = %[left:0, top:0, right:260, bottom:280];
+			break;
+		case 4:
+			info.hitRect = %[left:0, top:0, right:350, bottom:200];
+			break;
+		case 5:
+			info.hitRect = %[left:0, top:0, right:370, bottom:250];
+			break;
+		case 6:
+			info.hitRect = %[left:0, top:0, right:400, bottom:160];
+			break;
+		default:
+			info.hitRect = void;
+			break;
+		}
+		return info;
+	}
+}
+
+
+class CIrSyougekihaEffect extends CIriyaObject
+{
+	var onHit;
+	var info = %[];
+
+	function CIrSyougekihaEffect( _scene, _parent )
+	{
+		super.CIriyaObject(...);
+		priority = PRIORITY_GROUNDOBJ;
+		type = "CIrSyougekihaEffect";
+		info.mirror = false;
+		info.adapt = true;
+		info.centerX = 256;
+		info.centerY = 150;
+		info.hitRect = %[left:-200, top:-160, right:200, bottom:160];
+		syssound( SE_LASER_EXPLOSION );
+	}
+	
+	function finalize()
+	{
+		super.finalize();
+	}
+	
+	function doUpdateCom()
+	{
+		super.doUpdateCom();
+		//
+		var list = findHitServants( HITTEST_ONSCREEN );
+		if( list.count>0 )
+			doHit( list );
+	}
+	
+	function doHit( list )
+	{
+		if ( onHit )
+		{
+			var i;
+			for ( i=0; i<list.count; i++ )
+				onHit( this, list[i] );
+		}
+	}
+
+	function onAnimation()
+	{
+		var i = timing \ 1;
+		if ( i<=7 )
+			imageId = i;
+		else
+			enabled = false;
+	}
+	
+	function getImageFileInfo()
+	{
+		info.filename = "ir_eff_boss_shock%02d".sprintf(imageId);
+		return info;
+	}
+}
+
+
+
+
+class CIrLaserBomEffect extends CIriyaObject
+{
+	var onHit;
+	var info=%[];
+	
+	function CIrLaserBomEffect( _scene, _parent )
+	{
+		super.CIriyaObject(...);
+		priority = PRIORITY_PLAYER;
+		type = "CIrLaserBomEffect";
+		info.mirror = false;
+		info.adapt = true;
+		info.centerX = 136;
+		info.centerY = 233;
+		info.hitRect = %[left:-80, top:-30, right:80, bottom:30];
+		syssound( SE_LASER_EXPLOSION );
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	function doUpdateCom()
+	{
+		super.doUpdateCom(...);
+		//
+		var list = findHitServants(HITTEST_ONSCREEN);
+		if ( list.count>0 )
+			doHit(list);
+	}
+
+	function doHit( list )
+	{
+		if ( onHit )
+		{
+			var i;
+			for ( i=0; i<list.count; i++ )
+				onHit( this, list[i] );
+		}
+		
+	}
+	
+	function onAnimation()
+	{
+		var i = timing \ 2;
+		if ( i<=5)
+			imageId = i;
+		else
+			enabled = false;
+	}
+	
+	function getImageFileInfo()
+	{
+		info.filename = "ir_eff_boss_bom%02d".sprintf(imageId);
+		return info;
+	}
+}
+
+
+
+
+class CIrBersercar extends CIrLivingObject
+{
+	var onHitSyougekiha;
+	var onHitLaser;
+	var onHitTireFire;
+	var onHit;
+	var characterId;
+	var gauge; // dummy 
+	var marker; // dummy
+	var isDead;
+	var emoObj; // 宝具処理時にエラーを起こさないためのダミー変数
+	var INFO;
+	var 戦闘経過時間;
+	
+	function CIrBersercar( _scene, _parent )
+	{
+		super.CIrLivingObject( ... );
+		priority = PRIORITY_PLAYER;
+		direction = MUKI_RIGHT;
+		animation = ANI_イベント待機;
+		type = OBJTYPE_BOSS;
+		hp = hpMax = BOSS_HITPOINT;
+		characterId = CHARA_ID_BERSERCAR;
+		isDead = false;
+		INFO = BERSERCAR;
+		戦闘経過時間 = -1;
+	}
+
+	function finalize()
+	{
+		super.finalize(...);
+	}
+
+	function houguDamaged()
+	{
+		super.houguDamaged( ... );
+		animation = ANI_BOSS_TARGET;
+		timing = 0;
+	}
+	
+	function directionByMotionDest()
+	{
+		if ( motionDestX < x )
+			if ( motionDestY < y )
+				return MUKI_LEFTBACK;
+			else
+				return MUKI_LEFT;
+				
+		if ( motionDestX > x )
+			if ( motionDestY < y )
+				return MUKI_RIGHTBACK;
+			else
+				return MUKI_RIGHT;
+		return direction;
+	}
+	
+	function directionBySpeed()
+	{
+		if ( speedX < 0 )
+			if ( speedY < 0 )
+				return MUKI_LEFTBACK;
+			else
+				return MUKI_LEFT;
+		if ( speedX > 0 )
+			if ( speedY < 0 )
+				return MUKI_RIGHTBACK;
+			else
+				return MUKI_RIGHT;
+		return direction;
+	}
+	
+	function createLaser()
+	{
+		with( new CIrLaser(scene,this) )
+		{
+			switch( direction )
+			{
+			case MUKI_LEFT:
+				.x=-40+20;
+				break;
+			case MUKI_RIGHT:
+				.x=+40-20;
+				break;
+			default:
+				dm( "バーサーカーのレーザは、向きが対応していないためキャンセルされた" );
+				.enabled = false;
+				return;
+			}
+			.y			= 70-40;
+			.origin		= ORIGIN_PARENT;
+			.direction	= direction;
+			.onHit		= onHitLaser;
+			.images		= scene.systemImages;
+		}
+	}
+	
+	function createSyougekiha()
+	{
+		with( new CIrSyougekihaEffect( scene, this ) )
+		{
+			.origin	= ORIGIN_PARENT;
+			.onHit	= onHitSyougekiha;
+			.images	= scene.systemImages;
+		}
+	}
+	
+
+	function _createFire( muki )
+	{
+		var obj = new CIrTiremark(scene,this);
+		obj.direction = muki;
+		obj.onHit = onHitTireFire;
+		obj.images = scene.systemImages;
+		return obj;
+	}
+
+	function createFire()
+	{
+		var x1,y1,x2,y2;
+		switch( direction )
+		{
+		case MUKI_LEFT:
+			x1 = this.x+70+20;
+			y1 = this.y-35-40+100;
+			x2 = this.x-40+20;
+			y2 = this.y-65-40+100;
+			break;
+		case MUKI_RIGHT:
+			x1 = this.x-70-20;
+			y1 = this.y-35-40+100;
+			x2 = this.x+40-20;
+			y2 = this.y-65-40+100;
+			break;
+		case MUKI_LEFTBACK:
+			x1 = this.x-70;
+			y1 = this.y-35-40+100;
+			x2 = this.x+40;
+			y2 = this.y-65-40+100;
+			break;
+		case MUKI_RIGHTBACK:
+			x1 = this.x-70;
+			y1 = this.y-35-40+100;
+			x2 = this.x+40;
+			y2 = this.y-65-40+100;
+			break;
+		}
+		
+		with( _createFire(this.direction) )
+		{
+			.x = x1;
+			.y = y1;
+		}
+		with( _createFire(this.direction) )
+		{
+			.x = x2;
+			.y = y2;
+		}
+	}
+	
+	// 位置調整
+	function adjustBossPos()
+	{
+		var oldx = x;
+		var oldy = y;
+		x = round( ボス移動可能範囲.x1, x, ボス移動可能範囲.x2 );
+		y = round( ボス移動可能範囲.y1, y, ボス移動可能範囲.y2 );
+		if ( x!=oldx || y!=oldy )
+			return true;
+		else
+			return false;
+	}
+	
+	// ショット
+	function shotAttack( deg )
+	{
+		switch( direction )
+		{
+		case MUKI_LEFT:
+			scene.createNWayShot( 5, x-94+20, y+120-40, z, ショット速度, 135+deg );
+			break;
+		case MUKI_RIGHT:
+			scene.createNWayShot( 5, x+94-20, y+120-40, z, ショット速度,  45+deg );
+			break;
+		case MUKI_LEFTBACK:
+			scene.createNWayShot( 5, x-94, y-40, z, ショット速度, -135+deg );
+			break;
+		case MUKI_RIGHTBACK:
+			scene.createNWayShot( 5, x+94, y-40, z, ショット速度, -45+deg );
+			break;
+		}
+	}
+	
+	
+	function newDirection( frontonly )
+	{
+		if( y<FieldYSize/2 || frontonly )
+			if ( x < FieldXSize/2 )
+				return MUKI_RIGHT;
+			else
+				return MUKI_LEFT;
+		if ( x < FieldXSize/2 )
+			return MUKI_RIGHTBACK;
+		else
+			return MUKI_LEFTBACK;
+	}
+	
+	function changeDirection( frontonly=false )
+	{
+		direction = newDirection( frontonly );
+	}
+	
+	var actionCounter=0;
+	var _ani;
+	var _damage;
+	var move_count;
+	
+	var oldani;
+	function onAnimation()
+	{
+		var actionPattern = [
+			ANI_BOSS_突進,
+			ANI_BOSS_MOVE,
+			ANI_BOSS_LASER,
+			ANI_BOSS_MOVE,
+			ANI_BOSS_SHOT,
+			ANI_BOSS_MOVE,
+			ANI_BOSS_SHOT,
+			ANI_BOSS_MOVE,
+			ANI_BOSS_LASER,
+			ANI_BOSS_STAND,
+			ANI_BOSS_MOVE,
+			ANI_BOSS_必殺技,
+			ANI_BOSS_MOVE
+		];
+		allowAnimationWhileUsingHougu = false;
+		switch( animation )
+		{
+		case ANI_イベント待機:
+			doAnimation( ANI_BOSS_STAND );
+			break;
+			
+		case ANI_START:
+			animation = ANI_BOSS_STAND;
+			戦闘経過時間 = 0;
+			break;
+		
+		case ANI_BOSS_STAND:
+			doAnimation();
+			switch( timing )
+			{
+			case 0:
+				stop();
+				break;
+			case ボス待機時間:
+				animation = ANI_BOSS_CHANGE;
+				break;				
+			}
+			if ( damageTimeLeft>0 && !_damage )
+				animation = ANI_BOSS_DAMAGE;
+			break;
+		
+		case ANI_BOSS_DAMAGE:
+			_damage = true;
+			stop();
+			if ( timing==0 )
+				syssound( SE_BOSS_DAMAGE );
+			doAnimation();
+			if ( timing < 30 )
+				break;
+			animation = ANI_BOSS_STAND;
+			break;
+		
+		case ANI_BOSS_TARGET:
+			if( timing==0 )
+				stop();
+			doAnimation( ANI_BOSS_DAMAGE );
+			if( timing<90 )
+				break;
+			animation = ANI_BOSS_MOVE;
+			break;
+
+		case ANI_BOSS_CHANGE:
+			animation = actionPattern[
+				actionCounter % actionPattern.count
+			];
+			_damage = false;
+			stop();
+			actionCounter++;//処理の最後にインクリメント
+			break;		
+			
+		case ANI_BOSS_MOVE:
+			if ( random32(60)==0 )
+			{
+				if ( random32(10)==0 )
+				{
+					if ( 戦闘経過時間 > FRAME_PER_SEC*80 )
+						scene.putItem(x,y,%[id:ITEM_レア_天の杯, 確率:天の杯の出現確率] );
+					else
+						scene.putItem(x,y,%[id:ITEM_レア_ジャプニカ暗殺帖, 確率:ジャプニカ暗殺帖の出現確率] );
+				}
+				else
+					scene.putItem(x,y);
+			}
+			doAnimation();
+			if ( timing == 0 )
+			{
+				move_count = 0;
+				stop();
+				randomMove();
+			}
+			if ( timing < ボス移動時間 )
+			{
+				if( adjustBossPos() )
+				{
+					if ( move_count>3 )
+						animation = ANI_BOSS_CHANGE;
+					else
+					{
+						move_count++;
+						stop();
+						randomMove();
+					}
+				}
+				break;
+			}
+			animation = ANI_BOSS_CHANGE;
+			break;
+		
+		case ANI_BOSS_突進:
+			doAnimation();
+			if ( timing==0 )
+			{
+				changeDirection();
+				stop();
+				syssound( SE_BOSS_PREV_DASH );
+			}
+			if ( timing==30 )
+			{
+				syssound( SE_BOSS_DASH );
+				stop();
+				speedX = random32(2) ? ボス突進速度 : -ボス突進速度;
+				speedY = ボス突進速度;
+				direction = directionBySpeed();
+			}
+			if ( timing>=30 && timing%タイヤ跡を置く時間間隔==0 )
+				createFire();
+			// 位置調整
+			var oldx = x;
+			var oldy = y;
+			x = round( ボス移動可能範囲.x1, x, ボス移動可能範囲.x2 );
+			y = round( ボス移動可能範囲.y1, y, ボス移動可能範囲.y2 );
+			if ( x!=oldx || y!=oldy )
+			{
+				animation = ANI_BOSS_STAND;
+				break;
+			}
+			break;
+			
+		case ANI_BOSS_LASER:
+			doAnimation();
+			switch( timing )
+			{
+			case 0:
+				stop();
+				changeDirection(true);
+				syssound( SE_BOSS_PREV_LASER );
+				break;
+			case 15:
+				syssound( SE_BOSS_LASER );
+				break;
+				
+			case 35:
+				createLaser();
+				break;
+				
+			case 90:
+				animation = ANI_BOSS_STAND;
+				break;
+			}
+			break;
+			
+		case ANI_BOSS_必殺技:
+			// カットイン入る
+			doAnimation();
+			if( timing==0 )
+			{
+				stop();
+				changeDirection();
+				if( scene.servantUseItem(this) == false )
+					timing = 0;
+				break;
+			}
+			if( houguEventProcessing )
+				break;
+			if( timing==10 || timing==30 || timing==50 )
+			{
+				createSyougekiha(); // 衝撃波だす
+			}
+			if( timing<80 )
+			{
+				break;
+			}
+			animation = ANI_BOSS_STAND;				
+			break;
+			
+		case ANI_BOSS_SHOT:
+			doAnimation();
+			var deg;
+			if ( timing == 0 )
+			{
+				changeDirection();
+				syssound( SE_BOSS_PREV_SHOT );
+				stop();
+			}
+			if ( timing < 30 )
+				break;
+			if ( timing <= 60 )
+			{
+				if ( timing%5==0 )
+				{
+					deg = (timing-30)*2;
+					shotAttack( deg );
+				}
+				break;
+			}
+			animation = ANI_BOSS_STAND;
+			break;
+						
+		case ANI_BOSS_DESTROYED:
+			isDead = true;
+			damageTimeLeft = 0;
+			doAnimation( ANI_BOSS_DAMAGE );
+			if (timing == 0)
+			{
+				hp = mp = 0;
+				stop();
+			}
+			if (timing == 120)
+			{
+				syssound( SE_BOSS_DEAD );
+				animation = ANI_BOSS_DEAD;
+			}
+			if (timing%20 == 0)
+				randomMove( ボス速度*2.5 );
+			if ( timing%10==0 )
+				syssound(SE_BOSS_DESTROYED);
+			if (timing%5 == 0)
+				createSmoke();
+			if ( ボス移動可能範囲.x1>x ) speedX = +Math.abs(speedX);
+			if ( ボス移動可能範囲.x2<x ) speedX = -Math.abs(speedX);
+			if ( ボス移動可能範囲.y1>y ) speedY = +Math.abs(speedY);
+			if ( ボス移動可能範囲.y2<y ) speedY = -Math.abs(speedY);
+			direction = directionBySpeed();
+			adjustBossPos();
+			break;
+			
+		default:
+			doAnimation();
+			break;
+		}
+	}
+	
+	function createSmoke()
+	{
+		with( new CIrSmoke(scene,this) )
+			.images = scene.systemImages;
+	}
+	
+	function doAnimation( ani )
+	{
+		if ( ani===void)
+			ani = animation;
+		switch( ani )
+		{
+		case ANI_BOSS_STAND:
+		case ANI_BOSS_SHOT:
+			if ( timing==0 )
+				syssound( SE_BOSS_IDLING );
+			switch( timing\4 % 2 )
+			{
+			case 0:	imageId="BOSS_通常1"; break;
+			case 1:	imageId="BOSS_通常2"; break;
+			}
+			break;
+			
+		case ANI_BOSS_MOVE:
+			if( timing==0 )
+				syssound( SE_BOSS_MOVING );
+			switch( timing\4 % 2 )
+			{
+			case 0:	imageId="BOSS_通常1"; break;
+			case 1:	imageId="BOSS_通常2"; break;
+			}
+			break;
+
+		case ANI_BOSS_DAMAGE:
+			switch( timing\2 % 2 )
+			{
+			case 0:	imageId="BOSS_ダメージ1"; break;
+			case 1:	imageId="BOSS_ダメージ1a"; break;
+			case 2:	imageId="BOSS_ダメージ2"; break;
+			case 3:	imageId="BOSS_ダメージ2a"; break;
+			}
+			break;
+
+		case ANI_BOSS_必殺技:
+		case ANI_BOSS_突進:
+		case ANI_BOSS_LASER:
+			switch( timing\4 % 2 )
+			{
+			case 0:	imageId="BOSS_突進1"; break;
+			case 1:	imageId="BOSS_突進2"; break;
+			}
+			break;
+
+		case ANI_BOSS_DEAD:
+			imageId = "BOSS_ダウン";
+			stop();
+			break;
+		case ANI_BOSS_NOIRIYA:
+			imageId = "BOSS_イリヤいない";
+			break;			
+		}
+
+		if ( damageTimeLeft > 0 )
+		{
+			drawOffsetX = randomRange(-5,5);
+			drawOffsetY = randomRange(-5,5);		
+		}
+		else
+		{
+			drawOffsetX = 0;
+			drawOffsetY = 0;		
+		}
+	}
+	
+	function getImageFileInfo()
+	{
+		var mir;
+		// 反転の有無
+		switch( direction )
+		{
+		case MUKI_RIGHT:
+		case MUKI_RIGHTBACK:
+			mir = false;
+			break;
+		case MUKI_LEFT:
+		case MUKI_LEFTBACK:
+			mir = true;
+			break;
+		}
+		// ファイル名（前半）
+		var file;
+		switch( direction )
+		{
+		case MUKI_RIGHT:
+		case MUKI_LEFT:
+			file = "ir_char_bersercar00";
+			break;
+		case MUKI_RIGHTBACK:
+		case MUKI_LEFTBACK:
+			file = "ir_char_bersercar01";
+			break;
+		}	
+		// ファイル名（後半）
+		switch( imageId )
+		{
+		case "BOSS_通常1": file+="00"; break;
+		case "BOSS_通常2": file+="01"; break;
+		case "BOSS_突進1": file+="02"; break;
+		case "BOSS_突進2": file+="03"; break;
+		case "BOSS_ダメージ1": file+="04"; break;
+		case "BOSS_ダメージ2": file+="05"; break;
+		case "BOSS_ダメージ1a": file+="07"; break;
+		case "BOSS_ダメージ2a": file+="08"; break;
+		case "BOSS_ダウン":
+			file = "ir_char_bersercar0006";
+			break;
+		case "BOSS_イリヤいない":
+			file = "ir_char_bersercar0200";
+			break;
+		default:
+			return void;
+		}
+		var info = %[];
+		info.filename = file;
+		info.mirror = mir;
+		switch( direction )
+		{
+		case MUKI_LEFT:
+		case MUKI_RIGHT:
+			info.centerX = 147;
+			info.centerY = 180;
+			break;
+		case MUKI_LEFTBACK:
+		case MUKI_RIGHTBACK:
+			info.centerX = 128;
+			info.centerY = 180;
+			break;
+		}
+		info.adapt = true;
+		return info;
+	}
+
+	function isHit( obj )
+	{
+		switch( direction )
+		{
+		case MUKI_LEFTBACK:
+			if( distanceOf(obj.x, obj.y ) < 85 )
+				return true;
+			if( distanceOf(obj.x-20, obj.y+40 ) < 95 )
+				return true;
+			return false;
+			
+		case MUKI_RIGHTBACK:
+			if( distanceOf(obj.x, obj.y ) < 85 )
+				return true;
+			if( distanceOf(obj.x+20, obj.y+40 ) < 95 )
+				return true;
+			return false;
+			
+		case MUKI_LEFT:
+			if( distanceOf(obj.x+20, obj.y ) < 90 )
+				return true;
+			if( distanceOf(obj.x-20, obj.y+40) < 90 )
+				return true;
+			return false;
+			
+		case MUKI_RIGHT:
+			if( distanceOf(obj.x-20, obj.y ) < 90 )
+				return true;
+			if( distanceOf(obj.x+20, obj.y+40) < 90 )
+				return true;
+			return false;
+		}
+		return false;	
+	}
+	
+	function randomMove( spd=ボス速度 )
+	{
+		speedX = (random32(2)==0) ? spd : -spd;
+		speedY = (random32(2)==0) ? spd : -spd;
+		motionType = MOTIONTYPE_DEFAULT;
+		direction = directionBySpeed();
+	}
+	
+	function doUpdateCom()
+	{
+		if ( 戦闘経過時間 >= 0 )
+			戦闘経過時間++;
+		super.doUpdateCom(...);
+		//
+		switch( animation )
+		{
+		case ANI_BOSS_DESTROYED:
+		case ANI_BOSS_DEAD:
+			break;
+		default:
+			// ボスが壊れる。ただしプレイヤーがやられた後の場合は無視する
+			if ( hp==0 && scene.playerObj.hp>0 )
+			{
+				// 壊れると同時にタイマーをとめておく
+				scene.gameTimerStop();
+				// アイテムとショットを削除する
+				scene.オブジェクト削除();
+				//
+				animation = ANI_BOSS_DESTROYED;
+				return;
+			}
+		}
+ 		// サーバントにぶつかった場合
+		var i;
+		var list = [];
+		for ( i=0; i<scene.players.count; i++ )
+			if( isHit(scene.players[i]) )
+				list.add( scene.players[i] );
+		if ( list.count>0 )
+		{
+			doHit(list);
+		}		
+	}
+	
+	function doHit( list )
+	{
+		if ( onHit )
+		{
+			var i;
+			for( i=0; i<list.count; i++ )
+				onHit( this, list[i] );
+		}
+	}
+}
+
+
+
+class CIrTile extends CIriyaObject
+{
+	var typeid;
+	
+	function CIrTile( _scene, _parent, __typeid )
+	{
+		super.CIriyaObject( ... );
+		type = "CIrTile";
+		typeid = __typeid;
+		priority = PRIORITY_GROUNDOBJ;
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	function onAnimation()
+	{
+		var w = 2;
+		var i;
+		switch( typeid )
+		{
+		case 0:
+		case 1:
+			switch( animation )
+			{
+			case 0:
+				i = timing\w;
+				if ( i <= 20 )
+					imageId = i;
+				else
+					animation = 1;
+				break;
+			case 1:
+				i = 21 + timing\w % 10;
+				imageId = i;
+				break;
+			}
+			break;
+		case 2:
+			i = timing\w;
+			if ( i <= 22 )
+				imageId = i;
+			break;
+		}
+	}
+	
+	function getImageFileInfo()
+	{
+		var info=%[];
+		switch( typeid )
+		{
+		case 0:
+		case 1:
+			info.filename = "ir_ending_block%02d".sprintf(typeid*50+imageId);
+			break;
+		case 2:
+			info.filename = "ir_ending_switch%02d".sprintf(imageId);
+			break;
+		}
+		info.mirror = false;
+		info.adapt = false;
+		info.centerX = 0;
+		info.centerY = 0;
+		return info;
+	}
+}
+
+
+
+var ANI_IRIYA_倒れている = 0;
+var ANI_IRIYA_しゃべる = 10;
+var ANI_IRIYA_ボタン押す = 20;
+var ANI_IRIYA_笑う = 30;
+var ANI_IRIYA_通常 = 40;
+
+class CIrEndingIriya extends CIriyaObject
+{
+	function CIrEndingIriya( _scene, _parent )
+	{
+		super.CIriyaObject( ... );
+		type = "CIrEndingIriya";
+		priority = PRIORITY_PLAYER;
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	function onAnimation()
+	{
+		switch( animation )
+		{
+		case ANI_IRIYA_倒れている:
+			imageId = 0;
+			break;
+		case ANI_IRIYA_しゃべる:
+			switch( timing\5 % 2 )
+			{
+			case 0:
+				imageId = 1;
+				break;
+			case 1:
+				imageId = 2;
+				break;
+			}
+			break;
+		case ANI_IRIYA_ボタン押す:
+			switch( timing )
+			{
+			case 0:
+				imageId = 3;
+				break;
+			case 15:
+				sound( SE_JIBAKU_PUSHBUTTON );
+				imageId = 4;
+				break;
+			case 20:
+				imageId = 5;
+				break;
+			}
+			break;
+		case ANI_IRIYA_笑う:
+			imageId = 6 + timing\5 % 2;
+			break;
+		case ANI_IRIYA_通常:
+			imageId = 2;
+			break;	
+		}
+	}
+	
+	function getImageFileInfo()
+	{
+		var info = %[];
+		info.filename = "ir_char_iriya%04d".sprintf(imageId);
+		info.mirror = false;
+		info.adapt = true;
+		info.centerX = 48;
+		info.centerY = 76;
+		return info;
+	}
+}
+
+
+
+
+class CIrGareki extends CIriyaObject
+{
+	function CIrGareki( _scene, _parent )
+	{
+		super.CIriyaObject( ... );
+		animation = random32(4);
+		priority = PRIORITY_PLAYER_TOP;
+		origin = ORIGIN_WINDOW;
+	}
+	
+	function onAnimation()
+	{
+		if ( y > SCREEN_SIZE_H+100 )
+			enabled = false;
+	}
+	
+	function getImageFileInfo()
+	{
+		var info = %[];
+		switch( animation )
+		{
+		case 0:
+			info.filename = "ir_ed_gareki0100";
+			break;
+		case 1:
+			info.filename = "ir_ed_gareki0200";
+			break;
+		case 2:
+			info.filename = "ir_ed_gareki0300";
+			break;
+		case 3:
+			info.filename = "ir_ed_gareki0400";
+			break;
+		}
+		info.centerX = 0;
+		info.centerY = 0;
+		return info;
+	}
+
+}
+
+
+
+class CIriyaIriya extends CIriyaSceneEx
+{
+	//--------------------------------------------------------------------------
+	var FirstCameraPosX	= 400;
+	var FirstCameraPosY	= 300;
+
+	var DefaultPlayers = [
+		%[ x: 400, y:650 ],
+		%[ x: 200, y:650 ],
+		%[ x: 300, y:600 ],
+		%[ x: 500, y:600 ],
+		%[ x: 600, y:650 ]
+	];
+
+	//--------------------------------------------------------------------------
+
+	var bossObj; // ボスオブジェクト
+	var cursorObj;
+
+	function CIriyaIriya( parent, scene_id )
+	{
+		super.CIriyaSceneEx( ... );
+		dm( "イリヤ戦" );
+	}
+	
+	function finalize()
+	{
+		super.finalize( ... );
+	}
+	
+	function init()
+	{
+		super.init( ... );
+		BgmPlay( BGM_BOSS );
+	}	
+	
+	// 通常カメラを更新する（宝具を使っていないときに呼び出される）
+	function normalCameraUpdate( camera )
+	{
+		if ( camera.mode != CAMERAMODE_DEFAULT )
+			return false;
+		camera.motionDestX = (playerObj.x+bossObj.x)\2;
+		camera.motionDestY = (playerObj.y+bossObj.y)\2;
+		return true;
+	}
+
+	// index番目のプレイヤの初期化処理の際に呼び出される
+	function onInitPlayer( player, _index )
+	{
+		with( player )
+		{
+			.x = DefaultPlayers[_index].x;
+			.y = DefaultPlayers[_index].y;
+			if ( .isPlayer )
+				.onUpdateCom = servantPlayer;
+			else
+				.onUpdateCom = servantCom;
+		}
+	}
+
+	// フィールドの初期化時に呼び出される
+	function initField()
+	{
+		super.initField();
+		// 移動先カーソル
+		destinationCursorCreate();
+		// 背景用オブジェクト
+		with ( new CIrBackground(this,etcRootObj) )
+		{
+			.filename = "ir_boss_bg";
+		}
+		// ボス
+		bossObj = new CIrBersercar( this, etcRootObj );
+		with ( bossObj )
+		{
+			.x = 400;
+			.y = 280;
+			.onHitSyougekiha = servantHitSyougekiha;
+			.onHitLaser = servantHitLaser;
+			.onHitTireFire = servantHitTireFire;
+			.onHit = servantHitBoss;
+			.onHpChanged = bossHpChanged;
+ 		}
+ 		// カーソル
+ 		cursorObj = new CIrBattleCursor(this,etcRootObj);
+ 		cursorObj.visible = false;
+	}
+	
+	// サーバントの位置を問い合わされた場合に呼び出される
+	// ボス面ではサーバント位置ではなく、与えたダメージを返す
+	function getServantPosition( index )
+	{
+		return players[index].point;
+	}
+
+	function bossHpChanged(boss)
+	{
+		var val = boss.hp/boss.hpMax;
+		_menuObj.ChangeBossVitAve( val );
+	}
+
+	function servantHitTireFire( fire, servant )
+	{
+		servant.hpDamage( DAMAGE_TIREFIRE );
+	}
+	
+	
+	function servantHit( obj, servant, _speed=10 )
+	{
+		with( servant )
+		{
+			.stop();
+			var dx = obj.x - .x;
+			var dy = obj.y - .y;
+			var r  = .distanceOf( obj.x, obj.y );
+			if ( r<1 ) r=1;
+			.speedX = dx/r * _speed;
+			.speedY = dy/r * _speed;
+		}
+	}
+	
+	function servantHitLaser( laser, servant )
+	{
+		if( bossObj.isDead )
+			return;
+		switch( servant.animation )
+		{
+		case ANI_STAND:
+		case ANI_MOVE:
+		case ANI_RUN:
+		case ANI_FIGHT:
+			servant.scoreInc( 得点_レーザーに当たった );
+			servant.hpDamage( DAMAGE_LASER );
+			servant.animation = ANI_DAMAGE;
+			servantHit( laser, servant );
+			break;
+		}
+	}
+	
+	function servantHitSyougekiha( syougekiha, servant )
+	{
+		if( bossObj.isDead )
+			return;
+		switch( servant.animation )
+		{
+		case ANI_STAND:
+		case ANI_MOVE:
+		case ANI_RUN:
+		case ANI_FIGHT:
+			servant.scoreInc( 得点_衝撃波に当たった );
+			servant.hpDamage( DAMAGE_SYOUGEKIHA );
+			servant.animation = ANI_DAMAGE;
+			servantHit( syougekiha, servant, 20 );
+			break;
+		}
+	}
+	
+	function servantHitHalberd( halberd, servant )
+	{
+		if( bossObj.isDead )
+			return;
+		switch( servant.animation )
+		{
+		case ANI_STAND:
+		case ANI_MOVE:
+		case ANI_RUN:
+		case ANI_FIGHT:
+			servant.scoreInc( 得点_ハルバードに当たった );
+			servant.hpDamage( HALBERD_DAMAGE );
+			servant.animation = ANI_DAMAGE;
+			servantHit( halberd, servant );
+			break;
+		}
+	}
+
+	function servantHitShot( shot, servant )
+	{
+		if( bossObj.isDead )
+			return;
+		switch( servant.animation )
+		{
+		case ANI_STAND:
+		case ANI_MOVE:
+		case ANI_RUN:
+		case ANI_FIGHT:
+			servant.scoreInc( 得点_ショットに当たった);
+			createHitEff( servant );
+			servant.hpDamage( DAMAGE_SHOT );
+			servant.animation = ANI_DAMAGE;
+			servantHit( shot, servant );
+			break;
+		}
+	}
+	
+	function createNWayShot( n, x, y, z, speed, deg )
+	{
+		syssound( SE_BOSS_SHOT );
+		var i=0;
+		for ( i=0; i<n; i++ )
+			_createShot( x, y, z, speed, deg+ショット角度間隔*(i-(n-1)/2) );
+	}
+	
+	function _createShot( x, y, z, speed, deg )
+	{
+		// 弾を生成してリストに追加する
+		with ( new CIrShot(this,etcRootObj) )
+		{
+			.x		= x;
+			.y		= y;
+			.z		= z;
+			.speedX	= speed * Math.cos( degToRad(deg) );
+			.speedY	= speed * Math.sin( degToRad(deg) );
+			.speedZ	= 0;
+			.onHit	= servantHitShot;
+			.images = systemImages;
+		}
+	}	
+
+	// ボスとサーバントがぶつかった場合
+	function servantHitBoss( boss, target )
+	{
+		_adjustServantPos( target );
+		switch ( target.animation )
+		{
+		case ANI_STAND:
+		case ANI_MOVE:
+		case ANI_FOLLOWTARGET:
+			break;
+		default:
+			return;
+		}
+		var dx = target.x-boss.x;
+		var dy = target.y-boss.y;
+		var d = boss.distanceOf( target.x, target.y );
+		if ( d < 0 ) d = 1;
+		target.stop();
+		// ボスが移動中であれば問答無用で吹き飛ばされる
+		// ボスが待機中であれば小競り合いが始まる
+		switch ( boss.animation )
+		{
+		case ANI_BOSS_必殺技:
+		case ANI_BOSS_MOVE:
+		case ANI_BOSS_突進:
+			target.speedX = 吹き飛び速度 * dx/d;
+			target.speedY = 吹き飛び速度 * dy/d;
+			target.animation = ANI_KNOCKBACK;
+			target.hpDamage( DAMAGE_BOSS );
+			break;
+			
+		case ANI_BOSS_DEAD:
+		case ANI_BOSS_DESTROYED:
+			target.speedX = 吹き飛び速度*2 * dx/d;
+			target.speedY = 吹き飛び速度*2 * dy/d;
+			target.animation = ANI_KNOCKBACK;
+			break;
+
+		case ANI_BOSS_LASER:
+		case ANI_BOSS_SHOT:
+		case ANI_BOSS_STAND:
+		case ANI_BOSS_TARGET:
+		case ANI_BOSS_DAMAGE:
+			battleStart( boss, target );				
+			break;
+		}
+	}
+	
+	// ボスとプレイヤで小競り合いが発生した場合に呼び出される
+	function battleStart( boss, servant )
+	{
+		servant.animation = ANI_FIGHT;
+		if( servant.x < boss.x )
+			servant.direction = MUKI_RIGHT;
+		else
+			servant.direction = MUKI_LEFT;
+		// 小競り合い管理用のダミーアニメを生成
+		with ( new CIriyaObject(this,etcRootObj) )
+		{
+			.name			= "";
+			.x				= servant.x;
+			.y				= servant.x;
+			.priority		= PRIORITY_PLAYER;
+			.animation		= void;
+			.onAnimation	= onBossBattleAnimation;
+			.visible		= false;
+			.servant		= servant;
+			.boss			= boss;
+			.fightbutton	= void;
+			.smoke			= void;
+		}
+	}
+	
+	// サーバントがボスと重ならないように、位置をずらす
+	function _adjustServantPos( servant )
+	{
+		if ( bossObj.isHit( servant ) )
+		{
+			servant.x += (bossObj.x<servant.x) ? 2 : -2;
+			servant.y += (bossObj.y<servant.y) ? 2 : -2;
+		}
+	}
+	function adjustServantPos()
+	{
+		var i;
+		for ( i=0; i<players.count; i++ )
+			_adjustServantPos( players[i] );
+	}
+	
+	function onBossBattleAnimation( battle )
+	{
+		switch( battle.timing )
+		{
+		case 0:
+			if( battle.servant.isPlayer )
+				with( battle.fightbutton = new CIrFightButton(this,etcRootObj) )
+				{
+					.animation = ANI_BUTTON_FIGHT;
+					.images = systemImages;
+				}
+			//  break;
+		//case 20:
+			with( battle.smoke = new CIrSmoke(this, battle.servant ) )
+				.images = systemImages;
+			break;
+			
+		case 45:
+			onBossBattleEnd( battle );
+			break;
+		}
+		// サーバントの位置を調整
+		//adjustServantPos();
+		// マウス連打処理
+		var keyinput;
+		if ( battle.servant.isPlayer )
+			keyinput = ( input.left==0 );
+		else
+			keyinput = ( random32(5)==0 );
+		if ( keyinput )
+		{
+			battle.boss.hpDamage( サーバント攻撃力 );
+			battle.servant.point += サーバント攻撃力;
+			battle.servant.scoreInc( サーバント攻撃力*得点_ダメージ倍率 );
+		}
+		// ボスがやられた場合
+		if ( battle.boss.hp == 0 )
+		{
+			onBossBattleEnd( battle );
+			return;
+		}
+		// 途中でボスが動き出したら小競り合い終了
+		switch( battle.boss.animation )
+		{
+		case ANI_BOSS_SHOT:
+		case ANI_BOSS_STAND:
+		case ANI_BOSS_DAMAGE:
+		case ANI_BOSS_TARGET:
+		case ANI_BOSS_LASER:
+		case ANI_BOSS_必殺技:
+			break;
+		default:
+			onBossBattleEnd( battle );
+			break;
+		}
+		// 小競り合い中にサーバントがダメージを受けるなどした場合は小競り合い終了
+		if  ( battle.servant.animation != ANI_FIGHT )
+			onBossBattleEnd( battle );
+	}
+	
+	function onBossBattleEnd( battle )
+	{
+		with( battle )
+		{
+			if ( CheckValid(.smoke) )
+				.smoke.enabled = false;
+			if ( CheckValid(.fightbutton) )
+				.fightbutton.enabled = false;
+			switch( .boss.animation )
+			{
+			// ボスの攻撃中に小競り合いが発生していた場合は、ボスのアニメを変更しない
+			case ANI_BOSS_SHOT:
+			case ANI_BOSS_LASER:
+			case ANI_BOSS_突進:
+			case ANI_BOSS_必殺技:
+				break;
+			// ボスを移動状態にする
+			default:
+				.boss.animation = ANI_BOSS_CHANGE;
+				break;
+			}
+			if( .servant.animation == ANI_FIGHT )
+				.servant.animation = ANI_STAND;
+			.enabled = false;
+		}
+	}
+	
+	
+	var se_timer=0;
+	function servantPlayer( servant )
+	{
+		cursorObj.x = input.x;
+		cursorObj.y = input.y;
+		switch( servant.animation )
+		{
+		case ANI_STAND:
+		case ANI_MOVE:
+			break;
+			
+		case ANI_FIGHT:
+			if( servant.timing==0 || se_timer<=0 )
+			{
+				se_timer = randomRange(5,15);			
+				servant.sound( SE_ZANGEKI );
+			}
+			else
+				se_timer--;
+			//break;
+		default:
+			parentLayer.cursor = crDefault;
+			cursorObj.visible = false;
+			return;
+		}
+		deadProc(servant);
+		// バーサーカーにカーソルを持ってきた場合に戦闘アイコンが表示されるようにする
+		if ( bossObj.isHit(currentCamera.windowToField(cursorObj.x, cursorObj.y)) )
+		{
+			if( [ANI_BOSS_DESTROYED, ANI_BOSS_DEAD].find( bossObj.animation )<0 )
+			{
+				parentLayer.cursor = crNone;
+				cursorObj.visible = true;
+			}
+		}
+		else
+		{
+			parentLayer.cursor = crDefault;
+			cursorObj.visible = false;
+		}
+		// フィールド上をクリックした場合はそこまで移動する
+		if ( input.left == 0 )
+		{
+			var pos = currentCamera.windowToField( input.x, input.y );
+			with(servant)
+			{
+				.motionDestX = round( 移動可能範囲.x1, pos.x, 移動可能範囲.x2 );
+				.motionDestY = round( 移動可能範囲.y1, pos.y, 移動可能範囲.y2 );
+				.motionDestZ = 0;
+				.motionSpeed = .servantSpeed();
+				.motionType = MOTIONTYPE_LINER;
+				.motionStart();
+				.animation = ANI_MOVE;
+				destinationCursorChange( .motionDestX, .motionDestY );
+			}
+		}
+		// 宝具
+		if ( input.right==0 && 宝具が使用可能(servant) )
+			servantUseItem( servant, bossObj );
+	}
+	
+	function servantUseItem( servant )
+	{
+		if ( super.servantUseItem(...) )
+		{
+			cursorObj.visible = false;
+			parentLayer.cursor = crDefault;
+			return true;
+		}
+		else
+			return false;
+	}
+	
+	function deadProc( servant )
+	{
+		if ( servant.hp == 0 )
+		{
+			servant.stop();
+			servant.animation = ANI_DEAD;
+			servant.priority = PRIORITY_GROUNDOBJ+20;
+			servant.onFailed();
+		}
+	}
+	
+	function 宝具が使用可能( servant )
+	{
+		if( bossObj.animation==ANI_BOSS_DEAD )
+			return false;
+		if( bossObj.animation==ANI_BOSS_DESTROYED )
+			return false;
+		if( servant.hp <= 0 )
+			return false;
+		return true;
+	}	
+
+	function COM宝具使用チェック( servant )
+	{
+		if( servant.timing > 0 )
+			return false;
+		if( 宝具が使用可能(servant) == false )
+			return false;
+		if( COMが宝具使用する確率 <= random32(1000) )
+			return false;
+		//ok
+		return true;
+	}
+
+	
+	function servantCom( servant )
+	{
+		switch( servant.animation )
+		{
+		case ANI_STAND:
+			deadProc(servant);
+			if( COM宝具使用チェック(servant) )
+				servantUseItem(servant, bossObj);
+			else
+				if( servant.timing >= 30 )
+					servantRandomMove( servant );
+			break;
+			
+		case ANI_MOVE:
+			deadProc(servant);
+			if( COM宝具使用チェック(servant) )
+				servantUseItem(servant, bossObj);
+			else
+				if ( servant.timing % 120 == 0 )
+					servantRandomMove( servant );
+			break;
+			
+		case ANI_FIGHT:
+			if( servant.timing==0 || se_timer<=0 )
+			{
+				se_timer = randomRange(10,20);			
+				servant.sound( SE_ZANGEKI );
+			}
+			else
+				se_timer--;
+			//break;
+			
+		default:
+			return;
+		}
+		if ( bossObj.animation==ANI_BOSS_TARGET )
+			with(servant)
+			{
+				.stop();
+				.motionDestX = bossObj.x;//+randomRange(-10,10);
+				.motionDestY = bossObj.y;//+randomRange(-10,10);
+				.motionDestZ = 0;
+				.motionSpeed = 10;
+				.motionType = MOTIONTYPE_LINER;
+				.motionStart();
+				.animation = ANI_FOLLOWTARGET;		
+			}
+	}
+
+	function servantRandomMove( servant )
+	{
+		if ( random32(100) < 40 )
+		{
+			servant.motionDestX = bossObj.x;
+			servant.motionDestY = bossObj.y;
+		}
+		else
+		{
+			servant.motionDestX = random32( FieldXSize );
+			servant.motionDestY = random32( FieldYSize );
+		}
+		servant.motionDestZ = 0;
+		servant.motionSpeed = servant.servantSpeed();
+		servant.motionType = MOTIONTYPE_LINER;
+		servant.motionStart();
+		servant.animation = ANI_MOVE;
+	}
+	
+	// サーバントのアニメ更新	
+	function servantAnimation( servant )
+	{
+		switch( servant.animation )
+		{
+		case ANI_STAND:
+			servant.doAnimation();
+			servant.stop();
+			break;
+			
+		case ANI_START:
+			servant.animation = ANI_STAND;
+			break;
+			
+		case ANI_MOVE:
+			servant.doAnimation();
+			servant.updateDirectionByMotionDest();
+			if ( servant.motionDone )
+			{
+				servant.animation = ANI_STAND;
+				break;
+			}				
+			break;
+			
+		case ANI_FOLLOWTARGET:
+			if ( bossObj.animation!=ANI_BOSS_TARGET && servant.timing>60 )
+			{
+				servant.stop();
+				servant.animation = ANI_STAND;
+				break;
+			}
+			servant.doAnimation( ANI_RUN );
+			servant.updateDirectionByMotionDest();
+			if ( servant.motionDone )
+				servant.animation = ANI_MOVE;
+			break;
+			
+		case ANI_DAMAGE:
+			with( servant )
+			{
+				//if ( .timing==0 )
+				//	.stop();
+				.doAnimation();
+				if ( .timing >= ダメージ硬直時間 )
+					.animation = ANI_STAND;
+			}
+			break;
+		
+		case ANI_BLOWN:
+		case ANI_KNOCKBACK:
+			with( servant )
+			{
+				.doAnimation();
+				if ( .timing >= 吹き飛び状態持続時間 )
+					.animation = ANI_STAND;
+			}
+			break;			
+			
+		default:
+			servant.doAnimation();
+			break;
+		}
+		
+		if ( ! houguEventProcessing )
+			with( servant )
+			{
+				if ( .x < 移動可能範囲.x1 )	.x = 移動可能範囲.x1;
+				if ( .x > 移動可能範囲.x2 )	.x = 移動可能範囲.x2;
+				if ( .y < 移動可能範囲.y1 )	.y = 移動可能範囲.y1;
+				if ( .y > 移動可能範囲.y2 )	.y = 移動可能範囲.y2;
+			}
+	}
+
+ 	function updateServantRank()
+ 	{
+ 		var list = [];
+ 		var i;
+ 		var obj;
+ 		// 位置情報を更新
+		// 未ゴールのサーバントリストを作成する
+ 		for ( i=0; i<players.count; i++ )
+ 		{
+ 			players[i].position = getServantPosition(i);
+ 			list.add( players[i] );
+  		}
+  		//サーバントを進行順にソートする
+ 		list.sort( comparePosition, false );
+ 		// 順位決定
+ 		for ( i=0; i<list.count; i++ )
+			list[i].rank = i;
+	}
+		
+	//--------------------------------------------------------------------------
+	// イベント進行
+	//--------------------------------------------------------------------------
+	function onEventFirst()
+	{
+		with( normalCamera )
+		{
+			.motionDestX = DefaultPlayers[0].x;
+			.motionDestY = DefaultPlayers[0].y;
+		}
+	}
+	
+	function onEventStart()
+	{
+		servantsRootObj.changeChildAnimation( ANI_START );
+		bossObj.animation = ANI_START;
+
+		// セラ
+		with ( new CIrSerarizu(this,this.enemyRootObj) )
+		{
+			.isRizu = false;
+			.x		= -100;
+			.y		= 400;
+			.angleDeg= 135;
+			.iriyaStage	= true;
+			.animation = .ANI_イリヤ戦用登場;
+			.iriyaObj = bossObj;
+			.アイテム範囲 = 移動可能範囲;
+//			.退却タイマ = FRAME_PER_SEC*12;
+		}
+		// リズ
+		with ( new CIrSerarizu(this,this.enemyRootObj) )
+		{
+			.isRizu = true;
+			.x		= FieldXSize+100;
+			.y		= 400;
+			.angleDeg= -135;
+			.usingHalberd = getRizuHalberdFlag(); // 斧を持っているかどうか
+			.onHalberdHit = servantHitHalberd ;
+			.iriyaStage	= true;
+			.animation = .ANI_イリヤ戦用登場;
+			.iriyaObj = bossObj;
+			.アイテム範囲 = 移動可能範囲;
+//			.退却タイマ = FRAME_PER_SEC*12;
+		}
+	}
+	
+	function onEventLast()
+	{
+		if ( isAutoPlayMode() )
+		{
+			next = SCENE_SELECT;
+			return;
+		}
+		if ( parentLayer.getStageSelectFlag() )
+		{
+			next = SCENE_TITLE;
+			return;
+		}
+		switch( parentLayer.getCallType() )
+		{
+		case CALLTYPE_NORMAL:
+			next = SCENE_BOSS_NEXT;
+			return;
+		case CALLTYPE_ADV:
+			next = SCENE_BOSS_ADV_NEXT;
+			return;
+		default:
+			next = SCENE_TITLE;
+			return;
+		}
+	}
+	
+	
+	var 状況_戦闘中 = 0;
+	var 状況_戦闘終了 = 1;
+
+	var 状況;
+	
+	function onEventPlaying()
+	{
+		// スキップ機能
+		if ( input.control==0 )
+		{
+			parentLayer.setUseStageSkipFlag();
+			bossObj.hp = 0;
+		}
+		@if( DEBUG_MODE )
+			if ( input.del == 0 )
+				bossObj.hp = 0;
+		@endif
+
+		// 宝具イベント中は何の処理も行わない
+		if( houguEventProcessing )
+			return;
+
+		// 
+		if( playerObj.animation!=ANI_勝利 && bossObj.animation==ANI_BOSS_DEAD )
+		{
+			gameTimerStop();
+			// 死んでいるサーバントが起き上がる
+			if ( bossObj.timing==10 )
+			{
+				var i;
+				for ( i=0; i<players.count; i++ )
+				{
+					if( players[i].animation == ANI_DEAD )
+						players[i].animation = ANI_しゃがみ;
+				}
+			}
+			else
+				if( bossObj.timing>30 )
+				{
+					servantsRootObj.changeChildAnimation( ANI_勝利 );
+					var i;
+					for ( i=0; i<players.count; i++ )
+					{
+						players[i].onSucceeded();
+						players[i].priority = PRIORITY_PLAYER;
+					}
+				}
+		}
+		switch( playerObj.animation )
+		{
+		case ANI_勝利:
+			if ( playerObj.timing >= AFTER_WIN_TIME )
+			{
+				if ( isAutoPlayMode() )
+					eventSwitch = EVENTSWITCH_FADEOUT;
+				else
+				{
+					parentLayer.setIriyaBreakFlagGameClear();
+					eventSwitch = EVENTSWITCH_CONGRATULATIONS;
+				}
+			}
+			return;
+		case ANI_DEAD:
+			if ( playerObj.timing >= AFTER_DEAD_TIME )
+			{
+				eventSwitch = EVENTSWITCH_FAILED;
+			}
+			return;
+		}
+	}
+	
+	
+	function キャラクタIDに対応するキャラオブジェクトを取得( characterId )
+	{
+		var i;
+		for ( i=0; i<players.count; i++ )
+			if( players[i].characterId == characterId )
+				return players[i];
+		return void;
+	}
+			
+	function 自爆イベント用配置()
+	{
+		var playerpos = [
+			%[char:CHARA_ID_CASTER, x:340,y:230,muki:MUKI_RIGHT,ani:ANI_STAND],
+			%[char:CHARA_ID_LANCER, x:340,y:390,muki:MUKI_RIGHT,ani:ANI_ENDING_STAND],
+			%[char:CHARA_ID_ARCHER, x:500,y:440,muki:MUKI_LEFT ,ani:ANI_ENDING_STAND],
+			%[char:CHARA_ID_SABER,  x:660,y:390,muki:MUKI_LEFT ,ani:ANI_ENDING_STAND],
+			%[char:CHARA_ID_RIDER,  x:630,y:230,muki:MUKI_LEFT ,ani:ANI_STAND]
+		];
+		// サーバントを配置
+		playerObj.marker.enabled = false;
+		var i;
+		var obj;
+		for ( i=0; i<playerpos.count; i++ )
+		{
+			obj = キャラクタIDに対応するキャラオブジェクトを取得( playerpos[i].char );
+			obj.gauge.enabled = false;
+			obj.x = playerpos[i].x;
+			obj.y = playerpos[i].y;
+			obj.z = 0;
+			obj.位置を修正する = true;
+			obj.direction = playerpos[i].muki;
+			obj.animation = playerpos[i].ani;
+			obj.onAnimation = playerEndingAnimation;
+			obj.onUpdateCom = playerEndingCom;
+		}
+		// バーサーカーを配置
+		bossObj.x = 500;
+		bossObj.y = 120;
+		bossObj.direction = MUKI_LEFT;
+		bossObj.animation = ANI_BOSS_NOIRIYA;
+		bossObj.onAnimation = bossEndingAnimation;
+		bossObj.onUpdateCom = bossEndingUpdateCom;
+		// イリヤを配置
+		with( iriyaObj = new CIrEndingIriya(this,etcRootObj) )
+		{
+			.x = 525;
+			.y = 275;
+			.animation = ANI_IRIYA_倒れている;
+		}
+		// フィールド上のアイテムを削除
+		オブジェクト削除();
+		// カメラを指定位置で固定しておく
+		normalCamera.stop();
+		normalCamera.mode = CAMERAMODE_CUSTOM;
+		normalCamera.x = 500;
+		normalCamera.y = 300;
+	}	
+
+	function オブジェクト削除()
+	{
+		var i;
+		var obj;
+		for ( i=0; i<etcRootObj.child.count; i++ )
+		{
+			obj = etcRootObj.child[i];
+			if ( obj.type==OBJTYPE_ITEM || obj.type==OBJTYPE_SHOT )
+				obj.enabled = false;
+		}
+		for ( i=0; i<enemyRootObj.child.count; i++ )
+		{
+			obj = enemyRootObj.child[i];
+			if ( obj.type == OBJTYPE_SHOT )
+				obj.enabled = false;
+		}
+	}
+
+	var eventTimer = 0;
+	var eventMode = 0;
+	var oldmode = void;
+	var bg;
+	var staff_roll;
+	var iriyaObj;
+	var colorScreen;
+	var 点滅カウンタ;
+	var posx, posy;
+	function onEventEnding()
+	{
+		switch( eventMode )
+		{
+		// 最初の待ち時間
+ 		case 0:
+			if ( eventTimer<ENDING_FIRST_WAIT )
+				break;
+			eventMode = 1;
+			break;
+		// セピア調に
+ 		case 1:
+			with( bg=new CIriyaObject(this,etcRootObj) )
+			{
+				.layer.setSize( parentLayer.width, parentLayer.height );
+				.layer.piledCopy( 0, 0, parentLayer, 0, 0, .layer.width, .layer.height );
+				.layer.doGrayScale();
+				.layer.adjustGamma(
+					0.8, 0, 200, //1.3 R gamma, floor, ceil
+					0.5, 0, 200, //1.0 G gamma, floor, ceil
+					0.2, 0, 200  //0.8 B gamma, floor, ceil
+				); // B gamma, floor, ceil
+				.origin = ORIGIN_WINDOW;
+				.x = 0;
+				.y = 0;
+				.priority = PRIORITY_SYSTEM;
+				.fadeIn(15);
+			}
+			stopBGM();
+			eventMode = 2;
+			break;
+		// セピア調に切り替わり終わるのを待つ
+		case 2:
+			if ( bg.fadeProcessing )
+				break;
+			eventMode = 3;
+			break;
+		// スタッフロール開始
+		case 3:
+			if( eventTimer < ENDING_CREDIT_開始 )
+				break;
+			BgmPlay( BGM_STAFF );
+			staff_roll = new CIriyaStaffRoll( parentWindow, parentLayer );
+			staff_roll.Init();
+			eventMode = 4;
+			break;
+		// スタッフロールしばらく続ける
+		case 4:
+			staff_roll.Update();
+			if ( eventTimer<ENDING_CREDIT_WAIT )
+				break;
+			eventMode = 5;
+			break;
+		// 突然の警告を生成
+		case 5:
+			invalidate staff_roll;
+			自爆イベント用配置(); // 裏で配置をしておく
+			colorScreen = fadeCreate2(0xFFFF0000,true);
+			colorScreen.priority = PRIORITY_SYSTEM+10;
+			点滅カウンタ = ENDING_赤色点滅回数;
+			syssound( SE_JIBAKU_WARNING );
+			eventMode = 6;
+			stopBGM();
+			break;
+		// 画面点滅
+		case 6:
+			if ( colorScreen.fadeProcessing )
+				break;
+			colorScreen.fadeIn(10);
+			eventMode = 7;
+			break;
+		case 7:
+			if ( colorScreen.fadeProcessing )
+				break;
+			点滅カウンタ--;
+			if ( 点滅カウンタ == 2 )
+				bg.fadeOut(30);
+			if ( 点滅カウンタ > 0 )
+			{
+				colorScreen.fadeOut(10);
+				eventMode = 6;
+				break;
+			}
+//			stopSound( ,500,true );
+			eventMode = 8;
+			break;
+		// 配置変更
+		case 8:
+			colorScreen.fadeOut(10);
+			eventMode = 9;
+			break;
+		// フェード待ち
+		case 9:
+			if ( colorScreen.fadeProcessing )
+				break;
+			eventMode = 9.4;
+			break;
+		// イリヤ倒れてる
+		case 9.4:
+			if( eventTimer < 45 )
+				break;
+			posx = iriyaObj.x;
+			posy = iriyaObj.y;
+			eventMode = 9.41;
+			break;
+		// イリヤぴくぴく動き出す
+		case 9.41:
+			if( eventTimer < 15 )
+			{
+				iriyaObj.x = posx+randomRange(-2,2) if( random32(2)==0 );
+				break;
+			}
+			iriyaObj.x = posx;
+			if( eventTimer < 30 )
+				break;
+			if( eventTimer < 45 )
+			{
+				iriyaObj.x = posx+randomRange(-2,2) if( random32(2)==0 );
+				break;
+			}
+			iriyaObj.x = posx;
+			if( eventTimer < 60 )
+				break;
+			eventMode = 9.5;
+			break;
+		// イリヤ起きる
+		case 9.5:
+			if ( eventTimer==0 )
+				iriyaObj.animation = ANI_IRIYA_通常;
+			if ( eventTimer < 30 )
+				break;
+			eventMode = 9.6;
+			break;
+					
+		// イリヤしゃべる
+		case 9.6:
+			if ( eventTimer == 0 )
+				iriyaObj.animation = ANI_IRIYA_しゃべる;
+			if ( eventTimer < 45 )
+				break;
+			eventMode = 10;
+			break;
+		
+		// 自爆イベント開始待ち
+		case 10:
+			if ( eventTimer==0 )
+				iriyaObj.animation = ANI_IRIYA_通常;
+			if ( eventTimer < ENDING_ボタン出現WAIT )
+				break;
+			eventMode = 11;
+			break;
+		// 床が割れ、自爆ボタンが出てくる
+		case 11:
+			syssound( SE_JIBAKU_BUTTON );
+			with( new CIrTile(this,etcRootObj,0) )
+			{
+				.x = 339;
+				.y = 190;
+				.priority = PRIORITY_PLAYER+100;
+			}
+			with( new CIrTile(this,etcRootObj,2) )
+			{
+				.x = 460;
+				.y = 265;
+			}
+			with( new CIrTile(this,etcRootObj,1) )
+			{
+				.x = 499;
+				.y = 190;
+				.priority = PRIORITY_PLAYER+100;
+			}
+			eventMode = 12;
+			break;
+		// 自爆ボタン出現待ち
+		case 12:
+			if ( eventTimer<30 )
+				break;
+			eventMode = 13;
+			break;
+		// びっくり！！
+		case 13:
+			var i;
+			for ( i=0; i<players.count; i++ )
+				with( new CIrEmotion(this,players[i]) )
+				{
+					.animation = ANI_EMOTION_EXCLAMATION2;
+					.direction = players[i].direction;
+					.images = systemImages;
+				}
+			eventMode = 14;
+			break;
+		// 待ち
+		case 14:
+			if ( eventTimer<ENDING_ボタンオスWAIT )
+				break;
+			eventMode = 15;
+			break;
+		// ボタンオス
+		case 15:
+			switch( eventTimer )
+			{
+			case 0:
+				iriyaObj.animation = ANI_IRIYA_ボタン押す;
+				break;
+			case 50:
+				iriyaObj.animation = ANI_IRIYA_笑う;
+				break;
+			case 80:
+    			eventMode = 16;
+    			break;
+    		}
+    		break;
+		// ボタン押した
+		case 16:
+			地震処理();
+			if( timerCount%8 == 0 )
+			{
+				syssound( SE_JIBAKU_GOGOGOGOGO );
+				岩落下();
+			}
+			if ( eventTimer<10 )
+				break;
+			eventMode = 16.2;
+			break;
+			
+		// キョロキョロ
+		case 16.2:
+			地震処理();
+			if( timerCount%8 == 0 )
+				岩落下();
+			
+			var i;
+			for ( i=0; i<players.count; i++ )
+			{
+				players[i].animation = ANI_STAND;
+				if( timerCount%8==0 )
+					players[i].direction = random32(2)==0 ? MUKI_LEFT : MUKI_RIGHT;
+			}
+			
+			if ( eventTimer<90 )
+				break;
+			eventMode = 16.5;
+			break;
+
+		// サーバント逃げる
+		case 16.5:
+			地震処理();
+			if( timerCount%8 == 0 )
+				岩落下();
+			var i;
+    		switch( eventTimer )
+    		{
+    		case 0:
+	    		for ( i=0; i<players.count; i++ )
+    				with (players[i])
+    				{
+    					.animation = ANI_RUN;
+    					.motionDestX = 360 + i*20;
+    					.motionDestY = FieldYSize+100;
+    					.motionDestZ = 0;
+    					.motionLength = 60;
+    					.motionType = MOTIONTYPE_SCHEDULED_LINER;
+    					.motionStart();
+    					.updateDirectionByMotionDest();
+    				}
+    			break;
+    		case 30:
+				syssound( "se436.wav" );
+    			break;
+    		case 70:
+    			for ( i=0; i<players.count; i++ )
+    				players[i].stop();
+    			eventMode = 17;
+    			break;
+    		}
+    		break;
+    	// ホワイトアウト
+    	case 17:
+			地震処理();
+			if( timerCount%5 == 0 )
+				岩落下();
+    		switch( eventTimer )
+    		{
+    		case 0:
+//    			syssound( SE_JIBAKU_EXPLOSION );
+				colorScreen = fadeCreate2(0xFFFFFFFF,true);
+				colorScreen.priority = PRIORITY_FADE;
+				colorScreen.fadeIn(30);
+				break;
+			case 30:
+				eventMode = 17.1;
+				break;
+			}
+			break;
+		case 17.1:
+			switch( eventTimer )
+			{
+			case 60:
+				eventSwitch = EVENTSWITCH_LAST;
+				break;
+			}
+			break;
+		}
+		// カウンタ
+		if ( oldmode === eventMode )
+			eventTimer++;
+		else
+		{
+			eventTimer = 0;
+			oldmode = eventMode;
+		}
+	}
+	
+	
+	var _first = true;
+	var _camerax;
+	
+	function 地震処理()
+	{
+		if ( _first )
+		{
+			_camerax = normalCamera.x;
+			_first = false;
+		}
+		normalCamera.x = _camerax + randomRange( -10, 10 );
+	}
+	
+	
+	function 岩落下()
+	{
+		with( new CIrGareki(this,etcRootObj) )
+		{
+			.images = systemImages;
+			.x = randomRange( 0, SCREEN_SIZE_W );
+			.y = randomRange( -100, -200 );
+			.speedY = randomRange(0, 10);
+			.accelY = 0.5;
+		}
+	}
+
+	function playerEndingAnimation(servant)
+	{
+		servant.doAnimation();
+	}
+	
+	function playerEndingCom(servant)
+	{
+	}
+	
+	function bossEndingAnimation(boss)
+	{
+		boss.animation = ANI_BOSS_NOIRIYA;
+		boss.doAnimation();
+	}
+	
+	function bossEndingUpdateCom(boss)
+	{
+	}
+}
+

@@ -1,0 +1,1732 @@
+/*******************************************************************************
+
+	風雲イリヤ城 - きのこでボン
+	
+	
+■変更点
+
+変更点051003 で検索
+
+
+
+*******************************************************************************/
+
+var PRIORITY_KINOKO_BEHIND	= PRIORITY_PLAYER_BACK-4000;
+var PRIORITY_KINOKO			= PRIORITY_PLAYER_BACK-3000;
+var PRIORITY_KINOKO_FRONT	= PRIORITY_PLAYER_BACK-2000;
+var PRIORITY_KINOKO_ASHIBA	= PRIORITY_PLAYER_BACK-1000;
+var PRIORITY_TABLE			= PRIORITY_PLAYER_TOP+1000;
+var PRIORITY_MISSILE		= PRIORITY_PLAYER_TOP+2000;
+var PRIORITY_HINT			= PRIORITY_FADE-1000;
+
+var STAGE2_COM_登り中止HP			= 4;
+var STAGE2_COM_登り中止確率			= 0.2;
+var STAGE2_COM_登り再開HP			= 15;
+var STAGE2_COM_登り再開確率			= 0.1;
+var STAGE2_KINOKO_SPEED				= 3.8;
+var STAGE2_HINT_TIMELENGTH			= 30;
+var STAGE2_食事_クリック受付時間	= FRAME_PER_SEC/4;
+var STAGE2_崖_クリック受付時間		= FRAME_PER_SEC/6;
+var STAGE2_崖_登るときのHP消費		= 0.8;
+var STAGE2_崖_待機中のHP回復		= 0.3;
+var STAGE2_KINOKO_HP消費_登る		= 0.8;
+var STAGE2_KINOKO_HP消費_通常		= 0.4;
+var STAGE2_MISSILE_DAMAGE			= 15;
+var STAGE2_休憩所での移動速度		= 6;
+var STAGE2_KINOKO_登る速度			= 4;
+var STAGE2_KINOKO_降下速度			= 1.5;
+var STAGE2_COM_HP無視して崖を登り続ける確率 = 0.7;
+
+var ミサイル出現間隔_最小 = FRAME_PER_SEC*2;
+var ミサイル出現間隔_最大 = FRAME_PER_SEC*5;
+
+var ANI_CURSOR_DOWN = "ANI_CURSOR_DOWN";
+var ANI_CURSOR_JUMP = "ANI_CURSOR_JUMP";
+var ANI_CURSOR_NONE = "ANI_CURSOR_NONE";
+
+class CIrClimbMark extends CIriyaObject
+{
+	var info = %[];
+	
+	function CIrClimbMark( _scene, _parent )
+	{
+		super.CIriyaObject( ... );
+		origin = ORIGIN_WINDOW;
+		x = 500;
+		y = 200;
+		priority = PRIORITY_GAMESYSTEM;
+		info.filename = "ir_sys_climb00";
+		info.adapt = false;
+		info.mirror = false;
+		info.centerX = 32;
+		info.centerY = 38;
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	function onAnimation()
+	{
+		if ( timing%12==0 )
+			fadeOut(12);
+		switch( parent.animation )
+		{
+		case ANI_崖_登る:
+		case ANI_崖_しがみつき:
+			break;
+		default:
+			visible = false;
+			enabled = false;
+			break;
+		}
+	}
+	
+	function getImageFileInfo()
+	{
+		return info;
+	}
+}
+
+
+
+class CIrKinokoCursor extends CIriyaObject
+{
+	function CIrKinokoCursor( _scene, _parent )
+	{
+		super.CIriyaObject( ... );
+		x = 0;
+		y = 0;
+		priority = PRIORITY_GAMESYSTEM;
+		animation = ANI_CURSOR_NONE;
+	}
+
+	function finalize()
+	{
+		super.finalize(...);
+	}
+
+	function doUpdateCom()
+	{
+		super.doUpdateCom(...);
+		//
+		switch( animation )
+		{
+		case ANI_CURSOR_JUMP:
+			if ( timing % 15==0 )
+			{
+				if ( visible )
+					syssound( SE_JUMPUP_CURSOR );
+				fadeOut(15);
+			}
+			x = scene.kinokoObj.x;
+			y = scene.kinokoObj.y;
+			break;
+			
+		case ANI_CURSOR_DOWN:
+			if ( timing % 15==0 )
+			{
+				syssound( SE_JUMPDOWN_CURSOR );
+				fadeOut(15);
+			}
+			var area = scene.getNearestArea( scene.playerObj );
+			var meanx = area.left+area.width/2;
+			x = meanx;
+			y = area.top;
+			break;
+		}
+	}
+	
+	function onAnimation()
+	{
+		switch( animation )
+		{
+		case ANI_CURSOR_JUMP:
+			if ( timing==0 )
+				imageId = "JUMPUP";
+			visible = ( scene.playerObj.x<scene.kinokoObj.x );
+			break;
+			
+		case ANI_CURSOR_DOWN:
+			if ( timing==0 )
+				imageId = "JUMPDOWN";
+			visible = ( scene.playerObj.x<x );
+			break;
+			
+		case ANI_CURSOR_NONE:
+			if ( timing==0 )
+				visible = false;
+			break;
+		}
+	}
+	
+	function getImageFileInfo()
+	{
+		var info = %[];
+		var cx;
+		var cy;
+		switch( imageId )
+		{
+ 		case "JUMPUP":		info.filename="ir_sys_jumpcursor00"; cx=160; cy=-20; break;
+		case "JUMPDOWN":	info.filename="ir_sys_jumpcursor10"; cx=280; cy=280; break;
+ 		default:
+ 			return void;
+ 		}
+ 		info.mirror = false;
+ 		info.adapt = true;
+ 		info.centerX = cx;
+ 		info.centerY = cy;
+ 		return info;
+	}
+}
+
+
+
+
+class CIrKinoko extends CIriyaObject
+{
+	// きのこの通る道筋
+	var KinokoWay = [ 
+		%[x:   0, y: 30], %[x: 250, y: 30], %[x: 500, y: 30], %[x: 760, y: 50],
+		%[x: 840, y: 50], %[x:1000, y:  0], %[x:1200, y:200], %[x:1450, y:100],
+		%[x:1700, y: 50], %[x:1960, y:100], %[x:2220, y: 30], %[x:2400, y: 30],
+		%[x:2450, y:120], %[x:2750, y: 60], %[x:3000, y: 30], %[x:3600, y: 30],
+		%[x:3600, y: 30], %[x:3850, y: 30], %[x:4100, y: 30], %[x:4360, y: 50],
+		%[x:4440, y: 50], %[x:4600, y:  0], %[x:5000, y:  0]
+	];
+	var 折り返し点LEFT = 300;
+	var 折り返し点RIGHT = 4800;//7200;
+	var きのこ回転WAIT = 2;
+
+	var degree = 0; // 回転角（度単位）
+	var degreeIndex = 0;
+	var defSpeedX;
+	var kinoko_counter;
+	var ANI_KINOKO_DEFAULT = -1;
+	var ANI_KINOKO_STOP = -2;
+	var ANI_KINOKO_BACK = -3;
+	var ANI_KINOKO_UPDOWN = -4;
+	var 正回転 = true;
+	
+	function CIrKinoko( _scene, _parent )
+	{
+		super.CIriyaObject( ... );
+		x = 1000;
+		y = 100;
+		priority = PRIORITY_KINOKO;
+		images.capacity = 32;
+	}
+	
+	function finalize()
+	{
+		super.finalize( ... );
+	}
+
+	function doUpdateCom()
+	{
+		super.doUpdateCom(...);
+		//
+		if ( x < 折り返し点LEFT )
+			defSpeedX = STAGE2_KINOKO_SPEED;
+		if ( x > 折り返し点RIGHT )
+			defSpeedX = -STAGE2_KINOKO_SPEED;
+		y = getYPosOnPolyline( KinokoWay, x );
+	}
+	
+	function onAnimation()
+	{
+		switch( animation )
+		{
+		case ANI_START:
+			defSpeedX = -STAGE2_KINOKO_SPEED;
+			animation = ANI_KINOKO_DEFAULT;
+			return;
+
+		case ANI_KINOKO_DEFAULT:
+			speedX = defSpeedX;
+			正回転 = true;
+			if( timing<90 )
+				break;
+			if( random32(2)==0 )
+				animation=ANI_KINOKO_STOP;
+			else
+				animation=ANI_KINOKO_UPDOWN;
+			break;
+			
+		case ANI_KINOKO_STOP:
+			stop();
+			if ( timing<30 )
+				break;
+			if ( random32(3)==0 )
+				animation = ANI_KINOKO_BACK;
+			else	
+				animation = ANI_KINOKO_DEFAULT;
+			break;
+			
+		case ANI_KINOKO_BACK:
+			正回転 = false;
+			if ( timing<45 )
+				break;
+			animation = ANI_KINOKO_DEFAULT;
+			break;
+		
+		case ANI_KINOKO_UPDOWN:
+			y += randomRange(-10,10);
+			if ( timing < 30 )
+				break;
+			animation = ANI_KINOKO_DEFAULT;
+			break;
+		}
+				
+		if ( kinoko_counter%きのこ回転WAIT == 0 )
+		{
+			if ( 正回転 )
+				degreeIndex = (degreeIndex+1) % 32;
+			else
+				degreeIndex = (degreeIndex+31) % 32;
+			imageId = degreeIndex;
+			degree = 31-(degreeIndex * 360 \ 32);
+		}
+		kinoko_counter++;
+	}
+
+	function getImageFileInfo()
+	{
+		var info = %[];
+		info.filename = "ir_char_kinoko%02d".sprintf(imageId);
+		info.mirror = false;
+		info.adapt = true;
+		info.centerX = 182;
+		info.centerY = 0;
+		return info;
+	}
+}
+
+
+
+class CIrWarning extends CIriyaObject
+{
+	function CIrWarning( _scene, _parent )
+	{
+		super.CIriyaObject( ... );
+		origin = ORIGIN_WINDOW;
+		priority = PRIORITY_GAMESYSTEM-10;
+		animation = 0;
+		sound( SE_WARNING );
+	}
+	
+	function finalize()
+	{
+		super.finalize( ... );
+	}
+
+	function onAnimation()
+	{
+		imageId = ( timing\10 % 2 );
+		switch( animation )
+		{
+		case 0:
+			if ( timing < 20 )
+				break;
+			var pos = scene.normalCamera.windowToField( x, y );
+			scene.createMissile( pos.x+200, pos.y );
+			animation = 1;
+			break;
+		case 1:
+			fadeOut(10);
+			animation = 2;
+			break;
+		case 2:
+			if ( fadeProcessing )
+				break;
+			visible = false;
+			enabled = false;
+			break;
+		}
+	}
+	
+	function getImageFileInfo()
+	{
+		var info = %[];
+		info.filename = "ir_sys_warning%02d".sprintf(imageId);
+ 		info.mirror = false;
+ 		info.adapt = true;
+ 		info.centerX = 112;
+ 		info.centerY = 40;
+ 		return info;
+	}
+}
+
+
+
+var ANI_HINT_NONE	= "ANI_HINT_NONE";
+var ANI_HINT_DANGER = "ANI_HINT_DANGER";
+var ANI_HINT_EAT	= "ANI_HINT_EAT";
+var ANI_HINT_JUMPDOWN="ANI_HINT_JUMPDOWN";
+
+class CIrHint extends CIriyaObject
+{
+	var messages = [];
+	var text;
+	var characterId;
+	
+	function CIrHint( _scene, _parent )
+	{
+		super.CIriyaObject( ... );
+		x = 0;
+		y = 0;
+		origin = ORIGIN_WINDOWCENTER;
+		priority = PRIORITY_HINT;
+		animation = ANI_HINT_NONE;
+		text = "";
+		characterId = parent.masterId;
+		
+		messages.load( "ir_stage2.txt" );
+	}
+	
+	function onAnimation()
+	{
+		visible = ( animation!=ANI_HINT_NONE );
+		switch( animation )
+		{
+		case ANI_HINT_JUMPDOWN:
+			if ( timing%30==0 )
+				switch( random32(3) )
+				{
+				case 0: text=messages[0]; break;
+				case 1: text=messages[1]; break;
+				case 2: text=messages[2]; break;
+				}
+				break;
+			if ( timing>=30 )
+				animation = ANI_HINT_NONE;
+			break;
+
+
+		case ANI_HINT_DANGER:
+			if ( timing%30==0 )
+			{
+				switch( random32(3) )
+				{
+				case 0: text=messages[4]; break;
+				case 1: text=messages[5]; break;
+				case 2: text=messages[6]; break;
+				}
+				break;
+			}
+			if ( timing>=30 )
+				animation = ANI_HINT_NONE;
+			break;
+			
+		case ANI_HINT_EAT:
+			if ( timing%30==0 )
+				switch( random32(3) )
+				{
+				case 0: text=messages[8]; break;
+				case 1: text=messages[9]; break;
+				case 2: text=messages[10]; break;
+				}
+				break;
+			break;
+		}
+	}
+	
+	function onDraw()
+	{
+		with( layer )
+		{
+			.fill( 0x88000000 );
+			.font.height = 28;
+			.width	= .font.getTextWidth( text )+20;
+			.height	= .font.getTextHeight( text )+20;
+			.drawBorderText( 10, 10, text, , , 2 );
+			imageCenterX = .width\2;
+			imageCenterY = -140;
+		}
+		return true;
+	}
+}
+
+
+
+
+class CIriyaKinoko extends CIriyaSceneEx
+{
+	var FieldXSize				= 6000;
+	var FieldYSize				= 700;
+	var CameraPosY				= 300;
+	var FirstCameraPosX			= 1400;
+	var FirstCameraPosY			= 300;
+	var サーバント移動可能範囲L = 20;
+	var サーバント移動可能範囲R	= FieldXSize - 20;
+	var 脱落ラインY				= 900; // これよりも下（＝Ｙ座標が大きい場合）は脱落したとみなす
+	var サーバント重力加速度	= 0.4;
+	var 崖_登り速度X			= 3;
+	var 崖_落下速度X			= 8;
+	var ゴールまでの移動速度	= 8;
+	var 崖までの移動速度		= 8;
+	var テーブル幅				= 288;
+	var 危険HP					= 20;
+	var 悲鳴生成間隔			= 2;
+	var KinokoTopY = 20;
+	var KinokoBottomY = 410;
+	// きのこの半径
+	var KinokoRadius = [
+		%[x:30, y:KinokoTopY ],
+		%[x:160, y:200],
+		%[x:120, y:210],
+		%[x:120, y:KinokoBottomY]
+	];
+	// 崖の座標
+	var RockPosition = [
+		%[x:  0, y: 0],
+		%[x:460, y: 0],
+		%[x:530, y:-130],
+		%[x:710, y:-270],
+		%[x:820, y:-520],
+		%[x:960, y:-760],
+		%[x:1400, y:-760]
+	];	
+	var RockBeginIndex = 1;
+	var RockEndIndex = RockPosition.count-2;
+	//
+	var DefaultPlayers = [
+		%[ x: 80, y:560 ],
+		%[ x: 90, y:550 ],
+		%[ x: 100, y:540 ],
+		%[ x: 110, y:530 ],
+		%[ x: 120, y:520 ]
+	];
+	
+	var GoalPosition = [ 5730, 5780, 5830, 5880, 5930 ];
+	
+	var MealPositionX = [ 140, 110, 80, 170, 210 ];
+	
+	// 休憩所の範囲
+	var PlaceInfoList = [
+		%[ image:"足場0",	left:-150, width:300, top:480, height:80, table:false ], // スタート地点
+		%[ image:"足場1",	left: 930, width:300, top:490, height:80, table:true, tableX:50, tableY:-50 ],
+		%[ image:"足場0",	left:2000, width:300, top:440, height:80, table:true, tableX:50, tableY:-50 ],
+		%[ image:"足場1",	left:3300, width:300, top:440, height:80, table:true, tableX:50, tableY:-50 ],
+		%[ image:"足場2",	left:4700, width:400, top:450, height:80, table:false ] // ゴール地点
+	];
+	
+	//--------------------------------------------------------------------------
+
+	var kinokoObj;
+	
+	function CIriyaKinoko( parent, scene_id )
+	{
+		super.CIriyaSceneEx( ... );
+		dm( "きのこ" );
+	}
+	
+	function init()
+	{
+		super.init();
+		BgmPlay( BGM_STAGE2 );
+	}
+	
+	function finalize()
+	{
+		super.finalize( ... );
+	}
+
+
+	function onServantPositionQuery( index )
+	{
+		var start = DefaultPlayers[index].x;
+		var len = FieldXSize - start;
+		var pos;
+		switch ( players[index].animation )
+		{
+		case ANI_HANG:
+		case ANI_HANG_PINCH:
+		case ANI_登る:
+			pos = kinokoObj.x - start;
+			break;
+		default:
+			pos = players[index].x - start;
+			break;
+		}
+		return round( 0, pos/len*100, 100 );
+	}
+
+
+	var __cursor;
+	// カーソルを指定したアニメで表示する
+	//		すでにカーソルが存在する場合はそのカーソルのアニメが変化する
+	//		すでに同じアニメのカーソルが存在する場合は何もしない
+	function cursorShow( ani )
+	{
+		if ( ! CheckValid( __cursor ) )
+			__cursor = new CIrKinokoCursor( this, etcRootObj );
+		__cursor.animation = ani;
+	}
+	// カーソルを消す. カーソルが存在しない場合は何もしない
+	function cursorHide()
+	{
+		if ( CheckValid( __cursor ) )
+			__cursor.enabled = false;
+	}
+	// カーソルが指定されたアニメ中ならば真を返す
+	// カーソルが存在しない場合は常に偽を返す
+	function cursorIs( ani )
+	{
+		if ( CheckValid( __cursor ) )
+			return ( __cursor.animation == ani );
+		else
+			return false;
+	}
+	
+	// カーソルがクリックされた瞬間ならば真を返す
+	// カーソルが存在しない場合は常に偽を返す
+	function cursorLayerClicked()
+	{
+		if ( ! CheckValid( __cursor ) )
+			return false;
+		if ( ! __cursor.visible )
+			return false;
+		// レイヤ上の点かどうかを調べる
+		var pos = __cursor.getLayerPos();	
+		if ( input.x+10 < pos.x )
+			return false;
+		if ( input.x-10 > pos.x+__cursor.imageWidth )
+			return false;
+		if ( input.y+10 < pos.y )
+			return false;
+		if ( input.y-10 > pos.y+__cursor.imageHeight )
+			return false;
+		return true;
+	}
+
+
+	var __hint;
+	// ヒントを表示する
+	function hintShow( ani )
+	{
+		if ( ! CheckValid( __hint ) )
+			__hint = new CIrHint(this,playerObj);
+		__hint.animation = ani;
+	}
+	// ヒントを消す
+	function hintHide()
+	{
+		if ( CheckValid(__hint) )
+			__hint.enabled = false;
+	}
+
+	function goalBgAnimation( bg )
+	{
+		if ( ! bg.animation )
+			return;
+		bg.visible = true;
+		switch( bg.timing\10 % 2)
+		{
+		case 0: bg.filename="ir_st2_goal00"; break;
+		case 1: bg.filename="ir_st2_goal01"; break;
+		}
+	}
+	
+	var goalBg;
+	// フィールドの初期化時に呼び出される
+	function initField()
+	{
+		super.initField();
+		var i = 0;
+		
+		if ( DIVIDE_BACKGROUND_IMAGE )
+		{
+			var x;
+			for ( x=0; x<4000; x+=400 )
+				with( new CIrBackground(this,etcRootObj) )
+				{
+					.filename = "ir_st2_bg%02d".sprintf(i++);
+					.scrollRateX = 0.6;
+					.scrollRateY = 0;
+					.x = x/.scrollRateX;
+					.y = 0;
+					.imageWidth = 400;
+					.imageHeight= 600;
+					.autoImageMemory = true;
+				}
+		}
+		else
+		{
+			with( new CIrBackground(this,etcRootObj) )
+			{
+				.filename = "ir_st2_bg";
+				.scrollRateX = 0.6;
+				.scrollRateY = 0;
+			}
+		}	
+		// ゴール時に点滅する部分
+		with( goalBg=new CIrBackground(this,systemRootObj) )
+		{
+			.priority = PRIORITY_BACKGROUND+100;
+			.scrollRateX = 0.6;
+			.scrollRateY = 0;
+			.x = 3103/.scrollRateX;
+			.y = 0;
+			.animation = false;
+			.visible = false;
+			.onAnimation = goalBgAnimation;
+		}
+		// 足場
+		for ( i=0; i<PlaceInfoList.count; i++ )
+			with ( new CIrBackground(this,etcRootObj) )
+			{
+				.x = PlaceInfoList[i].left;
+				.y = PlaceInfoList[i].top;
+				.priority = PRIORITY_KINOKO_ASHIBA;
+				.adapt = true;
+				.autoImageMemory = true;
+				switch( PlaceInfoList[i].image )
+				{
+				case "足場0": .filename="ir_st2_ashiba00"; .imageCenterX=30; .imageCenterY= 40; .imageWidth= 480; .imageHeight= 400; break;
+				case "足場1": .filename="ir_st2_ashiba01"; .imageCenterX=50; .imageCenterY= 40; .imageWidth= 480; .imageHeight= 400; break;
+				case "足場2": .filename="ir_st2_ashiba02"; .imageCenterX=80; .imageCenterY=820; .imageWidth=1400; .imageHeight=1100; break;
+				}
+			}				
+		
+		// きのこ
+		kinokoObj = new CIrKinoko(this,etcRootObj);
+		
+		// テーブル
+		for ( i=0; i<PlaceInfoList.count; i++ )
+			if ( PlaceInfoList[i].table )
+				with( new CIrBackground(this,etcRootObj) )
+				{
+					.x = PlaceInfoList[i].left+PlaceInfoList[i].tableX;
+					.y = PlaceInfoList[i].top+PlaceInfoList[i].tableY;
+					.priority = PRIORITY_TABLE;
+					.adapt = true;
+					.filename = "ir_obj_table00";
+				}
+	}
+	
+
+	// 通常カメラを更新する（宝具を使っていないときに呼び出される）
+	function normalCameraUpdate( camera )
+	{
+		if ( camera.mode != CAMERAMODE_DEFAULT )
+			return false;
+			
+		switch ( playerObj.animation )
+		{
+		case ANI_HANG:
+		case ANI_HANG_PINCH:
+		case ANI_登る:
+			camera.motionDestX = kinokoObj.x; // きのこにあわせる
+			camera.motionDestY = kinokoObj.y;
+			break;
+		default:
+			camera.motionDestX = playerObj.x; // サーバントに合わせる
+			camera.motionDestY = playerObj.y-100;//CameraPosY;
+			break;
+		}
+		
+		return true;
+	}
+
+
+	// index番目のプレイヤの初期化処理の際に呼び出される
+	function onInitPlayer( player, _index )
+	{
+		with( player )
+		{
+			.x	= DefaultPlayers[_index].x;
+			.y	= DefaultPlayers[_index].y;
+			.degree = 0;	// きのこにつかまった時のきのこの角度を記録するために使う
+			.kinokoY = 0;	// きのこにつかまった位置を記録するために使う
+			.button = void;
+			.place = void;
+			if ( .isPlayer )
+				.onUpdateCom = servantPlayer;
+			else
+				.onUpdateCom = servantCom;
+		}
+	}
+
+	function updateServantPosOnKinoko( servant )
+	{
+		with( servant )
+		{
+			var r;
+			// サーバントの位置を取得
+			r = getXPosOnPolyline( KinokoRadius, .kinokoY );
+			if ( r===void)
+			{
+				if ( .kinokoY < KinokoTopY )
+				{
+					.kinokoY = KinokoTopY;
+					r = 10;
+				}
+				else
+				{
+					r = getXPosOnPolyline( KinokoRadius, KinokoBottomY );
+					.kinokoY = KinokoBottomY;
+				}
+			}
+			var deg = normalize360(kinokoObj.degree - .degree);
+			// 位置を更新
+			.x = kinokoObj.x - r * Math.cos( degToRad(deg) );
+			.y = kinokoObj.y + .kinokoY;
+			// 回転角度によって、きのことの表示順位関係を変える
+			if ( inRange( 0, deg, 180 ) )
+				.priority = PRIORITY_KINOKO_BEHIND;
+			else
+				.priority = PRIORITY_KINOKO_FRONT;
+			// 回転角度によってキャラクタの向きを変える
+			if ( inRange( 0, deg, 90 ) )
+				.direction = MUKI_RIGHT;
+			else if ( inRange( 90, deg, 270 ) )
+				.direction = MUKI_LEFT;
+			else if ( inRange( 270, deg, 360 ) )
+				.direction = MUKI_RIGHT;
+		}
+	}
+	
+	
+	// servant が食べるときの立ち位置
+	// テーブルがないエリアの場合は void を返す	
+	function getServantEatPos( servant )
+	{
+		var area = findArea( servant );
+		if ( area === void )
+			return void;
+		if ( area.table === void )
+			return void;
+		return area.left + area.tableX + MealPositionX[servant.index];
+	}
+	
+	// servant がジャンプするときの立ち位置
+	function getServantJumpPos( servant )
+	{
+		var area = findArea( servant );
+		if ( area === void )
+			return void;
+		return area.left+area.width-servant.index*15;
+	}
+		
+	
+	// 指定したオブジェクトが休憩エリアにいるなら、そのエリアオブジェクトを返す
+	// エリアがない場合は void を返す
+	function findArea( obj )
+	{
+		return _findArea( obj.x, obj.y );
+	}
+
+	function _findArea( x, y )
+	{
+		var i;
+		var area;
+		for ( i=0; i<PlaceInfoList.count; i++ )
+		{
+			area = PlaceInfoList[i];
+			if ( inRange( area.left, x, area.left+area.width ) )
+				if ( inRange( area.top, y, area.top+area.height ) )
+					return area;
+		}
+		return void;
+	}
+	
+	// 最も近い休憩エリアを返す
+	function getNearestArea( obj )
+	{
+		var i;
+		var area;
+		var dx;
+		var distanceX=0xffffffff;
+
+		for ( i=0; i<PlaceInfoList.count; i++ )
+		{
+			dx = Math.abs( PlaceInfoList[i].left - obj.x );
+			if ( dx<distanceX )
+			{
+				distanceX = dx;
+				area = PlaceInfoList[i];
+			}
+		}
+		return area;
+	}
+	
+
+	function createHimei( servant )
+	{
+		with( new CIrHimei( this, servant ) )
+			.images = systemImages;
+	}
+
+	function createMissile( x, y )
+	{
+		with( new CIrMissile(this,etcRootObj) )
+		{
+			.x = x;
+			.y = y;
+			.z = 0;
+			.onHit = missileHitServant;
+			.images = systemImages;
+		}
+	}
+	
+	function createWarning( x, y )
+	{
+		with( new CIrWarning(this,etcRootObj) )
+		{
+			.x = x;
+			.y = y;
+			.images = systemImages;
+		}
+	}
+
+	function missileHitServant( missile, target )
+	{
+		// 画面外、当たり判定が発生しないアニメ、きのこ裏側にいるときはヒットを無効にする
+		if ( target.outOfScreen() )
+			return false;
+		switch( target.animation )
+		{
+		case ANI_HANG:
+		case ANI_HANG_PINCH:
+		case ANI_登る:
+		case ANI_飛び乗る_ジャンプ中:
+		case ANI_飛び降りる:
+			if ( target.priority==PRIORITY_KINOKO_BEHIND )
+				return false;
+			// ミサイルに当たった
+			target.hpDamage( STAGE2_MISSILE_DAMAGE );
+			return true;
+		}
+		return false;
+	}
+	
+	
+	// 危険な状態（＝着地に失敗しそう）ならば真を返す
+	function danger( servant )
+	{
+		var near, dx, dy;
+		// 一番近くの足場を調べる
+		near = getNearestArea( servant );
+		// 上昇中は危険判定しない
+		if ( servant.speedY < 0 )
+			return false;
+		// 足場の右にいた場合はアウト
+		if ( servant.x > near.left+near.width )
+			return true;
+		// 足場よりも下にいた場合はアウト
+		if ( servant.y > near.top+near.height )
+			return true;
+		// 足場の左下端から、左斜め上４５度のラインよりも下にいれば危険
+		dx = near.left            - servant.x;
+		dy = near.top+near.height - servant.y;
+		if ( dx>0 && dy>0 && dx>dy )
+			return true;
+		// 足場の右上端から、左斜め上４５度のラインよりも上にいれば危険
+		dx = near.left+near.width - servant.x;
+		dy = near.top             - servant.y;
+		if ( dx>0 && dy>0 && dx<dy )
+			return true;
+		// 安全
+		return false;
+	}
+	
+	
+	function servantAnimation( servant )
+	{
+		switch( servant.animation )
+		{
+		case ANI_START:
+			servant.animation = ANI_STAND;
+			break;
+
+		case ANI_飛び乗る:
+			// 「ANI_JUMP」と同じアニメをさせる。
+			// 地面から離れるモーションになったら ANI_飛び乗る_ジャンプ中 アニメに切り替える
+			servant.doAnimation( ANI_JUMP );
+			if ( servant.animation == ANI_JUMPING )
+				servant.animation = ANI_飛び乗る_ジャンプ中;
+			break;
+
+		case ANI_飛び乗る_ジャンプ中:
+			// 「ANI_JUMPING」と同じアニメをさせる
+			servant.doAnimation( ANI_JUMPING );
+			with( servant )
+			{
+				if ( .timing === 0 )
+				{	
+					.stop();
+					.speedX = .INFO.JUMP_SPEEDX;
+					.speedY = .INFO.JUMP_SPEEDY;
+				}
+				// きのこに接触した場合
+				{
+					var dx = .x - kinokoObj.x;
+					var dy = .y - kinokoObj.y;
+					var きのこ上 = 30;
+					var きのこ下 = 400;
+					if ( inRange( -120, dx, 120 ) && inRange( きのこ上, dy, きのこ下 ) )
+					{
+						.sound( SE_HANG_KINOKO );
+						var sc = 得点_きのこ頂点+(得点_きのこ底辺-得点_きのこ頂点)*dy\(きのこ下-きのこ上);
+						.scoreInc( (sc+10)\10*10 ); // １の位を削除、最低１０点
+						.animation = ANI_HANG;
+						.degree = kinokoObj.degree;
+						.kinokoY = .y - kinokoObj.y;
+						break;			
+					}
+				}
+				// 重力加速
+				.speedY += サーバント重力加速度;
+				// 下に落ちそうな場合
+				{
+					// 下降中で、きのこの左下から見て左上４５度より低い位置にいるか、
+					// きのこの最下部よりも下にいる場合は「絶望的」と判断する
+					var dx = kinokoObj.x - .x;
+					var dy = kinokoObj.y+KinokoBottomY - .y;
+					if ( .speedY>0 )
+						if ( dx>Math.abs(dy) || dy<0 )
+						{
+							if ( servant.timing%悲鳴生成間隔 == 0 )
+							{
+								servant.scoreInc( 得点_落下時の悲鳴 );
+								createHimei( servant );
+							}
+							.doAnimation( ANI_HANG_PINCH );
+						}
+				}
+				// 下に落ちてしまった場合
+				if ( .y > 脱落ラインY )
+				{
+					.animation = ANI_落下;
+					break;
+				}
+			}
+			break;
+			
+			
+		case ANI_飛び降りる:
+			with ( servant )
+			{
+				if ( .timing === 0 )
+				{
+					// 変更点051003 飛び降りる際にもジャンプ音が鳴るようにした
+					.sound( SE_JUMP );
+					.stop();
+					.speedX = 落下初速度X( servant );
+					落下時速度補正( servant );
+				}
+				//
+				.doAnimation( ANI_HANG_PINCH );
+				// 位置修正
+				if ( .x < サーバント移動可能範囲L )
+					.x = サーバント移動可能範囲L;
+				else if ( .x> サーバント移動可能範囲R )
+					.x = サーバント移動可能範囲R;
+				// 重力加速
+				.speedY += サーバント重力加速度;
+				// 下に落ちそうな場合
+				if ( danger(servant) )
+					if ( servant.timing>10 && servant.timing%悲鳴生成間隔==0 )
+					{
+						servant.scoreInc( 得点_落下時の悲鳴 );
+						createHimei( servant );
+					}
+				// 下に落ちてしまった場合
+				if ( .y > 脱落ラインY )
+				{
+					.animation = ANI_落下;
+					break;
+				}
+				// 着地できた場合
+				var area = findArea( servant );
+				if ( area )
+				{
+					.place = area;
+					.animation = ANI_通常着地;
+					.y = area.top+15-servant.index*3;
+					.direction = MUKI_RIGHT;
+				}
+			}
+			break;
+			
+		case ANI_崖_移動:
+			with( servant )
+			{
+				hintHide();
+				.doAnimation( ANI_RUN );
+				var posx = .x - .place.left;
+				var posy = .y - .place.top;
+				.x += 崖までの移動速度;
+				.y = .place.top+10+getYPosOnPolyline( RockPosition, posx );
+				if ( posx >= RockPosition[RockBeginIndex].x )
+				{
+					.animation = ANI_崖_しがみつき;
+					if ( .isPlayer )
+					{
+						with( .button = new CIrFightButton(this,servant) )
+						{
+							.animation = ANI_BUTTON_登る;
+							.onUpdateCom = buttonUpdate;
+							.images = systemImages;
+						}
+					}
+					if ( servant==playerObj )
+					{
+						with( new CIrClimbMark(this,servant) )
+						{
+							.images = systemImages;
+						}
+						// カメラの移動上限を解除する
+						normalCamera.limitRect.top = -600;
+					}
+				}
+			}
+			break;
+			
+		case ANI_崖_登る:
+			with( servant )
+			{
+				if( .timing==0 && !.isPlayer )
+				{
+					.sound( SE_CLIMB );
+				}
+				.doAnimation( ANI_登る );
+				var posx = .x - .place.left;
+				var posy = .y - .place.top;
+				if ( posx >= RockPosition[RockEndIndex].x )
+					.animation = ANI_MOVETOGOAL;
+				else
+				{
+					.hp -= STAGE2_崖_登るときのHP消費;
+					.x += 崖_登り速度X;
+					.y = .place.top+10+getYPosOnPolyline( RockPosition, posx );
+					if ( .hp==0 )
+						.animation = ANI_崖_落下;
+				}
+			}
+			break;
+			
+		case ANI_崖_しがみつき:
+			servant.hp+=STAGE2_崖_待機中のHP回復;
+			servant.doAnimation( ANI_登る );
+			break;
+			
+		case ANI_MOVETOGOAL:
+			with( servant )
+			{
+				if ( .timing == 0 )
+				{
+					.onSucceeded();
+					.stop();
+					.motionSpeed = ゴールまでの移動速度;
+					.motionDestX = GoalPosition[.index];
+					.motionDestY = .y;
+					.motionDestZ = .z;
+					.motionType = MOTIONTYPE_LINER;
+					.motionStart();
+					hintHide();
+					if ( CheckValid( .button ) )
+					{
+						.button.visible = false;
+						.button.enaled = false;
+					}
+				}
+				.doAnimation( ANI_MOVE );
+				if ( .motionDone )
+					.animation = ANI_GOAL;
+			}
+			break;		
+			
+		case ANI_崖_落下:
+			with( servant )
+			{
+				.doAnimation( ANI_HANG_PINCH );
+				if ( .timing%2==0 )
+				{
+					.sound( SE_GAKE_FALL );
+				}
+				if ( .timing%5 == 0 )
+				{
+					with( new CIrSmoke(this, servant) )
+						.images = systemImages;
+				}
+				if ( .timing%悲鳴生成間隔 == 0 )
+				{
+					servant.scoreInc( 得点_崖での悲鳴 );
+					createHimei( servant );
+				}
+				var posx = .x - .place.left;
+				var posy = .y - .place.top;
+				.x -= 崖_落下速度X;
+				.y = .place.top+10+getYPosOnPolyline( RockPosition, posx );
+				if ( posx <= RockPosition[RockBeginIndex].x )
+				{
+					//.animation = ANI_DEAD;
+					.animation = ANI_崖_落下した;
+					.motionDestX = .x - 80;
+					.motionDestY = .y;
+					.motionDestZ = 0;
+					.motionLength = 15;
+					.motionType = MOTIONTYPE_SCHEDULED_SIN;
+					.motionStart();
+				}
+			}
+			break;
+		
+		case ANI_崖_落下した:
+			with( servant )
+			{
+				.doAnimation( ANI_DEAD );
+				if (  ! .motionDone )
+					break;
+				.stop();
+				.scoreInc( 得点_崖から落ちた );
+				.hp = 5;
+				.animation = ANI_崖_移動;
+				.direction = MUKI_RIGHT;
+			}
+			break;
+		
+		case ANI_通常着地:
+			servant.doAnimation( ANI_LANDING );
+			with ( servant )
+			{
+				// 着地アニメが終了するまで待つ
+				if ( .animation == ANI_LANDING )
+					break;
+				// ゴールに着地した場合
+				if ( .place == PlaceInfoList[PlaceInfoList.count-1] )
+				{
+					.animation = ANI_崖_移動;
+					.direction = MUKI_RIGHT;
+				}
+				else
+				{
+					// 着地した足場にテーブルがあるかどうか
+					if ( .place.table )
+						.animation = ANI_MOVETOTABLE;
+					else
+						.animation = ANI_STAND;
+				}
+				.priority = PRIORITY_PLAYER;
+			}
+			break;
+		
+		case ANI_MOVETOTABLE:
+			with( servant )
+			{
+				if ( .timing == 0 )
+				{
+					.stop();
+					.motionSpeed = STAGE2_休憩所での移動速度;
+					.motionDestX = getServantEatPos(servant);
+					.motionDestY = .y;
+					.motionDestZ = .z;
+					.motionType = MOTIONTYPE_LINER;
+					.motionStart();
+					if ( .x < getServantEatPos( servant ) )
+						.direction = MUKI_RIGHT;
+					else
+						.direction = MUKI_LEFT;
+				}
+				.doAnimation( ANI_MOVE );
+				if ( .motionDone )
+				{
+					.animation = ANI_食事待機;
+					if ( servant.isPlayer )
+					{
+						with( servant.button = new CIrFightButton(this,servant) )
+						{
+							.animation = ANI_BUTTON_EAT;
+							.images = systemImages;
+						}
+					}
+				}
+			}
+			break;
+		
+		case ANI_食事:
+			servant.doAnimation();
+			break;
+		
+		case ANI_食事待機:
+			servant.doAnimation( ANI_STAND );
+			break;
+			
+		case ANI_MOVETO_JUMPPOS:
+			with( servant )
+			{
+				if( .timing===0 )
+				{
+					.stop();
+					.direction = MUKI_RIGHT;
+					.motionSpeed = STAGE2_休憩所での移動速度;
+					.motionDestX = getServantJumpPos( servant );
+					.motionDestY = .y;
+					.motionDestZ = .z;
+					.motionType = MOTIONTYPE_LINER;
+					.motionStart();					
+					if( CheckValid(.button) )
+						.button.animation = ANI_BUTTON_HIDE;
+				}
+				.doAnimation( ANI_MOVE );
+				if ( .motionDone )
+					.animation = ANI_STAND;
+			}
+			break;
+		
+		case ANI_落下:
+			servant.animation = ANI_脱落;
+			break;
+
+		case ANI_脱落:
+			if ( servant.timing==0 )
+			{
+				servant.onFailed();
+				servant.visible = false;
+				servant.stop();
+			}
+			hintHide();
+			break;
+		
+		case ANI_登る:
+			with ( servant )
+			{
+				if ( .timing < 4 )
+					.doAnimation();
+				else
+				{
+					.animation = ANI_HANG;
+					break;
+				}
+				.kinokoY -= STAGE2_KINOKO_登る速度;
+				.hp -= STAGE2_KINOKO_HP消費_登る;
+				if ( .hp==0 )
+					.animation = ANI_飛び降りる;
+			}
+			updateServantPosOnKinoko( servant );	
+			break;
+			
+		case ANI_HANG:
+			with ( servant )
+			{
+				.doAnimation();
+				// 捕まっている位置がどんどん下がる
+				.kinokoY += STAGE2_KINOKO_降下速度;
+				.hp -= STAGE2_KINOKO_HP消費_通常;
+				if ( .hp==0 )
+					.animation = ANI_飛び降りる;
+			}
+			updateServantPosOnKinoko( servant );	
+			break;
+				
+		case ANI_復帰:
+			with ( servant )
+			{
+				.stop();
+				.z = 0;
+				.priority = PRIORITY_PLAYER;
+				.direction = MUKI_RIGHT;
+				.animation = ANI_STAND;
+			}
+			break;
+
+		default:
+			servant.doAnimation();
+			break;
+		}
+	}
+	
+	function buttonUpdate( button )
+	{
+		with( button )
+		{
+			switch( .parent.animation )
+			{
+			case ANI_崖_登る:
+			case ANI_崖_しがみつき:
+				break;
+			default:
+				.animation = ANI_BUTTON_HIDE;
+				break;
+			}
+		}
+	}
+	
+	
+	
+	// 影を更新した際に呼び出される
+	function onShadowUpdate( shadow )
+	{
+		switch ( shadow.parent.animation )
+		{
+		case ANI_STAND:
+		case ANI_MOVE:
+		case ANI_イベント待機:
+		case ANI_イベント移動:
+		case ANI_GOAL:
+			shadow.visible = true;
+			break;
+		default:
+			shadow.visible = false;
+			break;
+		}
+	}
+	
+	var buttonCounter;
+	
+	function servantPlayer( servant )
+	{
+		with( servant )
+		{
+			// キー入力
+			switch( .animation )
+			{
+			// 待機状態でクリックされた場合はジャンプする
+			case ANI_STAND:
+				cursorShow( ANI_CURSOR_JUMP );
+				if ( input.left==0 )
+					// カーソル受付範囲内で左クリックされたか
+					if( cursorLayerClicked() )
+					{
+						.animation = ANI_飛び乗る;
+						cursorHide();
+					}
+					else
+						// きのこが画面外ならば無条件でクリックを受け付ける
+						if ( kinokoObj.outOfScreen() )
+						{ 
+							.animation = ANI_飛び乗る;
+							cursorHide();
+						}
+				break;
+				
+			// しがみついている状態でクリックすると登る。
+			// ただし、足場をクリックした場合は飛び降りる
+			case ANI_HANG:
+				var area = getNearestArea( servant );
+				if ( inRange( -300, area.left-.x, 600 ) )
+				{
+					cursorShow( ANI_CURSOR_DOWN );
+					hintShow( ANI_HINT_JUMPDOWN );
+				}
+				else
+					cursorHide();
+				if ( input.left==0 )
+				{
+					if ( cursorLayerClicked() )
+					{
+						.animation = ANI_飛び降りる;
+						cursorHide();
+					}
+					else
+					{
+						.sound( SE_KINOKO_CLIMB );
+						.animation = ANI_登る;
+					}
+				}
+				break;
+				
+			case ANI_登る:
+				break;
+				
+			case ANI_食事:
+				hintShow( ANI_HINT_EAT );
+				if ( input.left == 0 )
+				{
+					.scoreInc( 得点_食事 );
+					.sound( SE_EAT );
+					buttonCounter = 0;
+					.hp += .INFO.EAT_SPEED;
+				}
+				else
+					buttonCounter++;
+				if ( buttonCounter > STAGE2_食事_クリック受付時間 )
+					.animation = ANI_食事待機;
+				if ( .hp == .hpMax )
+				{
+					.animation = ANI_MOVETO_JUMPPOS;
+					hintHide();
+				}
+				break;
+			
+			case ANI_食事待機:
+				hintShow( ANI_HINT_EAT );
+				if ( input.left==0 )
+				{
+					.animation = ANI_食事;
+					buttonCounter=0;
+					.sound( SE_EAT );
+				}
+				if ( .hp == .hpMax )
+				{
+					.animation = ANI_MOVETO_JUMPPOS;
+					hintHide();
+				}
+				break;
+				
+			case ANI_崖_登る:
+				if ( .hp<危険HP )
+					hintShow( ANI_HINT_DANGER );
+				if ( input.left==0 )
+				{
+					//.stop( SE_CLIMB );
+					.sound( SE_CLIMB );
+				}
+				if ( input.left==0 )
+					buttonCounter=0;
+				else
+					buttonCounter++;
+				if ( buttonCounter > STAGE2_崖_クリック受付時間 )
+					.animation = ANI_崖_しがみつき;
+				break;
+				
+			case ANI_崖_しがみつき:
+				if ( .hp<危険HP )
+					hintShow( ANI_HINT_DANGER );
+				if ( input.left==0 )
+				{
+					.sound( SE_CLIMB );
+					.animation = ANI_崖_登る;
+					buttonCounter=0;
+				}
+				break;
+				
+			default:
+				cursorHide();
+				break;
+			}
+		}
+	}
+	
+	
+	function 崖を登り続ける？( servant )
+	{
+		if ( servant.hp<STAGE2_COM_登り中止HP )
+		{
+			if( random32(1000)<1000*STAGE2_COM_HP無視して崖を登り続ける確率 )
+				return true;
+			else
+				return false;
+		}
+		if ( random32(1000) > 1000*STAGE2_COM_登り中止確率 )
+			return true;
+			
+		return false;
+	}
+
+
+	function servantCom( servant )
+	{
+		with( servant )
+		{
+			switch( .animation )
+			{
+			case ANI_STAND:
+				// きのこが一定の範囲に入ったらランダムでジャンプさせる
+				if ( inRange( 100, kinokoObj.x - .x, 600 ) )
+					if ( random32(1000) < 5 )
+						.animation = ANI_飛び乗る;
+				// きのこが遠ざかっていて、かつ一定の範囲になったら強制的にジャンプさせる
+				if ( kinokoObj.speedX > 0 )
+					if ( inRange( 300, kinokoObj.x-.x, 400 ) )
+						.animation = ANI_飛び乗る;
+				break;
+
+			case ANI_食事:
+				// 回復
+				if( random32(4)==0 )
+					.hp += .INFO.EAT_SPEED;
+				// 回復したら食事をやめる
+				if ( .hp == .hpMax )
+					.animation = ANI_MOVETO_JUMPPOS;
+				break;
+				
+			case ANI_食事待機:
+				.animation = ANI_食事;
+				break;
+
+			case ANI_HANG:
+				var area = getNearestArea(servant); // 近い足場を得る
+				var posx = touchDownPointX(servant,void,area); // 落下予想点を得る
+				if ( inRange( area.left, posx, area.left+area.width ) ) // ちゃんと足場に落下できる？
+					if ( random32(25)==0 )
+						.animation = ANI_飛び降りる;
+				break;
+				
+			case ANI_崖_登る:
+				if( 崖を登り続ける？(servant) )
+					break;
+				.animation = ANI_崖_しがみつき;
+				break;
+
+			case ANI_崖_しがみつき:
+				if ( .hp>STAGE2_COM_登り再開HP && random32(1000)<1000*STAGE2_COM_登り再開確率 )
+					.animation = ANI_崖_登る;
+				break;
+			}
+		}
+	}
+	
+	// きのこから飛び降りたときの初速を得る
+	function 落下初速度X( servant )
+	{
+		var 角度位置 = kinokoObj.degree - servant.degree;
+		var 接線速度 =  - Math.sin( degToRad(角度位置) );
+		return kinokoObj.speedX + 接線速度*10;
+	}
+	
+	// きのこに乗っている場合に、飛び降りたときの落下予想地点（誤差大きい）
+	// 
+	function touchDownPointX( servant, speedX, area )
+	{
+		var posx = servant.x;
+		var posy = servant.y;
+		var vx;
+		var vy = 0;
+		// 速度が指定されていない場合は、現在きのこから飛び降りた場合の初速度を使う
+		if ( speedX===void )
+			vx = 落下初速度X( servant );
+		else
+			vx = speedX;
+		// フレーム毎の計算を行い、足場と同じ高さに到達したときのX座標を返す
+		var t=0;
+		while ( t<FRAME_PER_SEC*10 && posy<area.top )
+		{
+			posx += vx;
+			posy += vy;
+			vy += サーバント重力加速度;
+			t++;
+		}
+		return posx;
+	}	
+	
+	function 落下時速度補正( servant )
+	{
+		var area = getNearestArea(servant);
+		var i;
+		var 予想着地点X;
+		// 補正レベルの回数だけ速度を調整する
+		for( i=servant.INFO.JUMP_HOSEI-1; i>=0; i-- )
+		{
+			予想着地点X = touchDownPointX( servant, servant.speedX, area );
+			// 落下点が右側の場合は速度を落とす
+			if ( 予想着地点X > area.left+area.width )
+			{
+				servant.speedX -= 1;
+				continue;
+			}
+			// 落下店が左側の場合は速度を上げる
+			if ( 予想着地点X < area.left )
+			{
+				servant.speedX += 1;
+				continue;
+			}
+			// どちらでもなければ補正終了
+			break;
+		}
+	}
+	//	dm("補正回数(%d), 着地範囲(%d-%d), 予想着地点(%d)".sprintf(i,area.left,area.left+area.width, 予想着地点X) );
+
+	//--------------------------------------------------------------------------
+	// イベント進行
+	//--------------------------------------------------------------------------
+
+	// 初期化の直後
+	function onEventFirst()
+	{
+		with( normalCamera )
+		{
+			.motionDestX = 400;
+			.motionDestY = DefaultPlayers[0].y-100;
+		}
+		kinokoObj.visible = false;
+	}
+
+	// readygo 表示開始時
+	function onEventReadygo()
+	{
+		kinokoObj.visible = true;
+		kinokoObj.animation = ANI_START;
+	}
+
+	// readygo 表示終了時	
+	function onEventStart()
+	{
+		servantsRootObj.changeChildAnimation( ANI_START );
+	}
+	
+	// 解放直前
+	function onEventLast()
+	{
+		if ( parentLayer.getStageSelectFlag() )
+		{
+			next = SCENE_TITLE;
+			return;
+		}
+		next = SCENE_STAGE2_NEXT;
+	}
+
+	// ゲーム中
+	var missiletimer;
+	function onEventPlaying()
+	{
+@if( DEBUG_MODE )
+		if ( input.del==0 )
+		{
+			var i;
+			for ( i=0; i<5; i++ )
+				with( players[i] )
+				{
+					.stop();
+					.x = PlaceInfoList[ PlaceInfoList.count-1 ].left+200;
+					.y = 400;
+					.hp = 60;
+					.animation = ANI_飛び降りる;
+				}
+		}
+@endif
+		if( input.control==0 )
+		{
+			parentLayer.setUseStageSkipFlag();
+			eventSwitch = EVENTSWITCH_LAST;
+		}
+		if ( playerObj.place != PlaceInfoList[PlaceInfoList.count-1] )
+		{
+			if ( kinokoObj.animation==kinokoObj.ANI_KINOKO_STOP )
+			{
+				if ( missiletimer <=0 )
+				{
+					createWarning( 680, 100+random32(300) );
+					missiletimer = 25;
+				}
+			}
+			else
+			{
+				if ( missiletimer <= 0 )
+				{
+					createWarning( 680, 100+random32(300) ); //警告を作成するとミサイルも自動的に作られる
+					missiletimer = randomRange(ミサイル出現間隔_最小, ミサイル出現間隔_最大 );
+				}
+			}
+		}
+		missiletimer--;
+		switch( playerObj.animation )
+		{
+		case ANI_GOAL:
+			goalBg.animation = true;
+			eventSwitch = EVENTSWITCH_GOAL;
+			break;
+		case ANI_脱落:
+			eventSwitch = EVENTSWITCH_FAILED;
+			break;
+		case ANI_DEAD:
+			if (playerObj.timing >= AFTER_DEAD_TIME)
+				eventSwitch = EVENTSWITCH_FAILED;
+			break;
+		}
+	}
+}
+

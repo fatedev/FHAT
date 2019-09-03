@@ -1,0 +1,4197 @@
+
+
+
+
+
+var		MAX_BACK_FADE_ALHA=214;		// 背景輝度ダウンアルファ値
+var		BACK_FADE_OUT_TIME=(int)(6);
+
+var		OPTION_MENU_PRINT_POS_Y=96;
+
+var		RET_TITLE_SE_FADE_TIME	= 30;
+
+
+// スライダーボタンクラス
+class CIriyaSliderButton
+{
+var		parWin,parLayer;
+
+	// コンストラクタ
+	function CIriyaSliderButton( _pr_win, _pr_layer )
+	{
+		parWin   = _pr_win;
+		parLayer = _pr_layer;
+
+		InitBuffer();
+	}
+	// デストラクタ
+	function finalize()
+	{
+		Release();
+	}
+
+	var		cancel_call_func;
+
+	var		layer_title,layer_button,layer_bar;
+	var		base_prn_x,base_prn_y;
+
+	var		title;
+	var		title_prn_x,title_prn_y;
+
+	var		button;
+	var		button_set_center_pos;
+	var		button_prn_cx,button_prn_cy;
+
+	var		bar;
+	var		bar_prn_x,bar_prn_y;
+	var		bar_max_pos;
+	var		bar_button_pos;
+
+	var		now_num,min_num,max_num,range_w;
+
+	var		btn_clicked;
+	var		btn_click_px,btn_click_py,click_base_x,click_base_y;
+	var		callback_func,call_id;
+
+	var		focus_title_cg,unfocus_title_cg;
+	var		focus_button_cg,unfocus_button_cg;
+	var		focus_bar_cg,unfocus_bar_cg;
+
+	var		direct_chk;
+
+
+	var		focus_se_name;
+	var		click_se_name;
+
+	// バッファの初期化
+	function InitBuffer()
+	{
+		base_prn_x = 0;
+		base_prn_y = 0;
+
+		layer_button = 0;
+		layer_bar    = 1;
+		layer_title  = 2;
+
+		title_prn_x = 0;
+		title_prn_y = 0;
+
+		button_set_center_pos = 0x00;
+		button_prn_cx = 0;
+		button_prn_cy = 0;
+
+		bar_prn_x = 0;
+		bar_prn_y = 0;
+
+		bar_max_pos = void;
+		bar_button_pos = void;
+
+		now_num = 0;
+		min_num = 0;
+		max_num = 0;
+		range_w = 0;
+
+		callback_func = void;
+		call_id = 0;
+
+		btn_clicked = false;
+		btn_click_px = 0;
+		btn_click_py = 0;
+		click_base_x = 0;
+		click_base_y = 0;
+
+		focus_title_cg   = void;
+		unfocus_title_cg = void;
+		focus_button_cg   = void;
+		unfocus_button_cg = void;
+		focus_bar_cg   = void;
+		unfocus_bar_cg = void;
+
+		direct_chk = void;
+
+		cancel_call_func = false;
+
+		focus_se_name = void;
+		click_se_name = void;
+		return;
+	}
+
+	// 開放処理
+	function Release()
+	{
+		RelaseTitle();
+		ReleaseButton();
+		ReleaseBar();
+
+		EasyReleaseLayer( direct_chk );
+		direct_chk = void;
+		return;
+	}
+
+	// 初期化
+	function Init()
+	{
+		Release();
+
+		title  = new CSpriteLayer( parWin, parLayer );
+		title.setSize(0,0);
+
+		button = new CSpriteLayer( parWin, parLayer );
+		button.setSize(0,0);
+
+		bar    = new CSpriteLayer( parWin, parLayer );
+		bar.setSize(0,0);
+
+		direct_chk = new CSpriteLayer( parWin, parLayer );
+		direct_chk.opacity = 0;
+		return;
+	}
+	// 表示の開始
+	function Print()
+	{
+		if (CheckValid(title)  ==  true) {
+			set_title_unfocus_cg();
+			ShowLayer( title, true );
+		}
+		if (CheckValid(button)  ==  true) {
+			set_button_unfocus_cg();
+			ShowLayer( button, true );
+		}
+		if (CheckValid(bar)  ==  true) {
+			set_bar_unfocus_cg();
+			ShowLayer( bar, true );
+		}
+
+
+		if (CheckValid(direct_chk)  ==  true)
+			ShowLayer( direct_chk, true );
+		return;
+	}
+
+	function FadeIn( _start_a, _end_a, _time )
+	{
+		if (CheckValid(title)  ==  true) {
+			set_title_unfocus_cg();
+			EasyStartFadeAnime( title, _start_a, _end_a, _time );
+		}
+		if (CheckValid(button)  ==  true) {
+			set_button_unfocus_cg();
+			EasyStartFadeAnime( button, _start_a, _end_a, _time );
+		}
+		if (CheckValid(bar)  ==  true) {
+			set_bar_unfocus_cg();
+			EasyStartFadeAnime( bar, _start_a, _end_a, _time );
+		}
+		return;
+	}
+	function UpdateFade()
+	{
+	var		ret;
+		ret = true;
+		if (CheckValid(title)  ==  true) {
+			if (ProcessFadeAnime(title)  ==  "UPDATING")
+				ret = false;
+		}
+		if (CheckValid(button)  ==  true) {
+			if (ProcessFadeAnime(button)  ==  "UPDATING")
+				ret = false;
+		}
+		if (CheckValid(bar)  ==  true) {
+			if (ProcessFadeAnime(bar)  ==  "UPDATING")
+				ret = false;
+		}
+		return ( ret );
+	}
+
+
+	// ヒット処理の開始
+	function Start( _hit_check_type="ALL" )
+	{
+		if (CheckValid(button)  ==  true) {
+			with (button)
+			{
+				.setMouseMoveCallback( button_move );
+				.setMouseDownCallback( button_click_down );
+				.setMouseUpCallback( button_click_up );
+				.setMouseEnterCallback( button_focus );
+				.setMouseLeaveCallback( button_unfocus );
+				.setHitCheckAlphaLimit( _hit_check_type );
+			}
+
+			if (CheckValid(direct_chk)  ==  true) {
+				with ( direct_chk )
+				{
+					.setMouseEnterCallback( direct_focus );
+					.setMouseDownCallback( direct_click_down );
+					.setHitCheckAlphaLimit( _hit_check_type );
+				}
+			}
+		}
+		return;
+	}
+	// ヒット処理の停止
+	function Stop()
+	{
+		if (CheckValid(button)  ==  true) {
+			with (button)
+			{
+				.setMouseMoveCallback( void );
+				.setMouseDownCallback( void );
+				.setMouseUpCallback( void );
+				.setMouseEnterCallback( void );
+				.setMouseLeaveCallback( void );
+				.setHitCheckAlphaLimit( "NONE" );
+			}
+
+			if (CheckValid(direct_chk)  ==  true) {
+				with ( direct_chk )
+				{
+					.setMouseEnterCallback( void );
+					.setMouseDownCallback( void );
+					.setHitCheckAlphaLimit( "NONE" );
+				}
+			}
+		}
+		return;
+	}
+
+	// 各種SE再生ファイル設定
+	function SetFocusSEPlayFile( _file_name )
+	{
+		focus_se_name = _file_name;
+		return;
+	}
+	function SetClickSEPlayFile( _file_name )
+	{
+		click_se_name = _file_name;
+		return;
+	}
+
+
+	// キャンセル時に呼び出すコールバック関数
+	function SetCancelCallback( _func )
+	{
+		cancel_call_func = _func;
+		return;
+	}
+
+
+	function button_focus( _layer )
+	{
+//		PlaySE( focus_se_name, true, , , SE_STOP_TIME );
+		if (CheckPlaySESTack(focus_se_name)  ==  false)
+			PlaySE( focus_se_name, , , , , FOCUS_SE_VOLUME_AVE );
+
+		set_title_focus_cg();
+		set_button_focus_cg();
+		set_bar_focus_cg();
+		return;
+	}
+	function button_unfocus( _layer )
+	{
+		set_title_unfocus_cg();
+		set_button_unfocus_cg();
+		set_bar_unfocus_cg();
+		return;
+	}
+
+	function button_click_down( _layer, _x,_y, _button,_shift )
+	{
+		if (_button  !=  mbLeft) {
+			if (_button  ==  mbRight) {
+				if (CheckValid(cancel_call_func)  ==  true) {
+					cancel_call_func();
+				}
+			}
+			return;
+		}
+		btn_clicked = true;
+
+		PlaySE( click_se_name );
+
+		// クリックされた時の座標を保持(パラメータの座標はつかえないので親から取得)
+		btn_click_px = parLayer.cursorX;
+		btn_click_py = parLayer.cursorY;
+
+		// 現在のボタンの位置を取得
+		click_base_x = calc_button_range_pos_x();
+		click_base_y = 0;
+		return;
+	}
+	function button_click_up( _layer, _x,_y, _button,_shift )
+	{
+		if (_button  !=  mbLeft)
+			return;
+		btn_clicked = false;
+		return;
+	}
+	function button_move( _layer, _x,_y, button,shift )
+	{
+		if (btn_clicked  ==  false)
+			return;
+
+		MoveButtonPosition( click_base_x + (parLayer.cursorX-btn_click_px),
+							click_base_y + (parLayer.cursorY-btn_click_py) );
+
+		if (CheckValid(callback_func)  ==  true)
+			callback_func( call_id, GetNowNum() );
+		return;
+	}
+
+	function direct_focus( _layer )
+	{
+		return;
+	}
+	function direct_click_down( _layer, _x,_y, _button,shift )
+	{
+		if (_button  !=  mbLeft) {
+			if (_button  ==  mbRight) {
+				if (CheckValid(cancel_call_func)  ==  true)
+					cancel_call_func();
+			}
+			return;
+		}
+
+		MoveButtonPosition( _x, _y );
+		if (CheckValid(callback_func)  ==  true)
+			callback_func( call_id, GetNowNum() );
+		return;
+	}
+
+
+	// ボタン移動のコールバック関数を設定する
+	function SetButtonMoveCallbackFunc( _call_func, _call_id )
+	{
+		callback_func = _call_func;
+		call_id = _call_id;
+		return;
+	}
+
+	// 表示ベース位置の設定
+	function SetBasePosition( _prn_x, _prn_y )
+	{
+		base_prn_x = _prn_x;
+		base_prn_y = _prn_y;
+
+		// 各CG位置の更新
+		UpdateTitleCGPosition();
+		UpdateButtonCGPosition();
+		UpdateBarCGPosition();
+		return;
+	}
+
+	// レイヤ優先順位の設定
+	function SetLayerPriority( _prio )
+	{
+		layer_button = _prio - 0;
+		layer_bar    = _prio - 1;
+		layer_title  = _prio - 2;
+		if (CheckValid(button)  ==  true)
+			button.setPriority( layer_button );
+		if (CheckValid(bar)  ==  true)
+			bar.setPriority( layer_bar );
+		if (CheckValid(title)  ==  true)
+			title.setPriority( layer_title );
+
+		if (CheckValid(direct_chk)  ==  true)
+			direct_chk.setPriority( layer_bar );
+		return;
+	}
+
+	function update_range_width()
+	{
+		range_w = max_num - min_num;
+		if (range_w  ==  0)
+			range_w = 1;
+		return;
+	}
+	// 現在位置の設定
+	function SetNowNum( _now )
+	{
+		now_num = _now;
+		UpdateBarCGPosition();	// 現在値の変更に伴うデータの更新
+		return;
+	}
+	// 最小可能位置の設定
+	function SetMinNum( _min )
+	{
+		min_num = _min;
+		update_range_width();
+		return;
+	}
+	// 最大可能位置の設定
+	function SetMaxNum( _max )
+	{
+		max_num = _max;
+		update_range_width();
+		return;
+	}
+
+
+	// 現在位置の取得
+	function GetNowNum()
+	{
+		return ( now_num );
+	}
+	// 最小・最大可能位置取得
+	function GetMinNum()
+	{
+		return ( min_num );
+	}
+	// 最大可能位置取得
+	function GetMaxNum()
+	{
+		return ( max_num );
+	}
+	// 設定可能幅の取得
+	function GetRangeWidth()
+	{
+		return ( range_w );
+	}
+
+
+
+	function get_zero_start_pos()
+	{
+		return ( GetNowNum()-GetMinNum() );
+	}
+
+
+
+
+	// タイトル開放
+	function RelaseTitle()
+	{
+
+
+		// タイトルCGの開放
+		if (CheckValid(title)  ==  true) {
+			ReleaseFadeAnime( title );
+			EasyReleaseLayer( title );
+			title = void;
+		}
+
+		EasyReleaseLayer( focus_title_cg );
+		EasyReleaseLayer( unfocus_title_cg );
+		focus_title_cg   = void;
+		unfocus_title_cg = void;
+		return;
+	}
+	// タイトルの表示オフセット位置の設定
+	function SetTitlePosition( _prn_x, _prn_y )
+	{
+		title_prn_x = _prn_x;
+		title_prn_y = _prn_y;
+		UpdateTitleCGPosition();
+		return;
+	}
+	// タイトル表示位置の更新
+	function UpdateTitleCGPosition()
+	{
+		if (CheckValid(title)  ==  true)
+			title.setPos( base_prn_x+title_prn_x, base_prn_y+title_prn_y );
+		return;
+	}
+
+	// タイトルのCGを読み込む
+	function LoadUnFocusTitleCG( _file_name )
+	{
+		EasyReleaseLayer( unfocus_title_cg );
+		unfocus_title_cg = EasyCreateLayerObject( parWin,parLayer, _file_name, clAdapt, false,
+							base_prn_x+title_prn_x,base_prn_y+title_prn_y, layer_title );
+		return;
+	}
+	function LoadFocusTitleCG( _file_name )
+	{
+		EasyReleaseLayer( focus_title_cg );
+		focus_title_cg = EasyCreateLayerObject( parWin,parLayer, _file_name, clAdapt, false,
+							base_prn_x+title_prn_x,base_prn_y+title_prn_y, layer_title );
+		return;
+	}
+
+	function set_title_unfocus_cg()
+	{
+		if (CheckValid(unfocus_title_cg)  ==  false)
+			return;
+
+		SetLayerInfoParam( title, unfocus_title_cg, ,, );
+		return;
+	}
+	function set_title_focus_cg()
+	{
+		if (CheckValid(focus_title_cg)  ==  false)
+			return;
+		SetLayerInfoParam( title, focus_title_cg, ,, );
+		return;
+	}
+
+
+	// ボタンの開放
+	function ReleaseButton()
+	{
+		// ボタンCGの開放
+		if (CheckValid(button)  ==  true) {
+			ReleaseFadeAnime( button );
+			EasyReleaseLayer( button );
+			button = void;
+		}
+
+		EasyReleaseLayer( focus_button_cg );
+		EasyReleaseLayer( unfocus_button_cg );
+		focus_button_cg   = void;
+		unfocus_button_cg = void;
+		return;
+	}
+
+	function calc_button_range_pos_x()
+	{
+	var		pos;
+		pos = get_zero_start_pos() / GetRangeWidth();
+		return ( (int)(pos*get_bar_max_pos()) );
+	}
+	function calc_button_range_pos_y()
+	{
+		return ( 0 );
+	}
+	function calc_button_prn_x()
+	{
+		return ( (base_prn_x+get_bar_button_prn_x()+calc_button_range_pos_x())-button_prn_cx );
+	}
+	function calc_button_prn_y()
+	{
+		return ( (base_prn_y+get_bar_button_prn_y()+calc_button_range_pos_y())-button_prn_cy );
+	}
+	// ボタンの画像中心位置の設定
+	function SetButtonCenterPositionAuto()
+	{
+		if (CheckValid(button)  ==  false)
+			return;
+		if (button.width  ==  0)
+			return;
+
+		button_set_center_pos = 0x03;
+
+		button_prn_cx = button.imageWidth/2;
+		button_prn_cy = button.imageHeight/2;
+		UpdateButtonCGPosition();
+		return;
+	}
+	// ボタン表示位置の更新
+	function UpdateButtonCGPosition()
+	{
+		if (CheckValid(button)  ==  false)
+			return;
+		if (button.width  ==  0)
+			return;
+		button.setPos( calc_button_prn_x(), calc_button_prn_y() );
+		return;
+	}
+	// ボタンのCGを読み込む
+	function LoadUnFocusButtonCG( _file_name )
+	{
+		EasyReleaseLayer( unfocus_button_cg );
+		unfocus_button_cg = EasyCreateLayerObject( parWin,parLayer, _file_name, clAdapt, false,
+							calc_button_prn_x(),calc_button_prn_y(), layer_button );
+		if (button.width  ==  0)
+			set_button_unfocus_cg();
+		if (button_set_center_pos  ==  0x00)
+			SetButtonCenterPositionAuto();
+		return;
+	}
+	function LoadFocusButtonCG( _file_name )
+	{
+		EasyReleaseLayer( focus_button_cg );
+		focus_button_cg = EasyCreateLayerObject( parWin,parLayer, _file_name, clAdapt, false,
+							calc_button_prn_x(),calc_button_prn_y(), layer_button );
+		return;
+	}
+
+	function set_button_unfocus_cg()
+	{
+		if (CheckValid(unfocus_button_cg)  ==  false)
+			return;
+		SetLayerInfoParam( button, unfocus_button_cg, ,, );
+		return;
+	}
+	function set_button_focus_cg()
+	{
+		if (CheckValid(focus_button_cg)  ==  false)
+			return;
+		SetLayerInfoParam( button, focus_button_cg, ,, );
+		return;
+	}
+
+
+
+
+
+
+
+
+
+	// バーの開放
+	function ReleaseBar()
+	{
+		// バーCGの開放
+		if (CheckValid(bar)  ==  true) {
+			ReleaseFadeAnime( bar );
+			EasyReleaseLayer( bar );
+			bar = void;
+		}
+
+		EasyReleaseLayer( focus_bar_cg );
+		EasyReleaseLayer( unfocus_bar_cg );
+		focus_bar_cg   = void;
+		unfocus_bar_cg = void;
+		return;
+	}
+
+
+	// バーの最小・最大位置の設定
+	function SetBarRangeAuto()
+	{
+		if (CheckValid(unfocus_bar_cg)  ==  true) {
+			bar_max_pos = unfocus_bar_cg.imageWidth;
+			UpdateButtonCGPosition();
+		}
+		return;
+	}
+	function get_bar_max_pos()
+	{
+		if (CheckValid(bar_max_pos)  ==  false)
+				return ( 0 );
+		else	return ( bar_max_pos );
+	}
+
+	// バー上のボタンの移動位置(ライン)設定
+	function SetBarButtonLinePositionAuto()
+	{
+		if (CheckValid(unfocus_bar_cg)  ==  true) {
+			bar_button_pos = unfocus_bar_cg.imageHeight / 2;
+			UpdateButtonCGPosition();
+		}
+		return;
+	}
+	function get_bar_button_prn_x()
+	{
+		return ( bar_prn_x );
+	}
+	function get_bar_button_prn_y()
+	{
+		if (CheckValid(bar_button_pos)  ==  false)
+				return ( bar_prn_y );
+		else	return ( bar_prn_y+bar_button_pos );
+	}
+
+
+
+	function SetBarPosition( _prn_x, _prn_y )
+	{
+		bar_prn_x = _prn_x;
+		bar_prn_y = _prn_y;
+		UpdateBarCGPosition();
+		return;
+	}
+	// バー表示位置の更新
+	function UpdateBarCGPosition()
+	{
+		if (CheckValid(bar)  ==  true) {
+			with ( bar )
+			{
+				.setSize( calc_button_range_pos_x(), base_prn_y+bar_prn_y );
+				.setPos( base_prn_x+bar_prn_x, base_prn_y+bar_prn_y );
+			}
+			UpdateButtonCGPosition();
+
+			if (CheckValid(direct_chk)  ==  true) {
+				direct_chk.setPos( base_prn_x+bar_prn_x, base_prn_y+bar_prn_y );
+			}
+		}
+		return;
+	}
+	// バーのCGを読み込む
+	function LoadUnFocusBarCG( _file_name )
+	{
+		EasyReleaseLayer( unfocus_bar_cg );
+		unfocus_bar_cg = EasyCreateLayerObject( parWin,parLayer, _file_name, clAdapt, false,
+							base_prn_x+bar_prn_x,base_prn_y+bar_prn_y, layer_bar );
+
+		SetLayerInfoParam( direct_chk, unfocus_bar_cg, ,, );
+
+		if (bar.width  ==  0)
+			set_bar_unfocus_cg();
+
+		if (CheckValid(bar_max_pos)  ==  false)
+			SetBarRangeAuto();
+		if (CheckValid(bar_button_pos)  ==  false)
+			SetBarButtonLinePositionAuto();
+		return;
+	}
+	function LoadFocusBarCG( _file_name )
+	{
+		EasyReleaseLayer( focus_bar_cg );
+		focus_bar_cg = EasyCreateLayerObject( parWin,parLayer, _file_name, clAdapt, false,
+							base_prn_x+bar_prn_x,base_prn_y+bar_prn_y, layer_bar );
+		return;
+	}
+
+	function set_bar_unfocus_cg()
+	{
+		if (CheckValid(unfocus_bar_cg)  ==  true) {
+			SetLayerInfoParam( bar, unfocus_bar_cg, ,, );
+			UpdateBarCGPosition();
+		}
+		return;
+	}
+	function set_bar_focus_cg()
+	{
+		if (CheckValid(focus_bar_cg)  ==  true) {
+			SetLayerInfoParam( bar, focus_bar_cg, ,, );
+			UpdateBarCGPosition();
+		}
+		return;
+	}
+
+
+
+
+
+	// ボタンの移動
+	function MoveButtonPosition( _x, _y )
+	{
+	var		pos;
+
+		// 移動範囲のクリップ
+		if (_x  <  0)
+			_x = 0;
+		if (_x  >  get_bar_max_pos())
+			_x = get_bar_max_pos();
+
+		// X位置からレンジ値に変換
+		pos = (int)(_x * GetRangeWidth() / get_bar_max_pos());
+		SetNowNum( (int)(GetMinNum() + pos) );
+		return;
+	}
+}
+
+
+
+
+
+
+
+
+
+
+// スピンボタンクラス
+class CIriyaSpinButton
+{
+var		parWin,parLayer;
+
+	// コンストラクタ
+	function CIriyaSpinButton( _pr_win, _pr_layer )
+	{
+		parWin   = _pr_win;
+		parLayer = _pr_layer;
+	}
+	// デストラクタ
+	function finalize()
+	{
+	}
+
+	var	cancel_call_func;
+
+
+
+	// キャンセル時に呼び出すコールバック関数
+	function SetCancelCallback( _func )
+	{
+		cancel_call_func = _func;
+		return;
+	}
+
+}
+
+
+
+
+
+
+
+
+
+// チェンジボタンクラス
+class CIriyaChangeButton
+{
+var		parWin,parLayer;
+
+	// コンストラクタ
+	function CIriyaChangeButton( _pr_win, _pr_layer )
+	{
+		parWin   = _pr_win;
+		parLayer = _pr_layer;
+
+		InitBuffer();
+	}
+	// デストラクタ
+	function finalize()
+	{
+		Release();
+	}
+
+
+
+	var		cancel_call_func;
+
+	var		layer_prio;
+	var		base_prn_x,base_prn_y;
+	var		click_call_func,click_call_id;
+
+	var		focus_flag;
+
+	var		title;
+	var		title_prn_x,title_prn_y;
+
+	var		button,button_focus_cg,button_unfocus_cg;
+	var		button_cg_num;
+	var		button_prn_x,button_prn_y;
+	var		button_cg_id;
+
+	var		focus_se_name;
+	var		click_se_name;
+
+	// バッファの初期化
+	function InitBuffer()
+	{
+		base_prn_x = 0;
+		base_prn_y = 0;
+		layer_prio = 0;
+
+		focus_flag = false;
+		click_call_func = void;
+		click_call_id = void;
+
+
+		title_prn_x = 0;
+		title_prn_y = 0;
+
+		button_cg_num = 0;
+		button_prn_x = 0;
+		button_prn_y = 0;
+
+		button_cg_id = -1;
+
+		cancel_call_func = false;
+
+		focus_se_name = void;
+		click_se_name = void;
+		return;
+	}
+
+	function RelaseTitle()
+	{
+		// タイトルCGの開放
+		if (CheckValid(title)  ==  true) {
+			ReleaseFadeAnime( title );
+			EasyReleaseLayer( title );
+			title = void;
+		}
+		return;
+	}
+	function ReleaseButton()
+	{
+	var		i;
+
+		// ボタンのレイヤの開放
+		if (CheckValid(button)  ==  true) {
+			ReleaseFadeAnime( button );
+			EasyObjectInvalidate( button );
+			button = void;
+		}
+
+		ReleaseArray( button_focus_cg );
+		ReleaseArray( button_unfocus_cg );
+		button_focus_cg   = void;
+		button_unfocus_cg = void;
+
+		button_cg_num = 0;
+		return;
+	}
+	// 開放処理
+	function Release()
+	{
+		Stop();
+		RelaseTitle();
+		ReleaseButton();
+		return;
+	}
+
+
+
+	// 初期化
+	function Init( _button_cg_num )
+	{
+		Release();
+
+		// ボタンCGバッファの確保
+		button_cg_num = _button_cg_num;
+		button_focus_cg   = new Array();
+		button_unfocus_cg = new Array();
+
+		// ボタンレイヤの作成
+		button = new CSpriteLayer( parWin,parLayer );
+		return;
+	}
+	function Print()
+	{
+		ShowLayer( button, true );
+		if (CheckValid(title)  ==  true)
+			ShowLayer( title, true );
+		return;
+	}
+	function FadeIn( _start_a, _end_a, _time )
+	{
+		if (CheckValid(title)  ==  true)
+			EasyStartFadeAnime( title, _start_a, _end_a, _time );
+		if (CheckValid(button)  ==  true)
+			EasyStartFadeAnime( button, _start_a, _end_a, _time );
+		return;
+	}
+	function UpdateFade()
+	{
+	var		ret;
+		ret = true;
+		if (CheckValid(title)  ==  true) {
+			if (ProcessFadeAnime(title)  ==  "UPDATING")
+				ret = false;
+		}
+		if (CheckValid(button)  ==  true) {
+			if (ProcessFadeAnime(button)  ==  "UPDATING")
+				ret = false;
+		}
+		return ( ret );
+	}
+
+
+	// ヒット処理の開始
+	function Start( _hit_check_type="ALL" )
+	{
+		if (CheckValid(button)  ==  false)
+			return;
+		with ( button )
+		{
+			.setMouseEnterCallback( FocusEvent );
+			.setMouseLeaveCallback( UnFocusEvent );
+			.setMouseDownCallback( ClickEvent );
+//			.setMouseUpCallback( ClickUpEvent );
+//			.setMouseUpCallback( ClickEvent );
+			.setHitCheckAlphaLimit( _hit_check_type );
+
+//			.setMouseMoveCallback( move );
+		}
+		return;
+	}
+	// ヒット処理の停止
+	function Stop()
+	{
+		if (CheckValid(button)  ==  false)
+			return;
+		with ( button )
+		{
+			.setMouseEnterCallback( void );
+			.setMouseLeaveCallback( void );
+			.setMouseDownCallback( void );
+			.setHitCheckAlphaLimit( "NONE" );
+		}
+		return;
+	}
+
+
+	// 各種SE再生ファイル設定
+	function SetFocusSEPlayFile( _file_name )
+	{
+		focus_se_name = _file_name;
+		return;
+	}
+	function SetClickSEPlayFile( _file_name )
+	{
+		click_se_name = _file_name;
+		return;
+	}
+
+
+
+	// キャンセル時に呼び出すコールバック関数
+	function SetCancelCallback( _func )
+	{
+		cancel_call_func = _func;
+		return;
+	}
+
+	/*
+		各種マウスのコールバック関数
+	*/
+	function FocusEvent( _layer )
+	{
+		// ID表示
+		@if( PRN_BUTTON_MESSAGE  ==  1 )
+			if ((typeof click_call_id)  !==  "void")
+				dm( "ChangeButton::Focus["+click_call_id+"]"+"("+"cg_no:"+button_cg_id+")" );
+
+			dm( "size:" + _layer.width + "," + _layer.height );
+			dm( "focus:"+_layer.cursorX+","+_layer.cursorY );
+		@endif
+
+
+//		PlaySE( focus_se_name, true, , , SE_STOP_TIME );
+		if (CheckPlaySESTack(focus_se_name)  ==  false)
+			PlaySE( focus_se_name, , , , , FOCUS_SE_VOLUME_AVE );
+
+		focus_flag = true;
+		UpdateButtonCG();
+		return;
+	}
+	function UnFocusEvent( _layer )
+	{
+		// ID表示
+		@if( PRN_BUTTON_MESSAGE  ==  1 )
+			if ((typeof click_call_id)  !==  "void")
+				dm( "ChangeButton::UnFocus["+click_call_id+"]"+"("+"cg_no:"+button_cg_id+")" );
+		@endif
+
+		focus_flag = false;
+		UpdateButtonCG();
+		return;
+	}
+	function ClickEvent( _layer, _x,_y, _button,_shift )
+	{
+		if (_button  !=  mbLeft) {
+			if (_button  ==  mbRight) {
+				if (CheckValid(cancel_call_func)  ==  true)
+					cancel_call_func();
+			}
+			return;
+		}
+
+		PlaySE( click_se_name );
+
+
+		// クリック
+		@if( PRN_BUTTON_MESSAGE  ==  1 )
+			if ((typeof click_call_id)  !==  "void")
+				dm( "ChangeButton::Click["+click_call_id+"]"+"("+"cg_no:"+button_cg_id+")" );
+		@endif
+
+
+		if ((typeof click_call_func)  ===  "Object") {
+		var		ret;
+			ret = click_call_func( click_call_id, button_cg_id );
+			if (ret  !=  -1)
+				AssignButtonCG( ret );
+		}
+		return;
+	}
+	// クリック時のコールバック呼び出し関数の登録
+	function SetClickCallbackFunc( _func, _call_id )
+	{
+		click_call_func = _func;
+		click_call_id   = _call_id;
+		return;
+	}
+/*
+	function ClickUpEvent( _layer, _x,_y, _button,_shift )
+	{
+dm( "button_up:"+_x+","+_y );
+		return;
+	}
+	function move( _layer,x,y, button,shift )
+	{
+dm( "layer_size:" + _layer.width + "," + _layer.height );
+dm( "image_size:" + _layer.imageWidth + "," + _layer.imageHeight );
+dm( "move_pos:" + x + "," + y );
+		return;
+	}
+*/
+
+
+
+
+	// 表示ベース位置の設定
+	function SetBasePosition( _prn_x, _prn_y )
+	{
+		base_prn_x = _prn_x;
+		base_prn_y = _prn_y;
+
+		// 各CG位置の更新
+		UpdateTitleCGPosition();
+		UpdateButtonCGPosition();
+		return;
+	}
+
+	// レイヤ優先順位の設定
+	function SetLayerPriority( _prio )
+	{
+		layer_prio = _prio;
+		if (CheckValid(button)  ==  true)
+			button.setPriority( layer_prio );
+		if (CheckValid(title)  ==  true)
+			title.setPriority( layer_prio );
+		return;
+	}
+
+
+
+	// ボタンの表示オフセット位置の設定
+	function SetButtonPosition( _prn_x, _prn_y )
+	{
+		button_prn_x = _prn_x;
+		button_prn_y = _prn_y;
+		UpdateButtonCGPosition();
+		return;
+	}
+	// ボタン表示位置の更新
+	function UpdateButtonCGPosition()
+	{
+		if (CheckValid(button)  ==  true)
+			button.setPos( base_prn_x+button_prn_x, base_prn_y+button_prn_y );
+		return;
+	}
+	// ボタンのCGを読み込む
+	function AddButtonFocusCG( _bank, _file_name )
+	{
+		EasyReleaseLayer( button_focus_cg[_bank] );
+		button_focus_cg[_bank] = EasyCreateLayerObject( parWin,parLayer, _file_name, clAdapt, false,
+							0,0, layer_prio );
+		return;
+	}
+	function AddButtonUnFocusCG( _bank, _file_name )
+	{
+		EasyReleaseLayer( button_unfocus_cg[_bank] );
+		button_unfocus_cg[_bank] = EasyCreateLayerObject( parWin,parLayer, _file_name, clAdapt, false,
+							0,0, layer_prio );
+		return;
+	}
+	// ボタンCGの更新
+	function UpdateButtonCG()
+	{
+		if (focus_flag  ==  true) {
+			if (CheckValid(button_focus_cg[button_cg_id])  ==  true) {
+				SetLayerInfoParam( button, button_focus_cg[button_cg_id], ,, );
+				return;
+			}
+		}
+
+		SetLayerInfoParam( button, button_unfocus_cg[button_cg_id], ,, );
+		return;
+	}
+	// ボタンのCGの変更
+	function AssignButtonCG( _cg_no )
+	{
+		button_cg_id = _cg_no;
+		UpdateButtonCG();
+		return;
+	}
+	function GetNowButtonCG()
+	{
+		return ( button_cg_id );
+	}
+
+
+
+
+	// タイトルの表示オフセット位置の設定
+	function SetTitlePosition( _prn_x, _prn_y )
+	{
+		title_prn_x = _prn_x;
+		title_prn_y = _prn_y;
+		UpdateTitleCGPosition();
+		return;
+	}
+	// タイトル表示位置の更新
+	function UpdateTitleCGPosition()
+	{
+		if (CheckValid(title)  ==  true)
+			title.setPos( base_prn_x+title_prn_x, base_prn_y+title_prn_y );
+		return;
+	}
+
+	// タイトルのCGを読み込む
+	function LoadTitle( _file_name )
+	{
+		RelaseTitle();
+		title = EasyCreateLayerObject( parWin,parLayer, _file_name, clAdapt, false,
+							base_prn_x+title_prn_x,base_prn_y+title_prn_y, layer_prio );
+		return;
+	}
+
+}
+
+
+
+
+
+
+
+
+
+
+
+// ボタンクラス
+class CIriyaNormalButton
+{
+var		parWin,parLayer;
+
+	// コンストラクタ
+	function CIriyaNormalButton( _pr_win, _pr_layer )
+	{
+		parWin   = _pr_win;
+		parLayer = _pr_layer;
+
+		InitBuffer();
+	}
+	// デストラクタ
+	function finalize()
+	{
+		Release();
+	}
+
+	var		cancel_call_func;
+
+	var		button;
+	var		focus_cg,unfocus_cg;
+	var		layer_prio,prn_x,prn_y;
+	var		click_call_func,click_call_id;
+
+	var		focus_se_name;
+	var		click_se_name;
+	var		click_type;
+
+	function InitBuffer()
+	{
+		cancel_call_func = void;
+
+		focus_se_name = void;
+		click_se_name = void;
+		return;
+	}
+
+
+	function Init( type=void )
+	{
+		Release();
+
+		if (type  ===   void)
+			type = 0;
+		click_type = type;
+
+		// ボタンレイヤの作成
+		button = new CSpriteLayer( parWin,parLayer );
+		button.setSize(0,0);
+		return;
+	}
+
+	function Release()
+	{
+		Stop();
+
+
+		if (CheckValid(button)  ==  true) {
+			ReleaseFadeAnime( button );
+			EasyReleaseLayer( button );
+			button = void;
+		}
+
+		EasyReleaseLayer( focus_cg );
+		focus_cg = void;
+		EasyReleaseLayer( unfocus_cg );
+		unfocus_cg = void;
+		return;
+	}
+
+	function GetButtonAlpha()
+	{
+		if (CheckValid(button)  ==  false)
+			return ( 0 );
+
+		return ( button.opacity );
+	}
+	function SetButtonAlpha( _alpha )
+	{
+		if (CheckValid(button)  ==  true)
+			button.opacity = _alpha;
+		return;
+	}
+
+
+	function Print()
+	{
+		if (CheckValid(button)  ==  false)
+			return ( false );
+
+		if (CheckValid(unfocus_cg)  ==  true) {
+			AssignUnFocusCG();
+			ShowLayer( button, true );
+		} else
+		if (CheckValid(focus_cg)  ==  true) {
+			AssignFocusCG();
+			ShowLayer( button, true );
+		}
+		return ( true );
+	}
+
+	function FadeIn( _start_a, _end_a, _time )
+	{
+		if (CheckValid(button)  ==  false)
+			return ( false );
+		EasyStartFadeAnime( button, _start_a, _end_a, _time );
+		return ( true );
+	}
+	function UpdateFade()
+	{
+		if (ProcessFadeAnime(button)  ==  "UPDATING")
+			return ( false );
+		return ( true );
+	}
+
+	function Start( _hit_check_type="ALL" )
+	{
+		if (CheckValid(focus_cg)  ==  true) {
+			button.setMouseEnterCallback( FocusEvent );
+			button.setMouseLeaveCallback( UnFocusEvent );
+		}
+
+		if (click_type  ==  0)
+				button.setMouseDownCallback( ClickEvent );
+		else	button.setMouseUpCallback( ClickUpEvent );
+		button.setHitCheckAlphaLimit( _hit_check_type );
+		UnFocusEvent( button );
+		return;
+	}
+	function Stop()
+	{
+		if (CheckValid(button)  ==  true) {
+			button.setMouseEnterCallback( void );
+			button.setMouseLeaveCallback( void );
+			if (click_type  ==  0)
+					button.setMouseDownCallback( void );
+			else	button.setMouseUpCallback( void );
+			button.setHitCheckAlphaLimit( "NONE" );
+		}
+		return;
+	}
+
+
+
+
+	// 各種SE再生ファイル設定
+	function SetFocusSEPlayFile( _file_name )
+	{
+		focus_se_name = _file_name;
+		return;
+	}
+	function SetClickSEPlayFile( _file_name )
+	{
+		click_se_name = _file_name;
+		return;
+	}
+
+
+
+	// キャンセル時に呼び出すコールバック関数
+	function SetCancelCallback( _func )
+	{
+		cancel_call_func = _func;
+		return;
+	}
+
+	/*
+		各種マウスのコールバック関数
+	*/
+	function FocusEvent( _layer )
+	{
+		// ID表示
+		@if( PRN_BUTTON_MESSAGE  ==  1 )
+			if ((typeof click_call_id)  !==  "void")
+				dm( "Button::Focus["+click_call_id+"]" );
+		@endif
+
+//		PlaySE( focus_se_name, true, , , SE_STOP_TIME );
+		if (CheckPlaySESTack(focus_se_name)  ==  false)
+			PlaySE( focus_se_name, , , , , FOCUS_SE_VOLUME_AVE );
+
+
+		if (CheckValid(focus_cg)  ==  true) {
+			AssignFocusCG();
+			ShowLayer( button, true );
+		}
+		return;
+	}
+	function UnFocusEvent( _layer )
+	{
+		// ID表示
+		@if( PRN_BUTTON_MESSAGE  ==  1 )
+			if ((typeof click_call_id)  !==  "void")
+				dm( "Button::UnFocus["+click_call_id+"]" );
+		@endif
+
+		if (CheckValid(unfocus_cg)  ==  true) {
+			AssignUnFocusCG();
+			ShowLayer( button, true );
+		}
+		return;
+	}
+
+
+
+	function ClickEvent( _layer, _x,_y, _button,_shift )
+	{
+		if (_button  !=  mbLeft) {
+			if (_button  ==  mbRight) {
+				if (CheckValid(cancel_call_func)  ==  true) {
+					cancel_call_func();
+				}
+			}
+			return;
+		}
+
+		PlaySE( click_se_name );
+
+		// クリック
+		@if( PRN_BUTTON_MESSAGE  ==  1 )
+			if ((typeof click_call_id)  !==  "void")
+				dm( "Button::Click["+click_call_id+"]" );
+		@endif
+		if ((typeof click_call_func)  ===  "Object")
+			click_call_func( click_call_id );
+		return;
+	}
+
+	function ClickUpEvent( _layer, _x,_y, _button,_shift )
+	{
+		if (_button  !=  mbLeft) {
+			if (_button  ==  mbRight) {
+				if (CheckValid(cancel_call_func)  ==  true) {
+					cancel_call_func();
+				}
+			}
+			return;
+		}
+
+		PlaySE( click_se_name );
+
+		// クリック
+		@if( PRN_BUTTON_MESSAGE  ==  1 )
+			if ((typeof click_call_id)  !==  "void")
+				dm( "Button::Click["+click_call_id+"]" );
+		@endif
+		if ((typeof click_call_func)  ===  "Object")
+			click_call_func( click_call_id );
+		return;
+	}
+
+
+	// クリック時のコールバック呼び出し関数の登録
+	function SetClickCallbackFunc( _func, _call_id )
+	{
+		click_call_func = _func;
+		click_call_id   = _call_id;
+		return;
+	}
+
+	// レイヤ優先順位の設定
+	function SetLayerPriority( _prio )
+	{
+		layer_prio = _prio;
+		if (CheckValid(button)  ==  true) {
+			button.setPriority( layer_prio );
+		}
+		return;
+	}
+	// レイヤ表示位置の設定
+	function SetLayerPosition( _prn_x, _prn_y )
+	{
+		prn_x = _prn_x;
+		prn_y = _prn_y;
+		if (CheckValid(button)  ==  true) {
+			button.setPos( prn_x,prn_y );
+		}
+		return;
+	}
+	function GetLayerPositionX()
+	{
+		return ( prn_x );
+	}
+	function GetLayerPositionY()
+	{
+		return ( prn_y );
+	}
+	function GetButtonSizeWidth()
+	{
+		return ( button.width );
+	}
+	function GetButtonSizeHeight()
+	{
+		return ( button.height );
+	}
+
+	function AssignUnFocusCG()
+	{
+		SetLayerInfoParam( button, unfocus_cg, ,, );
+		return;
+	}
+	function AssignFocusCG()
+	{
+		SetLayerInfoParam( button, focus_cg, ,, );
+		return;
+	}
+	// フォーカス用CGを読み込む
+	function LoadFocusCG( _file_name )
+	{
+		focus_cg = EasyCreateLayerObject( parWin,parLayer, _file_name, clAdapt, false,
+							prn_x,prn_y, layer_prio );
+		return;
+	}
+	// アンフォーカス用CGを読み込む
+	function LoadUnFocusCG( _file_name )
+	{
+		unfocus_cg = EasyCreateLayerObject( parWin,parLayer, _file_name, clAdapt, false,
+							prn_x,prn_y, layer_prio );
+		return;
+	}
+
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// YesNo確認Dialog管理クラス
+class	CIriyaYesNoDialog
+{
+var		parWin,parLayer;
+
+
+	function CIriyaYesNoDialog( _pr_win, _pr_layer )
+	{
+		parWin   = _pr_win;
+		parLayer = _pr_layer;
+
+		InitBuffer();
+	}
+	function finalize()
+	{
+		Release();
+	}
+
+
+	var		LAYER_TITLE		=0;
+	var		LAYER_BUTTON	=-1;
+	var		LAYER_BACK		=-2;
+
+
+
+	var		priority;
+//	var		cancel_function;
+	var		is_hit_check;
+	var		cancel_use;
+
+	var		select_id;
+		var		SEL_ID_RB_CANCEL=-2;
+		var		SEL_ID_NONE=-1;
+		var		SEL_ID_NORMAL_OFFSET=0;
+
+	var		prn_layer;
+
+	var		back_cg;
+	var		title_cg;
+	var		button;
+
+	var		focus_se_name;
+	var		click_se_name;
+
+	function InitBuffer()
+	{
+		priority = 0;
+
+		select_id = SEL_ID_NONE;
+
+		cancel_use = true;
+		is_hit_check = false;
+
+		prn_layer = void;
+
+		back_cg  = void;
+		title_cg = void;
+		button   = void;
+
+		focus_se_name = void;
+		click_se_name = void;
+		return;
+	}
+	function Release()
+	{
+		release_back_cg();
+		release_title_cg();
+		release_button();
+
+		if (CheckValid(prn_layer)  ==  true) {
+			ReleaseFadeAnime( prn_layer );
+			EasyReleaseLayer( prn_layer );
+			prn_layer = void;
+		}
+
+		DeleteArrayObject( focus_se_name, 1 );
+		focus_se_name = void;
+		DeleteArrayObject( click_se_name, 1 );
+		click_se_name = void;
+		return;
+	}
+
+
+	function Init( _priority )
+	{
+		Release();
+		InitBuffer();
+
+		priority = _priority;
+
+		with (prn_layer = new CSpriteLayer(parWin, parLayer) )
+		{
+			.setPriority( priority );
+			.setPos( 0,0 );
+			.setSize( SCREEN_SIZE_W ,SCREEN_SIZE_H );
+			.fill( RGBA_MAKE(0,0,0,0) );
+		}
+
+
+		focus_se_name = new Array();
+		click_se_name = new Array();
+
+		button = new Array();
+		return;
+	}
+
+
+
+
+
+	function print_button()
+	{
+	var		i;
+		if (CheckValid(button)  ==  false)
+			return;
+		for (i=0;  i<button.count;  i++) {
+			if (CheckValid(button[i])  ==  false)
+				continue;
+			button[i].Print();
+		}
+		return;
+	}
+
+	function Print( prn_flag=true )
+	{
+		if (CheckValid(prn_layer)  ==  true)
+			prn_layer.visible = true;
+		if (CheckValid(back_cg)  ==  true)
+			back_cg.visible = true;
+		if (CheckValid(title_cg)  ==  true)
+			title_cg.visible = true;
+		print_button();
+		return;
+	}
+	function ResetButtonCG()
+	{
+		print_button();
+		return;
+	}
+	function Start()
+	{
+		is_hit_check = true;
+		if (CheckValid(button)  ==  true) {
+		var		i;
+			for (i=0;  i<button.count;  i++) {
+				if (CheckValid(button[i])  ==  false)
+					continue;
+				button[i].Start();
+			}
+
+			if (cancel_use  ==  true) {
+			if (CheckValid(prn_layer)  ==  true) {
+				start_prn_layer_click();
+			}}
+		}
+		return;
+	}
+	function Stop()
+	{
+		is_hit_check = false;
+		if (CheckValid(button)  ==  true) {
+		var		i;
+			for (i=0;  i<button.count;  i++) {
+				if (CheckValid(button[i])  ==  false)
+					continue;
+				button[i].Stop();
+			}
+
+			if (cancel_use  ==  true) {
+			if (CheckValid(prn_layer)  ==  true) {
+				stop_prn_layer_click();
+			}}
+		}
+		return;
+	}
+
+	function start_prn_layer_click()
+	{
+		with ( prn_layer )
+		{
+			.setMouseDownCallback( _prn_layer_click );
+			.setHitCheckAlphaLimit( "ALL" );
+		}
+		return;
+	}
+	function stop_prn_layer_click()
+	{
+		with ( prn_layer )
+		{
+			.setMouseDownCallback( void );
+			.setHitCheckAlphaLimit( "NONE" );
+		}
+		return;
+	}
+
+
+
+	// 各種SE再生ファイル設定
+	function SetFocusSEPlayFile( _id, _file_name )
+	{
+		focus_se_name[_id] = _file_name;
+
+		if (CheckValid(button[_id])  ==  true)
+			button[_id].SetFocusSEPlayFile( _file_name );
+		return;
+	}
+	function SetClickSEPlayFile( _id, _file_name )
+	{
+		click_se_name[_id] = _file_name;
+
+
+		if (CheckValid(button[_id])  ==  true) {
+			button[_id].SetClickSEPlayFile( _file_name );
+		}
+		return;
+	}
+
+
+	function SetFadeParam( _start_a, _end_a, _time )
+	{
+		Print();
+		Stop();
+		if (CheckValid(prn_layer)  ==  true)
+			EasyStartFadeAnime( prn_layer, _start_a, _end_a, _time );
+		return;
+	}
+
+	function UpdateFade()
+	{
+		if (CheckValid(prn_layer)  ==  true) {
+			if (ProcessFadeAnime(prn_layer)  ==  "UPDATING")
+				return ( false );
+		}
+		return ( true );
+	}
+
+
+	// 背景
+	function release_back_cg()
+	{
+		if (CheckValid(back_cg)  ==  true) {
+			EasyObjectInvalidate( back_cg );
+			back_cg = void;
+		}
+		return;
+	}
+	function LoadBackCG( _file_name, _px,_py )
+	{
+		release_back_cg();
+		back_cg = EasyCreateLayerObject( parWin,prn_layer, _file_name, clNone, false, _px,_py, LAYER_BACK );
+		return;
+	}
+
+
+	// タイトル
+	function release_title_cg()
+	{
+		if (CheckValid(title_cg)  ==  true) {
+			EasyObjectInvalidate( title_cg );
+			back_cg = void;
+		}
+		return;
+	}
+	function LoadTitleCG( _file_name, _px,_py )
+	{
+		release_title_cg();
+		title_cg = EasyCreateLayerObject( parWin,prn_layer, _file_name, clNone, false, _px,_py, LAYER_TITLE );
+		return;
+	}
+
+
+	// ボタン
+	function release_button( del_no )
+	{
+		if (CheckValid(button)  ==  true) {
+		var		start,end,i;
+
+			if ((typeof del_no)  ===  "void") {
+				start = 0;
+				end = button.count;
+			} else {
+				start = del_no;
+				end = del_no+1;
+			}
+			for (i=start;  i<end;  i++) {
+				if (CheckValid(button[i])  ==  false)
+					return;
+				button[i].Release();
+			}
+
+			if ((typeof del_no)  ===  "void") {
+				ReleaseArray( button );
+				button = void;
+			}
+		}
+		return;
+	}
+	function LoadButton( _index_no, _focus_file_name, _unfocus_file_name, _px,_py )
+	{
+		release_button( _index_no );
+		with (button[_index_no] = new CIriyaNormalButton(parWin,prn_layer))
+		{
+			.Init();
+			.SetLayerPriority( LAYER_BUTTON );
+			.LoadFocusCG( _focus_file_name );
+			.LoadUnFocusCG( _unfocus_file_name );
+			.SetLayerPosition( _px, _py );
+			.SetClickCallbackFunc( ButtonHitCallback, _index_no );
+			.SetCancelCallback( _cancel_call_back );
+
+			.SetClickSEPlayFile( click_se_name[_index_no] );
+			.SetFocusSEPlayFile( focus_se_name[_index_no] );
+		}
+		return;
+	}
+	function SetCancelUseFlag( _flag )
+	{
+		cancel_use = _flag;
+/*
+	var		i;
+	var		_function;
+		if (cancel_use  ==  true)
+				cancel_function = _cancel_call_back;
+		else	cancel_function = void;
+		if (CheckValid(button)  ==  true) {
+			with ( button )
+			{
+				for (i=0;  i<.count;  i++) {
+					if (CheckValid(button[i])  ==  true)
+						.SetCancelCallback( cancel_function );
+				}
+			}
+		}
+*/		if (is_hit_check  ==  true) {
+		if (CheckValid(prn_layer)  ==  true) {
+			if (cancel_use  ==  true)
+					start_prn_layer_click();
+			else	stop_prn_layer_click();
+		}}
+		return;
+	}
+
+
+	function process_cancel()
+	{
+		select_id = SEL_ID_RB_CANCEL;
+		Stop();
+		return;
+	}
+	function process_select( _call_id )
+	{
+		select_id = _call_id;
+		Stop();
+		return;
+	}
+
+	function _cancel_call_back()
+	{
+		if (cancel_use  ==  false)
+			return;
+		process_cancel();
+		return;
+	}
+	function ButtonHitCallback( _call_id )
+	{
+		process_select( _call_id );
+		return;
+	}
+	function GetSelectID()
+	{
+		return ( select_id );
+	}
+
+	function _prn_layer_click( _layer, _x,_y, _button,_shift )
+	{
+		if (_button  ==  mbRight) {
+			_cancel_call_back();
+		}
+		return;
+	}
+
+
+	function SetBackPos( _px, _py )
+	{
+		if (CheckValid(back_cg)  ==  false)
+			return;
+
+		with ( back_cg )
+		{
+			if (_px  ===  void)
+				_px = .left;
+			if (_py  ===  void)
+				_py = .top;
+			.setPos( _px, _py );
+		}
+		return;
+	}
+	function SetTitlePos( _px, _py )
+	{
+		if (CheckValid(title_cg)  ==  false)
+			return;
+
+		with ( title_cg )
+		{
+			if (_px  ===  void)
+				_px = .left;
+			if (_py  ===  void)
+				_py = .top;
+			.setPos( _px, _py );
+		}
+		return;
+	}
+	function SetButtonPos( _id, _px, _py )
+	{
+		if (CheckValid(button)  ==  false)
+			return;
+		if (CheckValid(button[_id])  ==  false)
+			return;
+		with ( button[_id] )
+		{
+			if (_px  ===  void)
+				_px = .GetLayerPositionX();
+			if (_py  ===  void)
+				_py = .GetLayerPositionY();
+			.SetLayerPosition( _px, _py );
+		}
+		return;
+	}
+}
+
+
+
+
+
+// YesNo確認Dialog管理クラス
+class	CIriyaYesNoDialogEx extends CIriyaYesNoDialog
+{
+	function CIriyaYesNoDialogEx( _par_win, par_layer )
+	{
+		super.CIriyaYesNoDialog( _par_win, par_layer );
+	}
+	function finalize()
+	{
+		super.Release();
+		super.finalize();
+	}
+	function Release()
+	{
+		super.Release();
+	}
+
+	var		SEL_ID_YES		=0;
+	var		SEL_ID_NO		=1;
+
+
+	var		YESNO_DLG_BACK_CG_W=608;
+	var		YESNO_DLG_BACK_CG_H=113;
+	var		PRN_YESNO_DIG_PX		=(SCREEN_SIZE_W-YESNO_DLG_BACK_CG_W)/2;
+	var		PRN_YESNO_DIG_PY		=(SCREEN_SIZE_H-YESNO_DLG_BACK_CG_H)/2-32;
+	var		PRN_YESNO_TITLE_PX		=PRN_YESNO_DIG_PX+24;
+	var		PRN_YESNO_TITLE_PY		=PRN_YESNO_DIG_PY+16;
+	var		PRN_YESNO_YES_PX		=PRN_YESNO_DIG_PX+168;
+	var		PRN_YESNO_YES_PY		=PRN_YESNO_DIG_PY+64;
+	var		PRN_YESNO_NO_PX			=PRN_YESNO_DIG_PX+312;
+	var		PRN_YESNO_NO_PY			=PRN_YESNO_DIG_PY+64;
+
+	var		mode;
+		var		MODE_NONE			=0;
+		var		MODE_FADE_IN		=10;
+		var		MODE_FADE_IN_END	=15;
+		var		MODE_SELECT			=20;
+		var		MODE_FADE_OUT		=30;
+		var		MODE_FADE_OUT_END	=35;
+		var		MODE_USER_OFFSET	=1000;
+
+	var		cancel_mode;
+/*
+	var		select_callback_func=void;
+	function SetSelectCallbackFunc( _func )
+	{
+		select_callback_func = _func;
+		return
+	}
+*/
+
+	function CreateDefaultSet( _base_priority, _title_name, _cancel_mode=true )
+	{
+		mode = MODE_NONE;
+
+
+		Init( _base_priority );
+		SetCancelUseFlag( _cancel_mode );
+		LoadBackCG( "ir_menu00_03", PRN_YESNO_DIG_PX,PRN_YESNO_DIG_PY );
+		LoadTitleCG( _title_name, PRN_YESNO_TITLE_PX,PRN_YESNO_TITLE_PY );
+		LoadButton( SEL_ID_YES, "ir_menu02_09","ir_menu01_09", PRN_YESNO_YES_PX,PRN_YESNO_YES_PY );
+		LoadButton( SEL_ID_NO,  "ir_menu02_10","ir_menu01_10", PRN_YESNO_NO_PX,PRN_YESNO_NO_PY );
+
+		SetClickSEPlayFile( SEL_ID_YES, SE_YES_NO_MENU_YES );
+		SetFocusSEPlayFile( SEL_ID_YES, SE_YES_NO_MENU_FOCUS );
+
+		SetClickSEPlayFile( SEL_ID_NO, SE_YES_NO_MENU_NO );
+		SetFocusSEPlayFile( SEL_ID_NO, SE_YES_NO_MENU_FOCUS );
+		return;
+	}
+
+
+	function SetDefaultFadeInParam()
+	{
+		SetFadeParam( 0, 255, 8 );
+		return;
+	}
+	function SetDefaultFadeOutParam()
+	{
+		SetFadeParam( 255, 0, 8 );
+		return;
+	}
+
+
+	function StartFadeIn()
+	{
+		SetDefaultFadeInParam();
+		mode = MODE_FADE_IN;
+		return;
+	}
+	function StartFadeOut()
+	{
+		SetDefaultFadeOutParam();
+		mode = MODE_FADE_OUT;
+		return;
+	}
+
+	function StartSelect()
+	{
+		Start();
+		mode = MODE_SELECT;
+		return;
+	}
+
+
+
+	function process_cancel()
+	{
+		stopSound( ,, );
+		PlaySE( click_se_name[SEL_ID_NO] );
+
+		super.process_cancel();
+		return;
+	}
+	function process_select( _call_id )
+	{
+		stopSound( ,, );
+		PlaySE( click_se_name[_call_id] );
+		super.process_select( _call_id );
+		return;
+	}
+
+
+
+	function Update()
+	{
+		switch ( mode )
+		{
+		case MODE_SELECT:
+			break;
+
+		case MODE_NONE:
+			break;
+		case MODE_FADE_IN:
+			if (UpdateFade()  ==  false)
+				break;
+			mode = MODE_FADE_IN_END;
+			break;
+
+		case MODE_FADE_OUT:
+			if (UpdateFade()  ==  false)
+				break;
+			mode = MODE_FADE_OUT_END;
+			break;
+
+		case MODE_SELECT:
+			break;
+		case MODE_FADE_IN_END:
+			break;
+		case MODE_FADE_OUT_END:
+			break;
+		}
+		return;
+	}
+
+
+	// 簡易自動処理方法1
+	var		MODE_SELECT_YES		=MODE_USER_OFFSET+0;
+	var		MODE_SELECT_END		=MODE_USER_OFFSET+1;
+	function UpdateNormal()
+	{
+		Update();
+		switch ( mode )
+		{
+		case MODE_FADE_IN_END:
+			StartSelect();
+			break;
+		case MODE_SELECT:
+			switch ( GetSelectID() )
+			{
+			case SEL_ID_NONE:
+				break;
+			case SEL_ID_YES:
+				Stop();
+				mode = MODE_SELECT_YES;
+				ResetButtonCG();
+				break;
+
+			case SEL_ID_NO:
+			case SEL_ID_RB_CANCEL:
+				Stop();
+				ResetButtonCG();
+				StartFadeOut();
+				break;
+			}
+			break;
+		case MODE_FADE_OUT_END:
+			mode = MODE_SELECT_END;
+			break;
+
+		case MODE_SELECT_YES:
+			break;
+		case MODE_SELECT_END:
+			break;
+		}
+	}
+
+
+	var		MODE_SELECT_END_EX		=MODE_USER_OFFSET+0;
+	function UpdateEx()
+	{
+		Update();
+		switch ( mode )
+		{
+		case MODE_FADE_IN_END:
+			StartSelect();
+			break;
+		case MODE_SELECT:
+			switch ( GetSelectID() )
+			{
+			case SEL_ID_NONE:
+				break;
+			case SEL_ID_YES:
+				mode = MODE_SELECT_END;
+				ResetButtonCG();
+				Stop();
+				break;
+
+			case SEL_ID_NO:
+			case SEL_ID_RB_CANCEL:
+				mode = MODE_SELECT_END;
+				ResetButtonCG();
+				Stop();
+				break;
+			}
+			break;
+		case MODE_SELECT_END_EX:
+			break;
+		}
+		return;
+	}
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// オプションメニュ−管理クラス
+class CIriyaOptionMenu
+{
+var		parWin,parLayer,parScene;
+
+	// コンストラクタ
+	function CIriyaOptionMenu( _pr_win, _pr_layer, _pr_scene )
+	{
+		parWin   = _pr_win;
+		parLayer = _pr_layer;
+		parScene = _pr_scene;
+
+		InitBuffer();
+	}
+	// デストラクタ
+	function finalize()
+	{
+		Release();
+	}
+
+	var		RET_TITLE_FADE_TIME=24;		// タイトルに戻る時のフェードレイヤのフェード時間
+
+	var		LAYER_YESNO_OFFST		=20;
+	var		LAYER_MENU_BLACK_OFFST	=15;
+	var		LAYER_MENU_ITEM_OFFST	=10;
+	var		LAYER_MENU_BACK_OFFST	=1;
+	var		LAYER_BACK_FADE_OFFST	=0;
+
+	var		WIN_MODE_WINDOW		=0;
+	var		WIN_MODE_FULLSCREEN	=1;
+	function GetNowScreenMode()
+	{
+		if (parWin.fullScreen  ==  false)
+				return ( WIN_MODE_WINDOW );
+		else	return ( WIN_MODE_FULLSCREEN );
+	}
+
+
+	var		LEYER_TUTORIAL_OFFSET=100;
+
+	var		MENU_BACK_CG_W=448;
+	var		MENU_BACK_CG_H=448;
+
+	// メニュー生成座標情報など
+	// +---メニュー表示基本位置
+		var		OPTION_MENU_PRINT_POS_X=(SCREEN_SIZE_W-MENU_BACK_CG_W)/2;
+	// +---メニュー背景
+		var		MENU_BACK_PRINT_POS_X = 0;
+		var		MENU_BACK_PRINT_POS_Y = 0;
+	// +---画面モード変更
+		var		SCRREN_MODE_PRINT_POS_X = 24;
+		var		SCRREN_MODE_PRINT_POS_Y = 80;
+			var		SCRREN_MODE_TITLE_OFF_X=0;
+			var		SCRREN_MODE_TITLE_OFF_Y=0;
+			var		SCRREN_MODE_BUTTON_OFF_X=256;
+			var		SCRREN_MODE_BUTTON_OFF_Y=0;
+
+	// +---BGMのVolume変更
+		var		BGM_VOLUME_PRINT_POS_X = 24;
+		var		BGM_VOLUME_PRINT_POS_Y = 128;
+	// +---SEのVolume変更
+		var		SE_VOLUME_PRINT_POS_X = 24;
+		var		SE_VOLUME_PRINT_POS_Y = 192;
+
+	// 通常メニュー項目終了位置
+		var		PRINT_NORMAL_MENU_OFFSET_Y = 256;
+
+
+	// メモリタイプ
+		var		MEMORY_TYPE_POS_X		= 24;
+		var		MEMORY_TYPE_SKIP_POS_Y	= 48;
+			var	MEMORY_TYPE_TITLE_OFF_X		= 0;
+			var	MEMORY_TYPE_TITLE_OFF_Y		= 0;
+			var	MEMORY_TYPE_BUTTON_OFF_X	= 256;
+			var	MEMORY_TYPE_BUTTON_OFF_Y	= 0;
+	// 描画オプション
+		var		DRAW_OPTION_POS_X		= 24;
+		var		DRAW_OPTION_SKIP_POS_Y	= 48;
+			var	DRAW_OPTION_TITLE_OFF_X		= 0;
+			var	DRAW_OPTION_TITLE_OFF_Y		= 0;
+			var	DRAW_OPTION_BUTTON_OFF_X	= 256;
+			var	DRAW_OPTION_BUTTON_OFF_Y	= 0;
+
+
+	// +---チュートリアル
+		var		TUTORIAL_PRINT_POS_X = 24;
+
+		var		TUTORIAL_PRINT_SKIP_POS_Ya = 48;
+		var		TUTORIAL_PRINT_SKIP_POS_Yb =  0;
+
+
+	// +---タイトル画面にもどる
+		var		RET_TITLE_PRINT_POS_X = 24;
+		var		RET_TITLE_PRINT_POS_Y_EX 	= 16;
+		var		RET_TITLE_PRINT_SKIP_POS_Y	= 40;
+
+	// +---ゲームに戻る
+		var		RET_GAME_PRINT_POS_X = RET_TITLE_PRINT_POS_X;//(MENU_BACK_CG_W-224)/2;		// (メニューW-タイトルW)
+
+
+	// メニュー背景中間CG生成枚数
+	var		OPTION_TITLECALL_MENU_BACK_CENTER_NUM=9;//10;//8;
+	var		OPTION_GAMECALL_MENU_BACK_CENTER_NUM=10;
+
+
+	var		HIT_ID_RET_NONE			=-1;
+	var		HIT_ID_RET_TITLE		=0;
+	var		HIT_ID_RET_GAME			=1;
+	var		HIT_ID_TUTORIAL			=2;
+
+
+	var		yn_dialog;
+	var		tutorial_screen;
+
+
+
+
+	var		timer_chk_screen;
+
+	var		menu_type;
+
+	var		back_fade;
+	var		ret_title,ret_game,screen_mode,bgm_volume,se_volume,tutorial,draw_option,memory_type;
+	var		click_id;
+
+	var		sys_fade;
+
+	var		screen_change_ev;
+
+	var		menu_back_cg;
+	var		menu_back_cg_bank;
+
+	var		menu_fade_cg;
+	var		menu_fade_cg_bank;
+
+
+	var		ROOT_MODE_NONE			=0;		// 何もなし
+	var		ROOT_MODE_FADE_IN		=1;		// フェードイン
+	var		ROOT_MODE_SELECT		=2;		// メニューセレクト中
+	var		ROOT_MODE_FADE_OUT		=3;		// オプションから抜けるフェードアウト中
+	var		ROOT_MODE_TUTORIAL		=4;		// チュートリアル中
+
+	var		ROOT_MODE_YESNO_RET_GAME				=11;
+
+	var		root_mode;
+	function InitBuffer()
+	{
+		reset_click_id();
+		root_mode = ROOT_MODE_NONE;
+		screen_change_ev = false;
+		timer_chk_screen = void;
+
+		sys_fade = void;
+
+		menu_back_cg = void;
+		menu_back_cg_bank = void;
+
+		menu_fade_cg = void;
+		menu_fade_cg_bank = void;
+
+
+		yn_dialog = void;
+		tutorial_screen = void;
+		return;
+	}
+
+	function screen_change_stop()
+	{
+		Stop();	// すべてのメニューの判定を停止
+		screen_change_ev = true;
+		return;
+	}
+	// 画面モード変更ボタンコールバック関数
+	function _screen_change_button_callback( _call_id, _button_cg_id )
+	{
+		if (screen_change_ev  ==  true)
+			return (-1);
+		if (GetNowScreenMode()  !=  _button_cg_id)
+			return ( -1 );
+
+		if (parWin.fullScreen  ==  true)
+				parWin.onWindowedMenuItemClick();
+		else	parWin.onFullScreenMenuItemClick();
+		screen_change_stop();
+		return ( GetNowScreenMode() );
+	}
+
+	// 画面モード変更が行われたかを取得する
+	function get_screen_change_flag()
+	{
+		return ( screen_change_ev );
+	}
+	// 画面モード変更フラグをリセット
+	function reset_screen_change_flag()
+	{
+		screen_change_ev = false;
+		return;
+	}
+
+	function _memory_type_change_button_callback( _call_id, _button_cg_id )
+	{
+	var		next;
+		next =  parLayer.GetMemoryType() + 1;
+		if (next  >=  parLayer.MAX_MEMORY_TYPE)
+			next = 0;
+		parLayer.SetMemoryType( next );
+		return ( next );
+	}
+	function _draw_option_change_button_callback( _call_id, _button_cg_id )
+	{
+	var		next;
+		next =  parLayer.GetDrawOption() + 1;
+		if (next  >=  parLayer.MAX_DRAW_OPTION)
+			next = 0;
+		parLayer.SetDrawOption( next );
+		return ( next );
+	}
+
+
+/*
+	// MouseUpEvent時に行うならこれでOK
+	function _screen_change_button_callback( _call_id, _button_cg_id )
+	{
+		if (GetNowScreenMode()  !=  _button_cg_id)
+			return ( -1 );
+
+		var		cur_px,cur_py;
+		with ( parLayer )
+		{
+			cur_px = .cursorX;
+			cur_py = .cursorY;
+
+			if (_button_cg_id  ==  WIN_MODE_WINDOW)
+					parWin.fullScreen = true;
+			else	parWin.fullScreen = false;
+
+			.setCursorPos( cur_px, cur_py );
+		}
+		return ( GetNowScreenMode() );
+
+
+//		if (_button_cg_id  ==  WIN_MODE_WINDOW)
+//				parWin.fullScreen = true;
+//		else	parWin.fullScreen = false;
+//		UpdateCursorPos2( parLayer );
+//		return ( GetNowScreenMode() );
+	}
+*/
+
+
+
+
+	function bgm_change_callback( _call_id, _now_num )
+	{
+		kag.setUserVolume( , _now_num, );
+//		global.sf.bgmVolume = _now_num;
+		return;
+	}
+	function se_change_callback( _call_id, _now_num )
+	{
+		kag.setUserVolume( ,, _now_num );
+//		global.sf.seVolume = _now_num;
+		return;
+	}
+
+
+
+	// ボタンの画面モードと現在の画面モードが違うか返す
+	function is_not_screen_mode()
+	{
+		if (CheckValid(screen_mode)  ==  false)
+			return ( false );
+
+		if ((screen_mode.GetNowButtonCG()  ==  WIN_MODE_WINDOW)
+		&&	(parWin.fullScreen  ==  true)) {
+			return ( true );
+		} else
+		if ((screen_mode.GetNowButtonCG()  ==  WIN_MODE_FULLSCREEN)
+		&&	(parWin.fullScreen  ==  false)) {
+			return ( true );
+		}
+		return ( false );
+	}
+	// タイマによるシステムメニュー変更のチェック呼び出し関数
+	function check_screen_mode_callback()
+	{
+		if (CheckValid(screen_mode)  ==  false)
+			return;
+		if (is_not_screen_mode()  ==  true) {
+			if (parWin.fullScreen  ==  true)
+					screen_mode.AssignButtonCG( WIN_MODE_FULLSCREEN );
+			else	screen_mode.AssignButtonCG( WIN_MODE_WINDOW );
+			screen_change_stop();
+		}
+
+		return;
+	}
+
+
+
+	// スクリーンモード変更ボタンを生成する
+	function create_screen_mode_button( _layer_offset, _base_x,_base_y,_title_x,_title_y,_button_x,_button_y )
+	{
+		with (screen_mode = new CIriyaChangeButton(parWin,parLayer))
+		{
+			.Init( 2 );
+
+			.SetBasePosition( _base_x,_base_y );
+			.SetLayerPriority( _layer_offset-0 );
+
+			// タイトル設定
+			.LoadTitle( "ir_menu01_00" );
+			.SetTitlePosition( _title_x,_title_y );
+
+			// ボタンCGの読み込み
+			.SetButtonPosition( _button_x,_button_y );
+			.AddButtonFocusCG(   WIN_MODE_WINDOW,     "ir_menu02_03" );
+			.AddButtonUnFocusCG( WIN_MODE_WINDOW,     "ir_menu01_03" );
+			.AddButtonFocusCG(   WIN_MODE_FULLSCREEN, "ir_menu02_11" );
+			.AddButtonUnFocusCG( WIN_MODE_FULLSCREEN, "ir_menu01_11" );
+			.AssignButtonCG( GetNowScreenMode() );
+			.SetClickCallbackFunc( _screen_change_button_callback, 0 );
+			.SetCancelCallback( _cancel_call_back );
+
+			.SetClickSEPlayFile( SE_OPTION_MENU_SELECT );
+			.SetFocusSEPlayFile( SE_OPTION_MENU_FOCUS );
+		}
+		return;
+	}
+	// メモリタイプ切替ボタンを生成する
+	function create_memory_type_button( _layer_offset, _base_x,_base_y,_title_x,_title_y,_button_x,_button_y )
+	{
+	var		i;
+		with (memory_type = new CIriyaChangeButton(parWin,parLayer))
+		{
+			.Init( parLayer.MAX_MEMORY_TYPE );
+
+			.SetBasePosition( _base_x,_base_y );
+			.SetLayerPriority( _layer_offset-0 );
+
+			// タイトル設定
+			.LoadTitle( "ir_menu01_18" );
+			.SetTitlePosition( _title_x,_title_y );
+
+			// ボタンCGの読み込み
+			.SetButtonPosition( _button_x,_button_y );
+			for (i=0;  i<parLayer.MAX_MEMORY_TYPE;  i++) {
+				.AddButtonFocusCG(   i, "ir_menu02_%02d".sprintf(19+i) );
+				.AddButtonUnFocusCG( i, "ir_menu01_%02d".sprintf(19+i) );
+			}
+			.AssignButtonCG( parLayer.GetMemoryType() );
+			.SetClickCallbackFunc( _memory_type_change_button_callback, 0 );
+			.SetCancelCallback( _cancel_call_back );
+
+
+			.SetClickSEPlayFile( SE_OPTION_MENU_SELECT );
+			.SetFocusSEPlayFile( SE_OPTION_MENU_FOCUS );
+		}
+		return;
+	}
+	// 描画オプション切替ボタンを生成する
+	function create_draw_option_button( _layer_offset, _base_x,_base_y,_title_x,_title_y,_button_x,_button_y )
+	{
+	var		i;
+		with (draw_option = new CIriyaChangeButton(parWin,parLayer))
+		{
+			.Init( parLayer.MAX_DRAW_OPTION );
+
+			.SetBasePosition( _base_x,_base_y );
+			.SetLayerPriority( _layer_offset-0 );
+
+			// タイトル設定
+			.LoadTitle( "ir_menu01_14" );
+			.SetTitlePosition( _title_x,_title_y );
+
+			// ボタンCGの読み込み
+			.SetButtonPosition( _button_x,_button_y );
+			for (i=0;  i<parLayer.MAX_DRAW_OPTION;  i++) {
+				.AddButtonFocusCG(   i, "ir_menu02_%02d".sprintf(15+i) );
+				.AddButtonUnFocusCG( i, "ir_menu01_%02d".sprintf(15+i) );
+			}
+			.AssignButtonCG( parLayer.GetDrawOption() );
+			.SetClickCallbackFunc( _draw_option_change_button_callback, 0 );
+			.SetCancelCallback( _cancel_call_back );
+
+
+			.SetClickSEPlayFile( SE_OPTION_MENU_SELECT );
+			.SetFocusSEPlayFile( SE_OPTION_MENU_FOCUS );
+		}
+		return;
+	}
+	// タイトルに戻るボタンを生成する
+	function create_return_title_button( _layer_offset, _button_x,_button_y )
+	{
+		with (ret_title = new CIriyaNormalButton(parWin,parLayer))
+		{
+			.Init();
+			.SetLayerPriority( _layer_offset-0 );
+			.LoadFocusCG( "ir_menu02_01" );
+			.LoadUnFocusCG( "ir_menu01_01" );
+			.SetLayerPosition( _button_x, _button_y );
+			.SetClickCallbackFunc( ButtonHitCallback, HIT_ID_RET_TITLE );
+
+			.SetCancelCallback( _cancel_call_back );
+
+
+			.SetClickSEPlayFile( SE_OPTION_MENU_SELECT );
+			.SetFocusSEPlayFile( SE_OPTION_MENU_FOCUS );
+		}
+		return;
+	}
+	// ゲームに戻るボタンを生成する
+	function create_return_game_button( _layer_offset, _button_x,_button_y )
+	{
+		with (ret_game = new CIriyaNormalButton(parWin,parLayer))
+		{
+			.Init();
+			.SetLayerPriority( _layer_offset-0 );
+			.LoadFocusCG( "ir_menu02_02" );
+			.LoadUnFocusCG( "ir_menu01_02" );
+			.SetLayerPosition( _button_x, _button_y );
+			.SetClickCallbackFunc( ButtonHitCallback, HIT_ID_RET_GAME );
+
+			.SetCancelCallback( _cancel_call_back );
+
+
+			.SetClickSEPlayFile( SE_OPTION_MENU_CANCEL );
+			.SetFocusSEPlayFile( SE_OPTION_MENU_FOCUS );
+		}
+		return;
+	}
+	// チュートリアルボタンを生成する
+	function create_tutorial_button( _layer_offset, _button_x,_button_y )
+	{
+		with (tutorial = new CIriyaNormalButton(parWin,parLayer))
+		{
+			.Init();
+			.SetLayerPriority( _layer_offset-0 );
+			.LoadFocusCG( "ir_menu02_12" );
+			.LoadUnFocusCG( "ir_menu01_12" );
+			.SetLayerPosition( _button_x, _button_y );
+			.SetClickCallbackFunc( ButtonHitCallback, HIT_ID_TUTORIAL );
+
+			.SetCancelCallback( _cancel_call_back );
+
+
+			.SetClickSEPlayFile( SE_OPTION_MENU_SELECT );
+			.SetFocusSEPlayFile( SE_OPTION_MENU_FOCUS );
+		}
+		return;
+	}
+	// BGMボリュームボタンを生成する
+	function create_bgm_volume_button( _layer_offset, _base_x,_base_y, _title_x,_title_y )
+	{
+		with (bgm_volume = new CIriyaSliderButton(parWin,parLayer))
+		{
+			.Init();
+
+			.SetBasePosition( _base_x,_base_y );
+			.SetLayerPriority( _layer_offset-0 );
+
+			// タイトル設定
+			.LoadUnFocusTitleCG( "ir_menu01_04" );
+			.LoadFocusTitleCG( "ir_menu02_04" );
+			.SetTitlePosition( _title_x,_title_y );
+
+			// ボタン設定
+			.LoadUnFocusButtonCG( "ir_menu01_06" );
+			.LoadFocusButtonCG( "ir_menu02_06" );
+
+			// バーの設定
+			.LoadUnFocusBarCG( "ir_menu01_07" );
+			.LoadFocusBarCG( "ir_menu02_07" );
+			.SetBarPosition( 81,31 );
+
+			// 範囲の設定
+			.SetMinNum( 0 );
+			.SetMaxNum( 100 );
+			.SetNowNum( global.sf.bgmVolume );
+
+			// コールバックの登録
+			.SetButtonMoveCallbackFunc( bgm_change_callback, 0 );
+
+			.SetCancelCallback( _cancel_call_back );
+
+			.SetClickSEPlayFile( SE_OPTION_MENU_SLIDER_CLICK );
+			.SetFocusSEPlayFile( SE_OPTION_MENU_FOCUS );
+		}
+		return;
+	}
+	// SEボリュームボタンを生成する
+	function create_se_volume_button( _layer_offset, _base_x,_base_y, _title_x,_title_y )
+	{
+		with (se_volume = new CIriyaSliderButton(parWin,parLayer))
+		{
+			.Init();
+
+			.SetBasePosition( _base_x,_base_y );
+			.SetLayerPriority( _layer_offset-0 );
+
+			// タイトル設定
+			.LoadUnFocusTitleCG( "ir_menu01_05" );
+			.LoadFocusTitleCG( "ir_menu02_05" );
+			.SetTitlePosition( _title_x,_title_y );
+
+			// ボタン設定
+			.LoadUnFocusButtonCG( "ir_menu01_06" );
+			.LoadFocusButtonCG( "ir_menu02_06" );
+
+			// バーの設定
+			.LoadUnFocusBarCG( "ir_menu01_07" );
+			.LoadFocusBarCG( "ir_menu02_07" );
+			.SetBarPosition( 81,31 );
+
+			// 範囲の設定
+			.SetMinNum( 0 );
+			.SetMaxNum( 100 );
+			.SetNowNum( global.sf.seVolume );
+
+			// コールバックの登録
+			.SetButtonMoveCallbackFunc( se_change_callback, 0 );
+
+			.SetCancelCallback( _cancel_call_back );
+
+			.SetClickSEPlayFile( SE_OPTION_MENU_SLIDER_CLICK );
+			.SetFocusSEPlayFile( SE_OPTION_MENU_FOCUS );
+		}
+		return;
+	}
+
+
+	// バックの輝度ダウン用フェードレイヤの生成
+	function create_bacck_fade_window()
+	{
+		back_fade = new CSpriteLayer( parWin, parLayer );
+		back_fade.layerImageFromFill( 0,0, parLayer.width,parLayer.height, RGBA_MAKE(0,0,0,255), false );
+		SetLayerPriority( back_fade, PRIORITY_MENU-LAYER_BACK_FADE_OFFST );
+		return;
+	}
+	// メニュー用背景の読み込み
+	function meke_menu_back( cg_bank, _prn_x,_prn_y, _priority )
+	{
+	var		prn_layer;
+	var		i,create_num,index_no;
+	var		pos_x,pos_y;
+
+		if ((menu_type  ==  "MENU_GAME")
+		&&	(parLayer.getCallType()  ==  CALLTYPE_NORMAL))
+				create_num = OPTION_GAMECALL_MENU_BACK_CENTER_NUM;
+		else	create_num = OPTION_TITLECALL_MENU_BACK_CENTER_NUM;
+
+
+
+
+
+		prn_layer = new Array();
+		// メニュー上部分
+		index_no = prn_layer.count;
+		prn_layer[index_no] = new CSpriteLayer( parWin,parLayer );
+		SetLayerInfoParam( prn_layer[index_no], cg_bank[0],
+				_prn_x,_prn_y, _priority );
+		_prn_y += cg_bank[0].height;
+
+
+		// メニュー中部分
+		for (i=0;  i<create_num;  i++) {
+			index_no = prn_layer.count;
+			prn_layer[index_no] = new CSpriteLayer( parWin,parLayer );
+			SetLayerInfoParam( prn_layer[index_no], cg_bank[1],
+					_prn_x,_prn_y, _priority );
+			_prn_y += cg_bank[1].height;
+		}
+
+		// メニュー下部分
+		index_no = prn_layer.count;
+		prn_layer[index_no] = new CSpriteLayer( parWin,parLayer );
+		SetLayerInfoParam( prn_layer[index_no], cg_bank[2],
+				_prn_x,_prn_y, _priority );
+		_prn_y += cg_bank[2].height;
+
+		return ( prn_layer );
+	}
+
+
+
+	// メニュー用背景の生成
+	function create_menu_bacck_window( _pos_x, _pos_y )
+	{
+		menu_back_cg_bank = new Array();
+		menu_fade_cg_bank = new Array();
+
+
+
+		// メニュー用背景CGの読み込み
+		menu_back_cg_bank[0] = EasyCreateLayerObject( parWin,parLayer, "ir_menu00_00", clNone, false, 0,0, 0 );
+		menu_back_cg_bank[1] = EasyCreateLayerObject( parWin,parLayer, "ir_menu00_01", clNone, false, 0,0, 0 );
+		menu_back_cg_bank[2] = EasyCreateLayerObject( parWin,parLayer, "ir_menu00_02", clNone, false, 0,0, 0 );
+		menu_fade_cg_bank[0] = EasyCreateLayerObject( parWin,parLayer, "ir_menu00_04", clNone, false, 0,0, 0 );
+		menu_fade_cg_bank[1] = EasyCreateLayerObject( parWin,parLayer, "ir_menu00_05", clNone, false, 0,0, 0 );
+		menu_fade_cg_bank[2] = EasyCreateLayerObject( parWin,parLayer, "ir_menu00_06", clNone, false, 0,0, 0 );
+
+
+
+		menu_back_cg = meke_menu_back( menu_back_cg_bank, _pos_x,_pos_y, PRIORITY_MENU+LAYER_MENU_BACK_OFFST );
+		menu_fade_cg = meke_menu_back( menu_fade_cg_bank, _pos_x,_pos_y, PRIORITY_MENU+LAYER_MENU_BLACK_OFFST );
+		return;
+	}
+
+	// オブジェクト生成
+	// _menu_type:メニュータイプ
+	//		"MENU_TITLE"....タイトルからの呼び出しメニューとして生成
+	//		"MENU_GAME".....ゲーム中からの呼び出しメニューとして生成
+	function Init()
+	{
+	var		offset_y;
+
+		if (parScene.id  ==  SCENE_TITLE)
+				menu_type    = "MENU_TITLE";
+		else	menu_type    = "MENU_GAME";
+
+
+		// タイマを生成
+		timer_chk_screen = new Timer( check_screen_mode_callback, "" );
+		timer_chk_screen.capacity	= 1;
+		timer_chk_screen.interval	= 1;
+		timer_chk_screen.enabled	= true;
+
+		create_bacck_fade_window();
+		create_menu_bacck_window(
+			OPTION_MENU_PRINT_POS_X + MENU_BACK_PRINT_POS_X,
+			OPTION_MENU_PRINT_POS_Y + MENU_BACK_PRINT_POS_Y,
+			);
+
+
+		create_screen_mode_button( PRIORITY_MENU+LAYER_MENU_ITEM_OFFST,
+			OPTION_MENU_PRINT_POS_X+SCRREN_MODE_PRINT_POS_X,
+			OPTION_MENU_PRINT_POS_Y+SCRREN_MODE_PRINT_POS_Y,
+			SCRREN_MODE_TITLE_OFF_X,SCRREN_MODE_TITLE_OFF_Y,
+			SCRREN_MODE_BUTTON_OFF_X,SCRREN_MODE_BUTTON_OFF_Y );
+
+
+		create_bgm_volume_button( PRIORITY_MENU+LAYER_MENU_ITEM_OFFST,
+			OPTION_MENU_PRINT_POS_X + BGM_VOLUME_PRINT_POS_X,
+			OPTION_MENU_PRINT_POS_Y + BGM_VOLUME_PRINT_POS_Y,
+			0,0 );
+		create_se_volume_button( PRIORITY_MENU+LAYER_MENU_ITEM_OFFST,
+			OPTION_MENU_PRINT_POS_X + SE_VOLUME_PRINT_POS_X,
+			OPTION_MENU_PRINT_POS_Y + SE_VOLUME_PRINT_POS_Y,
+			0,0 );
+
+
+		offset_y = PRINT_NORMAL_MENU_OFFSET_Y;
+
+		if (menu_type  ==  "MENU_GAME") {
+		} else {
+/*			create_memory_type_button( PRIORITY_MENU+LAYER_MENU_ITEM_OFFST,
+			OPTION_MENU_PRINT_POS_X+MEMORY_TYPE_POS_X,
+			OPTION_MENU_PRINT_POS_Y+ offset_y,
+			MEMORY_TYPE_TITLE_OFF_X,MEMORY_TYPE_TITLE_OFF_Y,
+			MEMORY_TYPE_BUTTON_OFF_X,MEMORY_TYPE_BUTTON_OFF_Y );
+			offset_y += MEMORY_TYPE_SKIP_POS_Y;
+*/
+
+			create_draw_option_button( PRIORITY_MENU+LAYER_MENU_ITEM_OFFST,
+			OPTION_MENU_PRINT_POS_X+DRAW_OPTION_POS_X,
+			OPTION_MENU_PRINT_POS_Y+ offset_y,
+			DRAW_OPTION_TITLE_OFF_X,DRAW_OPTION_TITLE_OFF_Y,
+			DRAW_OPTION_BUTTON_OFF_X,DRAW_OPTION_BUTTON_OFF_Y );
+			offset_y += DRAW_OPTION_SKIP_POS_Y;
+		}
+
+
+		if (menu_type  ==  "MENU_GAME") {
+			create_tutorial_button( PRIORITY_MENU+LAYER_MENU_ITEM_OFFST,
+				OPTION_MENU_PRINT_POS_X + TUTORIAL_PRINT_POS_X,
+				OPTION_MENU_PRINT_POS_Y + offset_y );
+			offset_y += TUTORIAL_PRINT_SKIP_POS_Ya;
+		} else {
+			offset_y += TUTORIAL_PRINT_SKIP_POS_Yb;
+		}
+
+
+		if ((menu_type  ==  "MENU_GAME")
+		&&	(parLayer.getCallType()  ==  CALLTYPE_NORMAL))
+			offset_y += RET_TITLE_PRINT_POS_Y_EX;
+
+
+		if ((menu_type  ==  "MENU_GAME")
+		&&	(parLayer.getCallType()  ==  CALLTYPE_ADV)) {
+		} else {
+			create_return_title_button( PRIORITY_MENU+LAYER_MENU_ITEM_OFFST,
+					OPTION_MENU_PRINT_POS_X + RET_TITLE_PRINT_POS_X,
+					OPTION_MENU_PRINT_POS_Y + offset_y );
+			offset_y += RET_TITLE_PRINT_SKIP_POS_Y;
+		}
+
+		if (menu_type  ==  "MENU_GAME") {
+			create_return_game_button( PRIORITY_MENU+LAYER_MENU_ITEM_OFFST,
+				OPTION_MENU_PRINT_POS_X + RET_GAME_PRINT_POS_X,
+				OPTION_MENU_PRINT_POS_Y + offset_y );
+		}
+		return;
+	}
+
+	// オブジェクト開放
+	function Release()
+	{
+	var		i;
+
+		release_tutorial_screen();
+		release_ret_title_yes_no_dialog();
+
+		// タイトルに戻る用フェードレイヤ
+		if (CheckValid(sys_fade)  ==  true) {
+			ReleaseFadeAnime( sys_fade );
+			EasyReleaseLayer( sys_fade );
+			sys_fade = void;
+		}
+
+		// フルスクリーン切り替え割り込み用タイマ
+		if (CheckValid(timer_chk_screen)  ==  true) {
+			timer_chk_screen.enabled	= false;
+			EasyObjectInvalidate( timer_chk_screen );
+			timer_chk_screen = void;
+		}
+
+
+		if (CheckValid(back_fade)  ==  true) {
+			ReleaseFadeAnime( back_fade );
+			EasyReleaseLayer( back_fade );
+			back_fade = void;
+		}
+
+
+
+		if (CheckValid(menu_back_cg)  ==  true) {
+			for (i=0;  i<menu_back_cg.count;  i++)
+				ReleaseFadeAnime( menu_back_cg[i] );
+			ReleaseArray( menu_back_cg );
+			menu_back_cg = void;
+		}
+		if (CheckValid(menu_back_cg_bank)  ==  true) {
+			ReleaseArray( menu_back_cg_bank );
+			menu_back_cg_bank = void;
+		}
+
+
+		if (CheckValid(menu_fade_cg)  ==  true) {
+			for (i=0;  i<menu_fade_cg.count;  i++)
+				ReleaseFadeAnime( menu_fade_cg[i] );
+			ReleaseArray( menu_fade_cg );
+			menu_fade_cg = void;
+		}
+		if (CheckValid(menu_fade_cg_bank)  ==  true) {
+			ReleaseArray( menu_fade_cg_bank );
+			menu_fade_cg_bank = void;
+		}
+
+
+		// "タイトルに戻る"ボタンの開放
+		EasyObjectInvalidate( ret_title );
+		ret_title = void;
+
+		// "ゲームに戻る"ボタンの開放
+		EasyObjectInvalidate( ret_game );
+		ret_game = void;
+
+		// "BGM音量調整"ボタンの開放
+		EasyObjectInvalidate( bgm_volume );
+		bgm_volume = void;
+
+		// "SE音量調整"ボタンの開放
+		EasyObjectInvalidate( se_volume );
+		se_volume = void;
+
+		// "スクリーンモード切替"ボタンの開放
+		EasyObjectInvalidate( screen_mode );
+		screen_mode = void;
+
+		// "描画オプション切替"ボタンの開放
+		EasyObjectInvalidate( draw_option );
+		draw_option = void;
+
+		// "メモリタイプ切替"ボタンの開放
+		EasyObjectInvalidate( memory_type );
+		memory_type = void;
+
+
+		// "チュートリアル"ボタンの開放
+		EasyObjectInvalidate( tutorial );
+		tutorial = void;
+		return;
+	}
+
+	function Print()
+	{
+		if (CheckValid(back_fade)  ==  true) {
+			ShowLayer( back_fade, true );
+			back_fade.opacity = MAX_BACK_FADE_ALHA;
+		}
+		if (CheckValid(ret_title)  ==  true)
+			ret_title.Print();
+		if (CheckValid(bgm_volume)  ==  true)
+			bgm_volume.Print();
+		if (CheckValid(se_volume)  ==  true)
+			se_volume.Print();
+		if (CheckValid(ret_game)  ==  true)
+			ret_game.Print();
+		if (CheckValid(screen_mode)  ==  true)
+			screen_mode.Print();
+		if (CheckValid(draw_option)  ==  true)
+			draw_option.Print();
+		if (CheckValid(memory_type)  ==  true)
+			memory_type.Print();
+		if (CheckValid(tutorial)  ==  true)
+			tutorial.Print();
+
+
+		if (CheckValid(menu_back_cg)  ==  true) {
+		var		i;
+			for (i=0;  i<menu_back_cg.count;  i++) {
+				if (CheckValid(menu_back_cg[i])  ==  true) {
+					menu_back_cg[i].visible = true;
+				}
+			}
+		}
+		return;
+	}
+
+	// スクリーンモード変更メッセージ後の再初期化処理
+	function process_screen_change_after()
+	{
+		reset_screen_change_flag();
+		Release();
+		Init();
+
+		Print();
+		Start();
+		UpdateCursorPos2( parLayer );
+		return;
+	}
+
+
+	var		black_in_time = (BACK_FADE_OUT_TIME*0.5) \ 1;
+	function start_menu_black_in()
+	{
+	var		i;
+
+		for (i=0;  i<menu_fade_cg.count;  i++) {
+			menu_fade_cg[i].visible = true;
+			EasyStartFadeAnime( menu_fade_cg[i], 0, 192, black_in_time );
+		}
+		return;
+	}
+	function start_menu_black_out()
+	{
+	var		i;
+
+		for (i=0;  i<menu_fade_cg.count;  i++) {
+			menu_fade_cg[i].visible = true;
+			EasyStartFadeAnime( menu_fade_cg[i], 192, 0, black_in_time );
+		}
+		return;
+	}
+
+
+	function fade_in_all_obj()
+	{
+
+		// BG
+		if (CheckValid(back_fade)  ==  true)
+			EasyStartFadeAnime( back_fade, 0, MAX_BACK_FADE_ALHA, BACK_FADE_OUT_TIME );
+		// タイトルに戻る
+		if (CheckValid(ret_title)  ==  true)
+			ret_title.FadeIn( 0, 255, BACK_FADE_OUT_TIME );
+		// ゲームに戻る
+		if (CheckValid(ret_game)  ==  true)
+			ret_game.FadeIn( 0, 255, BACK_FADE_OUT_TIME );
+		// BGMボリューム
+		if (CheckValid(bgm_volume)  ==  true)
+			bgm_volume.FadeIn( 0, 255, BACK_FADE_OUT_TIME );
+		// SEボリューム
+		if (CheckValid(se_volume)  ==  true)
+			se_volume.FadeIn( 0, 255, BACK_FADE_OUT_TIME );
+		// 画面モード
+		if (CheckValid(screen_mode)  ==  true)
+			screen_mode.FadeIn( 0, 255, BACK_FADE_OUT_TIME );
+		// 描画オプション
+		if (CheckValid(draw_option)  ==  true)
+			draw_option.FadeIn( 0, 255, BACK_FADE_OUT_TIME );
+		// メモリタイプ
+		if (CheckValid(memory_type)  ==  true)
+			memory_type.FadeIn( 0, 255, BACK_FADE_OUT_TIME );
+		// チュートリアル
+		if (CheckValid(tutorial)  ==  true)
+			tutorial.FadeIn( 0, 255, BACK_FADE_OUT_TIME );
+
+
+		if (CheckValid(menu_back_cg)  ==  true) {
+		var		i;
+			for (i=0;  i<menu_back_cg.count;  i++) {
+				if (CheckValid(menu_back_cg[i])  ==  true)
+					EasyStartFadeAnime( menu_back_cg[i], 0, 255, BACK_FADE_OUT_TIME );
+			}
+		}
+		return;
+	}
+	function fade_out_all_obj()
+	{
+		// BG
+		if (CheckValid(back_fade)  ==  true)
+			EasyStartFadeAnime( back_fade, MAX_BACK_FADE_ALHA, 0, BACK_FADE_OUT_TIME );
+		// タイトルに戻る
+		if (CheckValid(ret_title)  ==  true)
+			ret_title.FadeIn( 255, 0, BACK_FADE_OUT_TIME );
+		// ゲームに戻る
+		if (CheckValid(ret_game)  ==  true)
+			ret_game.FadeIn( 255, 0, BACK_FADE_OUT_TIME );
+		// BGMボリューム
+		if (CheckValid(bgm_volume)  ==  true)
+			bgm_volume.FadeIn( 255, 0, BACK_FADE_OUT_TIME );
+		// SEボリューム
+		if (CheckValid(se_volume)  ==  true)
+			se_volume.FadeIn( 255, 0, BACK_FADE_OUT_TIME );
+		// 画面モード
+		if (CheckValid(screen_mode)  ==  true)
+			screen_mode.FadeIn( 255, 0, BACK_FADE_OUT_TIME );
+		// 描画オプション
+		if (CheckValid(draw_option)  ==  true)
+			draw_option.FadeIn( 255, 0, BACK_FADE_OUT_TIME );
+		// メモリタイプ
+		if (CheckValid(memory_type)  ==  true)
+			memory_type.FadeIn( 255, 0, BACK_FADE_OUT_TIME );
+		// チュートリアル
+		if (CheckValid(tutorial)  ==  true)
+			tutorial.FadeIn( 255, 0, BACK_FADE_OUT_TIME );
+
+		if (CheckValid(menu_back_cg)  ==  true) {
+		var		i;
+			for (i=0;  i<menu_back_cg.count;  i++) {
+				if (CheckValid(menu_back_cg[i])  ==  true)
+					EasyStartFadeAnime( menu_back_cg[i], 255, 0, BACK_FADE_OUT_TIME );
+			}
+		}
+		return;
+	}
+	// フェードイン設定
+	function FadeIn()
+	{
+		fade_in_all_obj();
+		root_mode = ROOT_MODE_FADE_IN;		// フェードイン開始
+		return;
+	}
+
+	function Start()
+	{
+		if (CheckValid(ret_title)  ==  true)
+			ret_title.Start();
+		if (CheckValid(bgm_volume)  ==  true)
+			bgm_volume.Start();
+		if (CheckValid(se_volume)  ==  true)
+			se_volume.Start();
+		if (CheckValid(ret_game)  ==  true)
+			ret_game.Start();
+		if (CheckValid(screen_mode)  ==  true)
+			screen_mode.Start();
+		if (CheckValid(draw_option)  ==  true)
+			draw_option.Start();
+		if (CheckValid(memory_type)  ==  true)
+			memory_type.Start();
+		if (CheckValid(tutorial)  ==  true)
+			tutorial.Start();
+
+		if (CheckValid(back_fade)  ==  true) {
+			with ( back_fade )
+			{
+				.setMouseDownCallback( _back_fade_layer_click );
+				.setHitCheckAlphaLimit( "ALL" );
+			}
+		}
+		return;
+	}
+	function Stop()
+	{
+		if (CheckValid(timer_chk_screen)  ==  true)
+			timer_chk_screen.enabled = false;
+
+		if (CheckValid(ret_title)  ==  true)
+			ret_title.Stop();
+		if (CheckValid(bgm_volume)  ==  true)
+			bgm_volume.Stop();
+		if (CheckValid(se_volume)  ==  true)
+			se_volume.Stop();
+		if (CheckValid(ret_game)  ==  true)
+			ret_game.Stop();
+		if (CheckValid(screen_mode)  ==  true)
+			screen_mode.Stop();
+		if (CheckValid(draw_option)  ==  true)
+			draw_option.Stop();
+		if (CheckValid(memory_type)  ==  true)
+			memory_type.Stop();
+		if (CheckValid(tutorial)  ==  true)
+			tutorial.Stop();
+
+		if (CheckValid(back_fade)  ==  true) {
+			with ( back_fade )
+			{
+				.setMouseDownCallback( void );
+				.setHitCheckAlphaLimit( "NONE" );
+			}
+		}
+		return;
+	}
+
+	// キャンセル処理用コールバック関数
+	function _cancel_call_back()
+	{
+		Stop();
+
+		stopSound( ,, );
+		PlaySE( SE_OPTION_MENU_CANCEL );
+
+		if (menu_type  ==  "MENU_GAME")
+				click_id = HIT_ID_RET_GAME;
+		else	click_id = HIT_ID_RET_TITLE;
+		return;
+	}
+	// バックレイヤのMouseDownコールバック
+	function _back_fade_layer_click( _layer, _x,_y, _button,_shift )
+	{
+		if (_button  ==  mbRight)
+			_cancel_call_back();
+		return;
+	}
+
+
+	// ボタンヒット処理
+	function ButtonHitCallback( _call_id )
+	{
+		@if( PRN_BUTTON_MESSAGE  ==  1 )
+			dm( "OptionButtonHitID:"+_call_id );
+		@endif
+
+		click_id = _call_id;	// ID格納
+
+
+
+		if (_call_id  ==  HIT_ID_RET_TITLE) {
+			stopSound( ,, );
+			if (menu_type  ==  "MENU_GAME")
+					PlaySE( SE_OPTION_MENU_RET_TITLE_CLICK );
+			else	PlaySE( SE_OPTION_MENU_CANCEL );
+		}
+
+		// すべてのヒット判定をオフにする
+		Stop();
+		return;
+	}
+
+	// ボタンのヒットしたIDを取得する
+	function GetClickID()
+	{
+		return ( click_id );
+	}
+
+	function reset_click_id()
+	{
+		click_id = HIT_ID_RET_NONE;
+		return;
+	}
+	function ResetButtonCG()
+	{
+		Print();
+		return;
+	}
+
+
+	// ローカルオブジェクトのフェードアニメ
+	function fade_anime()
+	{
+	var		ret;
+
+		// フェードアウトレイヤがある場合
+		if (CheckValid(sys_fade)  ==  true) {
+			if (ProcessFadeAnime(sys_fade)  ==  "UPDATING")
+				return ( false );
+			return ( true );
+		}
+
+
+		ret = true;
+		if (CheckValid(back_fade)  ==  true) {
+			if (ProcessFadeAnime(back_fade)  ==  "UPDATING")
+				ret = false;
+		}
+		if (CheckValid(ret_title)  ==  true) {
+			if (ret_title.UpdateFade()  ==  false)
+				ret = false;
+		}
+		if (CheckValid(ret_game)  ==  true) {
+			if (ret_game.UpdateFade()  ==  false)
+				ret = false;
+		}
+		if (CheckValid(bgm_volume)  ==  true) {
+			if (bgm_volume.UpdateFade()  ==  false)
+				ret = false;
+		}
+		if (CheckValid(se_volume)  ==  true) {
+			if (se_volume.UpdateFade()  ==  false)
+				ret = false;
+		}
+		if (CheckValid(screen_mode)  ==  true) {
+			if (screen_mode.UpdateFade()  ==  false)
+				ret = false;
+		}
+		if (CheckValid(draw_option)  ==  true) {
+			if (draw_option.UpdateFade()  ==  false)
+				ret = false;
+		}
+		if (CheckValid(memory_type)  ==  true) {
+			if (memory_type.UpdateFade()  ==  false)
+				ret = false;
+		}
+		if (CheckValid(tutorial)  ==  true) {
+			if (tutorial.UpdateFade()  ==  false)
+				ret = false;
+		}
+		if (CheckValid(menu_back_cg)  ==  true) {
+		var		i;
+
+			for (i=0;  i<menu_back_cg.count;  i++) {
+				if (CheckValid(menu_back_cg[i])  ==  true) {
+					if (ProcessFadeAnime(menu_back_cg[i])  ==  "UPDATING")
+						ret = false;
+				}
+			}
+		}
+		return ( ret );
+	}
+	function fade_black_anime()
+	{
+	var		ret;
+
+		ret = true;
+		if (CheckValid(menu_fade_cg)  ==  true) {
+		var		i;
+
+			for (i=0;  i<menu_fade_cg.count;  i++) {
+				if (CheckValid(menu_fade_cg[i])  ==  true) {
+					if (ProcessFadeAnime(menu_fade_cg[i])  ==  "UPDATING")
+						ret = false;
+				}
+			}
+		}
+		return ( ret );
+	}
+
+
+
+	// タイトルに戻るためのフェード処理などを開始させる
+	function start_return_title()
+	{
+		EasyReleaseLayer( sys_fade );
+		sys_fade = EasyCreateFadeLayer( parWin, parLayer, "BLACK","FADE_IN", RET_TITLE_SE_FADE_TIME );
+		StartFadeAnime( sys_fade );
+		SetLayerPriority( sys_fade, PRIORITY_SYSTEM_FADE );
+
+		// ゲーム中の場合はゲームの音をすべてフェードアウトさせる
+		stopSound( , RET_TITLE_SE_FADE_TIME*TIMER_INTERVAL, true );
+		stopBGM( RET_TITLE_SE_FADE_TIME*TIMER_INTERVAL, );
+		return;
+	}
+
+
+	function release_tutorial_screen()
+	{
+		if (CheckValid(tutorial_screen)  ==  true) {
+			tutorial_screen.Release();
+			EasyObjectInvalidate( tutorial_screen );
+			tutorial_screen = void;
+		}
+		return;
+	}
+	function tutorial_screen_in()
+	{
+		release_tutorial_screen();
+		with (tutorial_screen = new CIriyaGameHelp(parWin,parLayer) )
+		{
+			.Init();
+			.SetPriorityOffset( PRIORITY_MENU+LEYER_TUTORIAL_OFFSET );
+			.SetBasePosition( 0,0 );
+			.InitGameHelp( parScene.id );
+			.SetUp();
+			.Print();
+		}
+		return;
+	}
+
+
+	function restart_mode_select()
+	{
+		reset_click_id();
+		Start();
+		root_mode = ROOT_MODE_SELECT;		// メニューセレクト中
+
+		UpdateCursorPos2( parLayer );
+		return;
+	}
+
+
+	var	PROCESS_RET_NROMAL		=0;		// 通常処理中
+	var	PROCESS_RET_GAME		=1;		// ゲームに戻る
+	var	PROCESS_RET_TITLE		=2;		// タイトルに戻る
+	function ProcessUpdate()
+	{
+
+		switch ( root_mode )
+		{
+		case ROOT_MODE_NONE:
+			// 何もなし
+			break;
+		case ROOT_MODE_FADE_IN:
+			// フェードイン
+			if (fade_anime()  ==  true) {
+				Start();
+				root_mode = ROOT_MODE_SELECT;		// メニューセレクト中
+			}
+			break;
+		case ROOT_MODE_SELECT:
+			// メニューセレクト中
+			// 画面モード変更が行われたかを取得する
+			if (get_screen_change_flag()  ==  true) {
+				process_screen_change_after();
+				break;
+			}
+
+			// 選択メニュー分岐
+			switch ( GetClickID() )
+			{
+			case HIT_ID_RET_NONE:
+				return ( PROCESS_RET_NROMAL );
+
+			case HIT_ID_TUTORIAL:
+				root_mode = ROOT_MODE_TUTORIAL;
+				ResetButtonCG();
+				tutorial_screen_in();
+				return ( PROCESS_RET_NROMAL );
+
+			case HIT_ID_RET_TITLE:
+				ResetButtonCG();
+				if (menu_type  ==  "MENU_GAME") {
+					root_mode = ROOT_MODE_YESNO_RET_GAME;
+					start_menu_black_in();
+					start_ret_title_yes_no_dialog();
+					return ( PROCESS_RET_NROMAL );
+				} else {
+					fade_out_all_obj();
+				}
+				break;
+			case HIT_ID_RET_GAME:
+				fade_out_all_obj();
+				break;
+			}
+			root_mode = ROOT_MODE_FADE_OUT;		// オプションから抜けるフェードアウト移行
+			break;
+
+		case ROOT_MODE_TUTORIAL:
+			// チュートリアル中
+			with ( tutorial_screen )
+			{
+				.Update();
+				if (.mode  !=  .MODE_END)
+					break;;
+				release_tutorial_screen();
+				restart_mode_select();
+			}
+			break;
+
+
+		case ROOT_MODE_FADE_OUT:
+			// 各種戻るためのフェード
+			if (fade_anime()  ==  true) {
+				if (GetClickID()  ==  HIT_ID_RET_GAME)
+						return ( PROCESS_RET_GAME );
+				else	return ( PROCESS_RET_TITLE );
+			}
+			break;
+
+
+		case ROOT_MODE_YESNO_RET_GAME:
+			// タイトルに戻るか確認
+			if (CheckValid(yn_dialog)  ==  false)
+				break;
+
+			fade_black_anime();
+			with ( yn_dialog )
+			{
+				.Update();
+				switch ( .mode )
+				{
+				case .MODE_FADE_IN_END:
+					.StartSelect();
+					break;
+				case .MODE_SELECT:
+					switch ( .GetSelectID() )
+					{
+					case .SEL_ID_NONE:
+						break;
+					case .SEL_ID_YES:
+						root_mode = ROOT_MODE_FADE_OUT;		// オプションから抜けるフェードアウト移行
+						.Stop();
+						.ResetButtonCG();
+						start_return_title();
+						break;
+					case .SEL_ID_NO:
+					case .SEL_ID_RB_CANCEL:
+						.Stop();
+						.ResetButtonCG();
+						.StartFadeOut();
+						start_menu_black_out();
+						break;
+					}
+					break;
+				case .MODE_FADE_OUT_END:
+					restart_mode_select();
+					break;
+				}
+			}
+
+/*
+			with ( yn_dialog )
+			{
+				.UpdateNormal();
+				switch ( .mode )
+				{
+				case .MODE_SELECT_YES:
+					root_mode = ROOT_MODE_FADE_OUT;		// オプションから抜けるフェードアウト移行
+					start_return_title();
+					break;
+				case .MODE_SELECT_END:
+					restart_mode_select();
+					break;
+				}
+			}
+*/			break;
+		}
+		return ( PROCESS_RET_NROMAL );
+	}
+
+
+
+
+
+
+	/*
+		タイトルに戻る用確認ダイアログ関係
+	*/
+
+
+	function release_ret_title_yes_no_dialog()
+	{
+		if (CheckValid(yn_dialog)  ==  true) {
+			yn_dialog.Release();
+			EasyObjectInvalidate( yn_dialog );
+			yn_dialog = void;
+		}
+		return;
+	}
+
+	function start_ret_title_yes_no_dialog()
+	{
+		release_ret_title_yes_no_dialog();
+		with ( yn_dialog = new CIriyaYesNoDialogEx(parWin,parLayer) )
+		{
+			.CreateDefaultSet( PRIORITY_MENU + LAYER_YESNO_OFFST, "ir_menu01_08" );
+			.StartFadeIn();
+		}
+		return;
+	}
+}
+
+
+
+
+
+
+
+
+// オプションメニューを開放
+function ReleaseOptionMenu( p_obj )
+{
+	if (CheckValid(p_obj)  ==  true) {
+		p_obj.Release();
+		EasyObjectInvalidate( p_obj );
+	}
+	return;
+}
+// オプションメニューの作成
+function ResetOptionMenu( p_obj, par_win, par_layer, now_scene )
+{
+	// オプションメニュー作成
+	ReleaseOptionMenu( p_obj );
+	with ( p_obj = new CIriyaOptionMenu(par_win, par_layer, now_scene) )
+	{
+		.Init();
+		.Print();
+		.FadeIn();
+	}
+
+	// マウスの位置のアップデート
+	UpdateCursorPos2( par_layer );
+	return ( p_obj );
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+class CIriyaTutorialMenu
+{
+var		parWin,parLayer;
+
+	function CIriyaTutorialMenu( _pr_win, _pr_layer )
+	{
+		parWin   = _pr_win;
+		parLayer = _pr_layer;
+
+		init_buffer();
+	}
+	function finalize()
+	{
+		Release();
+	}
+
+	var		MAX_BACK_FADE_ALHA=214;		// 背景輝度ダウンアルファ値
+	var		BACK_FADE_OUT_TIME=(int)(6);
+
+	var		LAYER_TUTORIAL		=0;
+	var		LAYER_MENU_CG		=-1;
+	var		LAYER_BACK			=-2;
+
+
+	var		LAYER_LOCAL_BUTTON	=0;
+	var		LAYER_LOCAL_BACK	=0;
+
+
+	var		tutorial;
+
+	var		prn_menu;
+	var		menu_cg;
+	var		menu_back;
+
+	var		prn_back;
+
+
+	var		prn_layer_offset;
+	var		prn_px,prn_py;
+
+	var		select_id;
+
+
+	var		convert_id;
+
+	var		mode;
+	var		MODE_NONE		=-1;
+	var		MODE_FADE_IN	= 0;
+	var		MODE_SELECT		= 10;
+	var		MODE_FADE_OUT	= 20;
+	var		MODE_TUTORIAL	= 30;
+	var		MODE_END		= 50;
+
+	function init_buffer()
+	{
+		mode = MODE_NONE;
+
+
+		prn_layer_offset = 0;
+		prn_px = 0;
+		prn_py = 0;
+
+		Reset();
+
+		prn_menu = void;
+		menu_cg  = void;
+		menu_back  = void;
+
+		prn_back = void;
+		return;
+	}
+	function Release()
+	{
+	var		i;
+
+		Stop();
+
+		if (CheckValid(menu_cg)  ==  true) {
+			for (i=0;  i<menu_cg.count;  i++) {
+				menu_cg[i].Release();
+				EasyObjectInvalidate( menu_cg[i] );
+				menu_cg[i] = void;
+			}
+			menu_cg = void;
+		}
+		if (CheckValid(menu_back)  ==  true) {
+			for (i=0;  i<menu_back.count;  i++) {
+				EasyReleaseLayer( menu_back[i] );
+				menu_back[i] = void;
+			}
+			menu_back = void;
+		}
+
+
+		if (CheckValid(prn_back)  ==  true) {
+			ReleaseFadeAnime( prn_back );
+			EasyReleaseLayer( prn_back );
+			prn_back = void;
+		}
+
+		if (CheckValid(prn_menu)  ==  true) {
+			ReleaseFadeAnime( prn_menu );
+			EasyReleaseLayer( prn_menu );
+			prn_menu = void;
+		}
+
+
+		if (CheckValid(convert_id)  ==  true) {
+			EasyObjectInvalidate( convert_id );
+			convert_id = void;
+		}
+
+
+		release_tutorial();
+		return;
+	}
+
+
+
+	function Init()
+	{
+	var		i;
+	var		_scene_id;
+
+
+		Release();
+
+		convert_id = new CIriyaGameHelpID();
+
+		with (prn_menu = new CSpriteLayer(parWin,parLayer))
+		{
+			.setPriority( prn_layer_offset+LAYER_MENU_CG );
+			.setPos( prn_px, prn_py );
+			.setSize( 0, 0 );
+		}
+
+		with (prn_back = new CSpriteLayer(parWin, parLayer))
+		{
+			.setPriority( prn_layer_offset+LAYER_BACK );
+			.layerImageFromFill( 0,0, SCREEN_SIZE_W, SCREEN_SIZE_H, RGBA_MAKE(0,0,0,255), false );
+		}
+
+
+		menu_back = new Array();
+		menu_cg = new Array();
+
+
+		add_menu_back( "TOP" );
+
+		with ( convert_id )
+		{
+			for (i=0;  ;  i++) {
+				_scene_id = .ConvertStageNoToSceneID( i );
+				if (_scene_id  ===  void)
+					break;
+
+				if (parLayer.getCallType()  ==  CALLTYPE_ADV) {
+					switch ( _scene_id )
+					{
+					case SCENE_STAGE2:
+						continue;
+					}
+				}
+
+				if (_scene_id  !=  .TUTORIAL_BASIC) {
+				if (parLayer.CheckLook(_scene_id)  ==  0) {
+					continue;
+				}}
+
+
+				add_menu( .ConvertSceneIDToStageNo(_scene_id), void,SE_TUTORIAL_MENU_FOCUS );
+
+			}
+		}
+
+		add_menu( convert_id.GetMaxHelpStageNo(), void,SE_TUTORIAL_MENU_FOCUS  );
+		add_menu_back( "BOTTOM" );
+		return;
+	}
+
+
+	function add_menu( _stage_no, _click_play_name, _focus_play_name )
+	{
+	var		menu_page;
+
+		menu_page = menu_cg.count;
+		with (menu_cg[menu_page] = new CIriyaNormalButton(parWin,prn_menu))
+		{
+			.Init();
+			.SetLayerPriority( LAYER_LOCAL_BUTTON );
+			.LoadUnFocusCG( "ir_tutorial01_%02d".sprintf(_stage_no) );
+			.LoadFocusCG( "ir_tutorial02_%02d".sprintf(_stage_no) );
+			.SetLayerPosition( 32, prn_menu.height );
+			.SetClickCallbackFunc( push_btn_callback, _stage_no );
+			.SetCancelCallback( cancel_call_back );
+			.SetFocusSEPlayFile( _focus_play_name );
+			.SetClickSEPlayFile( _click_play_name );
+			.Print();
+		}
+
+		add_menu_back( "NORMAL" );
+		return;
+	}
+	function add_menu_back( add_type )
+	{
+	var		file_no;
+	var		now_page;
+		switch ( add_type )
+		{
+		case "TOP":
+			file_no = 0;
+			break;
+		case "NORMAL":
+			file_no = 1;
+			break;
+		case "BOTTOM":
+			file_no = 2;
+			break;
+		}
+
+		now_page = menu_back.count;
+		menu_back[now_page] = EasyCreateLayerObject( parWin,prn_menu, "ir_tutorial00_%02d".sprintf(file_no),
+							clNone, true, 0,prn_menu.height, LAYER_LOCAL_BACK );
+
+		with ( prn_menu )
+		{
+			.setSize( menu_back[now_page].imageWidth, .height+menu_back[now_page].imageHeight );
+		}
+		return;
+	}
+
+
+
+	// 表示レイヤの表示優先度オフセット位置を指定する
+	function SetPriorityOffset( _offset )
+	{
+		prn_layer_offset = _offset;
+		if (CheckValid(prn_menu)  ==  true) {
+			prn_menu.setPriority( prn_layer_offset+LAYER_MENU_CG );
+			prn_back.setPriority( prn_layer_offset+LAYER_BACK );
+		}
+		return;
+	}
+
+	function SetBasePosition( _px, _py )
+	{
+		prn_px = _px;
+		prn_py = _py;
+		if (CheckValid(prn_menu)  ==  true)
+			prn_menu.setPos( prn_px, prn_py );
+		return;
+	}
+	function SetAutoBasePosition()
+	{
+	var	prn_x;
+		prn_x = (SCREEN_SIZE_W-prn_menu.width) / 2;
+		SetBasePosition( prn_x, OPTION_MENU_PRINT_POS_Y );
+		return;
+	}
+
+	function Reset()
+	{
+		select_id = -1;
+		return;
+	}
+	function Print()
+	{
+		if (CheckValid(prn_menu)  ==  true)
+			prn_menu.visible = true;
+		if (CheckValid(prn_back)  ==  true)
+			prn_back.visible = true;
+		return;
+	}
+	function FadeIn()
+	{
+		mode = MODE_FADE_IN;
+
+		if (CheckValid(prn_menu)  ==  true)
+			EasyStartFadeAnime( prn_menu, 0, 255, BACK_FADE_OUT_TIME );
+		if (CheckValid(prn_back)  ==  true)
+			EasyStartFadeAnime( prn_back, 0, MAX_BACK_FADE_ALHA, BACK_FADE_OUT_TIME );
+		return;
+	}
+	function FadeOut()
+	{
+		if (CheckValid(prn_menu)  ==  true)
+			EasyStartFadeAnime( prn_menu, 255, 0, BACK_FADE_OUT_TIME );
+		if (CheckValid(prn_back)  ==  true)
+			EasyStartFadeAnime( prn_back, MAX_BACK_FADE_ALHA, 0, BACK_FADE_OUT_TIME );
+		return;
+	}
+	function fade_anime()
+	{
+	var		ret;
+		ret = false;
+
+		if (ProcessFadeAnime(prn_menu)  ==  "UPDATING")
+			ret = true;
+		if (ProcessFadeAnime(prn_back)  ==  "UPDATING")
+			ret = true;
+		return ( ret );
+	}
+
+
+	function reset_select_menu()
+	{
+	var		i;
+		if (CheckValid(menu_cg)  ==  false)
+			return;
+		for (i=0;  i<menu_cg.count;  i++)
+			menu_cg[i].Print();
+		return;
+	}
+
+
+
+	function change_tutorial()
+	{
+		Stop();
+
+		create_tutorial();
+
+		mode = MODE_TUTORIAL;
+		reset_select_menu();
+		return;
+	}
+	function create_tutorial()
+	{
+		with (tutorial = new CIriyaGameHelp(parWin, parLayer) )
+		{
+			.Init();
+			.SetPriorityOffset(prn_layer_offset+LAYER_TUTORIAL);
+			.SetBasePosition( 0,0 );
+			.InitGameHelp( convert_id.ConvertStageNoToSceneID( GetSelectID() ) );
+			.SetUp();
+			.Print();
+		}
+		return;
+	}
+	function release_tutorial()
+	{
+		EasyObjectInvalidate( tutorial );
+		tutorial = void;
+		return;
+	}
+	function process_tutorial_menu()
+	{
+		if (CheckValid(tutorial)  ==  false)
+			return ( false );
+
+
+		with ( tutorial )
+		{
+			.Update();
+			if (.mode  !=  .MODE_END)
+				return ( true );
+		}
+
+		release_tutorial();	// オプションメニューを開放
+		Start();
+		return ( false );
+	}
+
+
+	function Update()
+	{
+		switch ( mode )
+		{
+		case MODE_NONE:
+			break;
+
+		case MODE_SELECT:
+			break;
+
+		case MODE_TUTORIAL:
+			if (process_tutorial_menu()  ==  true)
+				break;
+			break;
+
+		case MODE_FADE_IN:
+			if (fade_anime()  ==  true)
+				break;
+			mode = MODE_SELECT;
+			Start();
+			break;
+		case MODE_FADE_OUT:
+			if (fade_anime()  ==  true)
+				break;
+			mode = MODE_END;
+			break;
+
+		case MODE_END:
+			break;
+		}
+		return;
+	}
+
+	function Start()
+	{
+	var		i;
+		Reset();
+
+		if (CheckValid(menu_cg)  ==  true) {
+			for (i=0;  i<menu_cg.count;  i++)
+				menu_cg[i].Start();
+		}
+		if (CheckValid(prn_back)  ==  true) {
+			with ( prn_back )
+			{
+				.setMouseDownCallback( back_button_hit );
+				.setHitCheckAlphaLimit( "ALL" );
+			}
+		}
+		UpdateCursorPos2( parLayer );
+		return;
+	}
+	function Stop()
+	{
+	var		i;
+		if (CheckValid(menu_cg)  ==  true) {
+			for (i=0;  i<menu_cg.count;  i++) {
+				menu_cg[i].Stop();
+				menu_cg[i].Print();
+			}
+		}
+		if (CheckValid(prn_back)  ==  true) {
+			with ( prn_back )
+			{
+				.setMouseDownCallback( void );
+				.setHitCheckAlphaLimit( "NONE" );
+			}
+		}
+		return;
+	}
+
+	function GetSelectID()
+	{
+		return ( select_id );
+	}
+
+
+	// ボタン上でのプッシュ割り込み
+	function push_btn_callback( _id )
+	{
+		select_id = _id;
+		if (select_id  ==  convert_id.GetMaxHelpStageNo()) {
+			cancel_call_back();
+			return;
+		}
+
+		stopSound( ,, );
+		PlaySE( SE_TUTORIAL_MENU_SELECT );
+
+
+		change_tutorial();
+		return;
+	}
+	function back_button_hit( _layer, _x,_y, _button,_shift )
+	{
+		if (_button  ==  mbRight)
+			cancel_call_back();
+		return;
+	}
+	// ボタン上でのキャンセル
+	function cancel_call_back()
+	{
+		select_id  = -1;
+		Stop();
+
+		stopSound( ,, );
+		PlaySE( SE_TUTORIAL_MENU_CANCEL );
+
+
+		mode = MODE_FADE_OUT;
+		reset_select_menu();
+		FadeOut();
+		return;
+	}
+
+}
+
+
+
+
+
+
+
+

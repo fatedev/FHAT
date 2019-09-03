@@ -1,0 +1,3214 @@
+/*-----------------------------------------------------------------------------/
+/	Copyright (C) 2004 TYPE-MOON All Rights Reserved.
+/		初期設定、基本タグの追加など、初期化処理を行う
+/-----------------------------------------------------------------------------*/
+
+//	Fate/hollow ataraxia 固有の処理
+@set(FATE_HOLLOW_ATARAXIA=1)
+
+/*-----------------------------------------------------------------------------/
+/	初期化設定
+/-----------------------------------------------------------------------------*/
+var defaultFGTransTime	= 300;
+var defaultBGTransTime	= 800;
+var defaultVaguePoint	= 128;
+
+//	ゲーム全体変数の初期化
+with(sf)
+{
+	//	ユーザー音量
+	.globalVolume	= 100 if .globalVolume === void;//	大域音量(廃止予定)
+	.seVolume		= 100 if .seVolume === void;	//	SE音量
+	.bgmVolume		= 100 if .bgmVolume === void;	//	BGM音量
+	kag.setUserVolume();
+
+	//	スキップ周り
+	.effectSkip			= false if .effectSkip===void;		//	エフェクトを瞬間表示
+	.Ch2ndSkip			= true if .Ch2ndSkip===void;		//	既読部分を飛ばす
+	.skipWithoutCheck	= false if .skipWithoutCheck===void;//	確認無しに既読部分を飛ばす
+
+	//	メッセージを早送りにするキー(Enter,Space/Ctrl/Shift)
+	.skipKey	= 2 if .skipKey===void;	//	デフォルト:Ctrl
+
+	//	右クリック2回でメニューを表示するか
+	.doubleCushionMenuOpen	= false if .doubleCushionMenuOpen===void;
+
+	//	セーブ関連
+	.lastSavePage	= 0 if .lastSavePage===void;	//	最後に使用したセーブデータページ
+	.convertSaveNoToFileNo	= [] if .convertSaveNoToFileNo===void;	//	ファイル番号とセーブデータ番号の対応
+
+	//	立ち絵の切替でテキストのON/OFFを行うか
+	.notextonoff	= false if .notextonoff===void;	//	基本はON/OFFする
+
+	//	特殊効果を表示するか？
+	.speffect	= true if .speffect===void;	//	基本は表示する
+
+	//	ゲーム進行度(全てtfへ)
+//	.displayedPictures	= %[] if .displayedPictures===void;	//	既に表示した画像の名前
+//	.playedMovie		= %[] if .playedMovie===void;		//	再生されたムービー
+//	.playedMusic		= %[] if .playedMusic===void;		//	再生されたBGM
+//	.playedSE			= %[] if .playedSE===void;			//	再生された効果音
+
+	//	テキストウィンドウ
+//	.frameGraphic	= kag.current.frameGraphic;
+
+	//	テキストウィンドウ濃度
+	.messageFrameOpacity	= 255 if .messageFrameOpacity===void;	//	100%(元々濃いものを用意していたら、下げておく)
+
+	//	履歴フォント
+	.historyFont	= "ＭＳ Ｐ明朝" if .historyFont===void;
+	.historyFontBold= true if .historyFontBold===void;
+	with(kag.historyLayer.font)
+	{
+		.face	= sf.historyFont;
+		.bold	= sf.historyFontBold;
+	}
+}
+
+with(kag)
+{
+	.chNonStopToPageBreak		= false;	//	ページ末まで一気に表示は無効
+	.ch2ndNonStopToPageBreak	= false;
+}
+
+//	セーブ単位のデータ
+(Dictionary.clear incontextof f)();	//	完全に入れ替え
+with(f)
+{
+//	.message_fadetime	= 2000;	//	メッセージレイヤーの表示/消去時間
+//	.bgimage	= "";	//	背景レイヤーに読み込まれている画像
+//	.fgimages	= [];	//	各前景レイヤーに読み込まれている画像
+	.lastLayerNo= -1;	//	最後に読み込んだ前景レイヤー
+	.message_off= false;	//	メッセージレイヤーを表示しない
+	.staymessage= false;	//	常にメッセージレイヤーを表示する
+	.textmode			= "basic";	//	テキストモード
+	.notextonoff		= false;	//	タイガー道場内では、立ち絵が変わってもテキストレイヤーを非表示にしない
+	.superposeLayerNo	= void;		//	スーパーポーズで使用しているレイヤーの番号(voidなら未使用)
+//	.image2Layer	= %[];	//	指定の画像が読み込まれているレイヤー
+	.scripttitle	= "title";	//	仮のタイトル
+
+	.frameGraphic	= kag.current.frameGraphic;
+}
+
+//	BGMの指定
+var BGMList	= %[
+	"normaltitle"	=> "bgm01.ogg",
+//	"gamemenu"		=> "ステータス.ogg",
+	"extratitle"	=> "bgm28.ogg",
+];
+
+//	SEの指定
+var clickSE	= "コンフィグ-決定.wav";
+var okSE	= "タイトル-決定.wav";
+var cancelSE= "コンフィグ-決定.wav";
+
+//	テキストモード
+var fontSettings	= %[
+	"basic"	=> %[size:27,rubysize:12, rubyoffset:-2,color:0xFFFFFF,edge:true],
+	"window"=> %[size:27,rubysize:12,rubyoffset:-2,face:"ＭＳ ゴシック",color:0xFFFFFF,edge:true],
+];
+var textSettings	= %[
+	"basic"	=> [
+		1,		//	メッセージレイヤー枚数
+		void,
+		void,
+		%[left:0,top:0,marginl:50,margint:55,marginr:48,marginb:65,frame:"global.f.frameGraphic"],	//	setPositionでの設定
+		fontSettings.basic,			//	setDefaultFontでの設定
+		%[linespacing:13],																	//	setDefaultStyleでの設定
+		void,	//	専用のpgルーチン(voidなら通常のページ切り替えルーチンを使用)
+	],
+	"interlude"	=> [
+		1,
+		void,
+		void,
+		%[left:0,top:0,marginl:50,margint:55,marginr:72,marginb:65,frame:"global.f.frameGraphic"],
+		%[size:24,rubysize:10,rubyoffset:-1,color:0xFFFFFF,edge:true],
+		%[linespacing:10],
+	],
+	"night"	=> [
+		1,
+		void,
+		void,
+		%[left:0,top:0,marginl:65,marginr:75,margint:55,marginb:77,frame:"global.f.frameGraphic"],
+		%[size:25,rubysize:11,rubyoffset:-1,color:0xFFFFFF,edge:true],
+		%[linespacing:11]
+	],
+	"window"	=> [
+		1,
+		"windowmode_pg",	//	[pg] = [p][er][draw speaker]
+		"windowmode_lr",	//	[lr] = [r]
+		%[left:0,top:405,marginl:49,margint:56,marginr:49,marginb:19,frame:"wm_main"],
+		fontSettings.basic,
+		%[linespacing:13],
+	],
+	"tiger"	=> [
+		1,
+		void,
+		void,
+		%[left:10,top:383,marginl:39,margint:69,marginr:24,marginb:16],
+		fontSettings.window,
+		%[linespacing:13],
+	],
+	"jinja"	=> [
+		1,
+		void,
+		void,
+		%[left:10,top:383,marginl:48,margint:69,marginr:33,marginb:16],
+		fontSettings.window,
+		%[linespacing:13],
+	],
+	"menu"	=> [
+		1,
+		void,
+		void,
+		%[left:0,top:0,marginl:0,margint:0,marginr:0,marginb:0,opacity:0,frame:"",width:800,height:600],
+		fontSettings.basic,
+		%[linespacing:13],
+	],
+	"minigame"	=> [	//	ミニゲーム用のメモリ消費を抑える設定
+		1,
+		void,
+		void,
+		%[left:0,top:0,width:32,height:32,opacity:0],
+		fontSettings.basic,
+		%[linespacing:13],
+	],
+];
+
+//	特殊文字タグ
+var	exCharTags	= [
+//	[ name,		code ]
+	[ "szlig",	0x00DF ],
+	[ "XAuml",	0x00C4 ],
+	[ "XOuml",	0x00D6 ],
+	[ "XUuml",	0x00DC ],
+	[ "auml",	0x00E4 ],
+	[ "ouml",	0x00F6 ],
+	[ "uuml",	0x00FC ],
+//	[ name,		storage,		alt ]
+	[ "aero",	"grアエロー",	"Αερο" ],
+	[ "atlas",	"grアトラス",	"Ατλασ" ],
+	[ "keraino","grケライノー",	"Κεραινο" ],
+	[ "troya",	"grトロイヤ",	"Τροψα" ],
+	[ "margos",	"grマルゴス",	"Μαρδοξ" ],
+	[ "kantss",	"grカナトス",	"Καλτξ" ],
+	[ "logss kyklopss",	"grロゴス　キクロプス",	"Ρηδε　Κυκιρξ" ],
+	[ "heart",	"heart",		"" ],
+	[ "argz",	"grアルギス",	"ARGZ" ],
+	[ "ansz",	"grアンサズ",	"ANSZ" ],
+	[ "ingz",	"grイングス",	"INGZ" ],
+	[ "nusz",	"grナウシズ",	"NUSZ" ]
+];
+
+//	T付きタグ
+var tagsWithT	= [
+	"wait",
+	"quake",
+	"prick",
+	"i2i",
+	"i2i_fast",
+	"i2o",
+	"i2o_fast",
+	"a2a",
+	"a2a_fast",
+	"pasttime",
+	"wave",
+	"ldall",
+	"cinesco",
+	"cinesco_off"
+];
+
+//	立ち絵の位置からレイヤー番号を導く
+var pos2LayerNo	= %[l:"0",r:"1",lc:"2",rc:"3",c:"4",all:"all"];
+var correctPosName	= %[l:"l",r:"r",lc:"lc",rc:"rc",c:"c",
+						left:"l",right:"r",leftcenter:"lc",rightcenter:"rc",center:"c",
+						left_center:"lc", right_center:"rc",
+						all:"all"];
+
+//	テキストレイヤーをトランジションでなくopacityでON/OFFさせる
+Scripts.execStorage("TextOnOffPlugin.tjs");
+
+//	ごみ処理屋
+Scripts.execStorage("DisposerPlugin.tjs");
+
+//	カーソル位置更新
+//Scripts.execStorage("CursorUpdatePlugin.tjs");
+
+//	短縮
+var kt = kag.tagHandlers;
+
+//-----------------------------------------------------------------------------
+//	花札
+Scripts.execStorage("HanafudaPlugin.tjs");
+Scripts.execStorage("HanafudaTitlePlugin.tjs");
+Scripts.execStorage("FusumaPlugin.tjs");
+Scripts.execStorage("HanafudaSelectPlugin.tjs");
+Scripts.execStorage("HanafudaVSPlugin.tjs");
+Scripts.execStorage("HanafudaContinuePlugin.tjs");
+//	hanafuda.ks は loadPlugins.ks で読み込み。
+
+//	イリヤ城
+Scripts.execStorage("iriya.tjs");
+
+//-----------------------------------------------------------------------------
+//	おみくじ
+var	omikujiPrice	= 100;
+var OmikujiSpecialDataFile	= "おみくじ特別.txt";	//	日付、時間指定のファイル名
+
+//	デバッグメッセージ
+kt.dm	= function(mp)
+{
+	dm(mp.msg ? mp.msg : mp.text);
+	return 0;
+} incontextof kag;
+
+/*-----------------------------------------------------------------------------/
+/	ch(文字表示)の置き換え
+/-----------------------------------------------------------------------------*/
+kt.chorg	= kt.ch;
+kt.ch	= function(mp)
+{
+	//	テキストレイヤーが表示されていなければ、
+	if(!current.visible || current.opacity < 255)
+	{
+		//	文字表示をpendingしておいて
+		mp.tagname			= "chorg";
+		conductor.pendings.insert(0, mp);
+
+		//	ウィンドウモードの場合
+		drawSpeaker() if(f.textmode == "window");	//	発言者を描画
+
+		//	文字表示前に、必ずテキストレイヤーを表示する
+		return tagHandlers.texton(%[]);	//	.f.message_off == trueなら表示されない
+	}
+	else
+	{
+		//	ウィンドウモードで発言者名がリセットされてしまっていたら、
+		drawSpeaker() if(f.textmode == "window" && f.resetSpeaker);	//	発言者を描画
+
+		return tagHandlers.chorg(mp);
+	}
+} incontextof kag;
+
+/*-----------------------------------------------------------------------------/
+/	ボタン表示
+/-----------------------------------------------------------------------------*/
+kt.original_fadebutton	= kt.fadebutton;
+kt.fadebutton	= function(mp)
+{
+	if(!current.visible)
+	{
+		conductor.pendings.insert(0, mp);
+		return tagHandlers.texton(%[]);
+	}
+	else
+		return tagHandlers.original_fadebutton(mp);
+} incontextof kag;
+
+kt.original_slidebutton	= kt.slidebutton;
+kt.slidebutton	= function(mp)
+{
+	if(!current.visible)
+	{
+		conductor.pendings.insert(0, mp);
+		return tagHandlers.texton(%[]);
+	}
+	else
+		return tagHandlers.original_slidebutton(mp);
+} incontextof kag;
+
+/*-----------------------------------------------------------------------------/
+/	move(レイヤー移動)の置き換え
+/	in	: both	両面共にmoveさせる(default: false)
+/-----------------------------------------------------------------------------*/
+kt.original_move = kt.move;
+kt.move	= function(mp)
+{
+	with(mp)
+	{
+//		dm("page = "+.page+" / layer = "+.layer+" / storage = "+.storage+" / base = "+.base);
+		.page	= "fore" if .page === void;	//	指定がないときは"fore"
+
+		//	レイヤー番号がなく画像名が指定されているときは、その画像を対象とする
+		if(.layer === void)
+		{
+			if(.storage != void)
+			{
+				.layer	= getLayerNoByStorage(mp, .page);
+				if(.layer === void)
+				{
+					.page	= .page != "back" ? "back" : "fore";
+					.layer	= getLayerNoByStorage(mp, .page);
+				}
+			}
+			else
+				throw new Exception("レイヤー番号かストレージ名のいずれかを必ず指定する必要があります。");
+		}
+
+//		dm("move.layer: "+.layer);
+		//	「テキストを消去しない」と明示されているとき以外で、テキストレイヤーが表示されていれば
+		if((+.textoff != false || .textoff === void) && current.visible)
+		{
+			//	処理をpendingしておいて
+			.tagname	= "move";
+			conductor.pendings.insert(0, mp);
+
+			//	先にテキストレイヤーを消去
+			return tagHandlers.textoff(%[]);
+		}
+		else
+		{
+			if(.base != "")
+				tagHandlers.imageex(%[page:.page,layer:.layer,storage:.base]);	//	移動するレイヤーへ読み込む
+			var	ret	= tagHandlers.original_move(mp);	//	元のmoveを呼び出す
+/*			if(.both != void)
+			{
+				.page	= .page == "fore" ? "back" : "fore";
+				tagHandlers.original_move(mp);
+			}
+*/			return ret;
+		}
+	}
+} incontextof kag;
+
+/*-----------------------------------------------------------------------------/
+/	loopmoveの置き換え
+/-----------------------------------------------------------------------------*/
+kt.original_loopmove	= kt.loopmove;
+kt.loopmove	= function(mp)
+{
+	with(mp)
+	{
+		.page	= "fore" if .page === void;	//	指定がないときは"fore"
+
+		//	レイヤー番号がなく画像名が指定されているときは、その画像を対象とする
+		if(.layer === void)
+		{
+			if(.storage != void)
+			{
+				.layer	= getLayerNoByStorage(mp, .page);
+				if(.layer === void)
+				{
+					.page	= .page != "back" ? "back" : "fore";
+					.layer	= getLayerNoByStorage(mp, .page);
+				}
+			}
+			else
+				throw new Exception("レイヤー番号かストレージ名のいずれかを必ず指定する必要があります。");
+		}
+
+		//	ターゲットの指定があるとき
+		if(.target != void)
+		{
+			var trg;
+//			dm(.target+" != "+(int .target)+" = "+(.target != int .target));
+			if(.target != int .target)
+				trg	= getLayerNoByStorage(%[storage:.target], .page);
+			else
+				trg	= int .target;
+			if(trg === void)
+				throw new Exception("target に指定しているレイヤーが存在しません。");
+			.target	= kag.getLayerFromElm(%[layer:string trg, page:.page]);
+		}
+
+		//	「テキストを消去しない」と明示されているとき以外で、テキストレイヤーが表示されていれば
+		if((+.textoff != false || .textoff === void) && current.visible)
+		{
+			//	処理をpendingしておいて
+			.tagname	= "loopmove";
+			conductor.pendings.insert(0, mp);
+
+			//	先にテキストレイヤーを消去
+			return tagHandlers.textoff(%[]);
+		}
+		else
+		{
+			var	ret	= tagHandlers.original_loopmove(mp);	//	元のloopmoveを呼び出す
+			return ret;
+		}
+	}
+} incontextof kag;
+
+/*-----------------------------------------------------------------------------/
+/	stopmoveの置き換え
+/-----------------------------------------------------------------------------*/
+kt.original_stopmove	= kt.stopmove;
+kt.stopmove	= function(mp)
+{
+	with(mp)
+	{
+		if(.storage != void)
+		{
+			.layer	= getLayerNoByStorage(mp, .page);
+			if(.layer === void)
+			{
+				.page	= .page != "back" ? "back" : "fore";
+				.layer	= getLayerNoByStorage(mp, .page);
+			}
+		}
+	}
+	return tagHandlers.original_stopmove(mp);
+} incontextof kag;
+
+/*-----------------------------------------------------------------------------/
+/	ページ切り替え
+/		ページ切り替え待ちを発行後、画面消去を実行
+/-----------------------------------------------------------------------------*/
+kt.pg	= function(mp)
+{
+	if(f.textmode2pg == void)
+	{
+		//	次に実行するタグを画面消去に変更して
+		mp.tagname	= "cm";
+		conductor.pendings.insert(0, mp);
+
+		//	ページ切り替え待ちを実行
+		return tagHandlers.p(%[]);
+	}
+	else
+		return tagHandlers[f.textmode2pg](mp);
+} incontextof kag;
+
+/*-----------------------------------------------------------------------------/
+/	改行
+/		クリック待ちの後、改行を実行
+/-----------------------------------------------------------------------------*/
+kt.lr	= function(mp)
+{
+	if(f.textmode2lr == void)
+	{
+		mp.tagname	= "r";
+		conductor.pendings.insert(0, mp);
+		return tagHandlers.l(%[]);
+	}
+	else
+		return tagHandlers[f.textmode2lr](mp);
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	トランジション拡張
+/		「rule="クロスフェード"ならmethod="crossfade"にする」とか、スキップに対応するとか
+/	in	: nowait	トランジションの終了を待たない(default:false)
+/		: textoff	テキストを消去する(default:true)
+/-----------------------------------------------------------------------------*/
+kt.transex	= function(mp)
+{
+	//	「テキストを消去しない」と明示されているとき以外で、テキストレイヤーが表示されていれば
+	dm("mp.textoff = "+mp.textoff);
+	var msgvisible	= false;
+	for(var i=0; i<fore.messages.count; i++)
+		msgvisible	|= fore.messages[i].visible;
+	//	メッセージレイヤーが表示されており、
+	//	テキストレイヤーを消去する意思があり、
+	//	メッセージを残す指定がなければ先にメッセージレイヤーを消去してトランジションする
+	if(msgvisible && (mp.textoff === void || +mp.textoff != false) && !f.staymessage)
+//	if((mp.textoff === void || !f.staymessage) && mp.textoff != false && msgvisible)
+	{
+		//	トランジション前にメッセージレイヤーをバックアップ
+		for(var i=0; i<fore.messages.count; i++)
+		{
+			backupLayer(%[layer:"message"+i], true);
+			back.messages[i].visible	= false;
+		}
+
+		//	処理をpendingしておいて
+		mp.tagname	= "transex";
+		conductor.pendings.insert(0, mp);
+
+		//	先にテキストレイヤーを消去
+		return tagHandlers.textoff(%[]);
+	}
+
+	//	前画面の背景と裏画面の背景の表示サイズを合わせる
+	if(mp.standard != void)
+	{
+		var	target	= mp.standard == "back" ? "fore" : "back";
+		kag[target].base.setSize(kag[mp.standard].base.width, kag[mp.standard].base.height);
+	}
+	else
+	{
+		var	fore = kag.fore.base, back = kag.back.base;
+		if(fore.width != back.width)
+		{
+			if(fore.width > back.width)
+				fore.width	= back.width;
+			else
+				back.width	= fore.width;
+		}
+		if(fore.height != fore.height)
+		{
+			if(fore.height > back.height)
+				fore.height	= back.height;
+			else
+				back.height	= fore.height;
+		}
+	}
+
+	mp.time	= 0 if .sf.effectSkip || skipMode >= 2;
+	mp.method	= "crossfade" if (mp.method==''||mp.method=='universal')&&(mp.rule==''||mp.rule=='クロスフェード');
+//	mp.canskip	= true;
+	tagHandlers.trans(mp);
+	//	背景が整う準備が出来ていたら、
+	if(.f.prepareArrange)
+	{
+		.f.derangedScreen	= false;	//	画面が整った状態になったことにする
+		.f.prepareArrange	= false;
+	}
+	if((mp.wait==true || mp.wait===void) && mp.nowait != true)
+		return tagHandlers.wt(mp);
+	return 0;
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	image
+/		背景が整うかどうかのチェック
+/-----------------------------------------------------------------------------*/
+kt.image_org	= kt.image;
+kt.image	= function(mp)
+{
+	if(mp.layer == "base")
+		.f.prepareArrange	= true;	//	背景が整った状態になる準備ができた
+	else
+		.f.prepareArrange	= false;
+
+	return tagHandlers.image_org(mp);
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	フラッシュオーバー
+/		画面を真っ白にする
+/	in	: wait	トランジションの終了を待つ(default:true)
+/-----------------------------------------------------------------------------*/
+kt.flushover	= function(mp)
+{
+	mp.file	= "white";
+	return tagHandlers.fadein(mp);
+} incontextof kag;
+kt.white	= kt.flushover;
+
+/*FUNC-------------------------------------------------------------------------/
+/	ブラックアウト
+/		画面を真っ黒にする
+/	in	: wait	トランジションの終了を待つ(default:true)
+/-----------------------------------------------------------------------------*/
+kt.blackout		= function(mp)
+{
+	mp.file	= "black";
+	return tagHandlers.fadein(mp);
+} incontextof kag;
+kt.black	= kt.blackout;
+
+/*FUNC-------------------------------------------------------------------------/
+/	立ち絵表示
+/		立ち絵を切り替える。
+/		ただし、トランジションは行なわない
+/	in	: file		立ち絵ファイル名
+/		: no		レイヤー番号(指定が無ければ新規/"last"なら直前)
+/		: index		前後位置
+/		: pos		立ち位置(right/left/center)(Def:center)
+/		: left, top	立ち絵の左上座標
+/		: center	　〃　の中心線の座標
+/		: bottom	　〃　の下端の高さ(horizonと同じか…)
+/		: horizon	地平線の高さ(0で画面下端、プラスで浮き上がりマイナスで沈む)
+/		: color		一色で塗りつぶす時の色指定
+/		: mono		規定の単色立ち絵
+/-----------------------------------------------------------------------------*/
+kt.ld_notrans	= function(mp)
+{
+	with(mp)
+	{
+		if(.file == "" && .storage == "")
+			throw new Exception("fileが指定されていません。");
+		.pos	= "center" if .pos == "" && .left === void && .center === void;	//	指定が無ければ中央
+		//	最初から指定されている
+		if(.layer !== void)
+		{
+			.layer	= string .f.lastLayerNo if .layer == "last";	//	"last"なら直前に操作したレイヤー
+		}
+		//	noで指定されている
+		else if(.no !== void)
+		{
+			.layer	= .no;
+		}
+		//	posで指定されている
+		else if(.pos !== void)
+		{
+			.pos	= correctPosName[.pos];	//	シンプルな名前にする
+			.layer	= getFreeLayer();	//	空いているレイヤーを取得
+		}
+		//	何も指定されていない
+		else
+		{
+			.layer	= getFreeLayer();	//	空いているレイヤーへ
+		}
+
+		//	指定の番号を格納するに十分な数のレイヤーが無ければ、
+		if(+.layer >= back.layers.count)
+			allocateCharacterLayersWithoutOrder(+.layer + 1);	//	レイヤーを増やす
+
+//		back.layers[+.layer].opacity	= 255;	//	表示時に必ず255にする
+		.opacity	= 255 if .opacity === void;
+		.storage	= .file if .storage == "";
+		.page		= "back" if .page == "";
+		.index		= (+.layer + 1) * 1000 if .index === void;
+		.visible	= true;
+		dm(@"ld_notrans: .page=${.page}, .layer=${.layer}, .storage=${.storage}, .pos=${.pos}, .index=${.index}, .left=${.left}, .visible=${.visible}");
+		tagHandlers.imageex(mp);
+	}
+//	fgimages[mp.layer]	= mp.storage;
+	//	直前に操作した立ち絵
+	.f.lastLayerNo	= +mp.layer;
+
+@if(FATE_HOLLOW_ATARAXIA==1)
+	//	リズのハルバード立ち絵を表示したかフラグ
+	if(mp.storage.indexOf("リズハルバード")>=0)
+		global.tf.useHalberd++;
+@endif
+
+	return 0;
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	前景レイヤー表示
+/		前景レイヤーを変更し、トランジションを行う
+/	in	: file		立ち絵ファイル名
+/		: no		レイヤー番号(指定が無ければ新規/"last"なら直前)
+/		: index		前後位置
+/		: pos		立ち位置(right/left/center)(Def:center)
+/		: left, top	立ち絵の左上座標
+/		: center	　〃　の中心線の座標
+/		: bottom	　〃　の下端の高さ(horizonと同じか…)
+/		: horizon	地平線の高さ(0で画面下端、プラスで浮き上がりマイナスで沈む)
+/		: color		一色で塗りつぶす時の色指定
+/		: mono		規定の単色立ち絵
+/		: rule		トランジションルール
+/		: time		　　　〃　　　時間
+/		: vague		　　　〃　　　の滑らかさ
+/		: wait		　　　〃　　　の終了を待つ(default:true)
+/		: textoff	テキストを消去する(default:true)
+/-----------------------------------------------------------------------------*/
+kt.ld_auto	= function(mp)
+{
+	tagHandlers.ld_notrans(mp);
+
+	with(mp)
+	{
+		.layer	= "base";
+		.rule	= "クロスフェード" if .rule === void;
+		.time	= defaultFGTransTime if .time === void;
+		.vague	= defaultVaguePoint if .vague === void;
+	}
+	return tagHandlers.transex(mp);
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	前景レイヤー表示
+/		前景レイヤーを変更し、トランジションを行う
+/	in	: file		立ち絵ファイル名
+/		: no		レイヤー番号(指定が無ければ新規/"last"なら直前)
+/		: index		前後位置
+/		: pos		立ち位置(right/left/center)(Def:center)
+/		: left, top	立ち絵の左上座標
+/		: center	　〃　の中心線の座標
+/		: bottom	　〃　の下端の高さ(horizonと同じか…)
+/		: horizon	地平線の高さ(0で画面下端、プラスで浮き上がりマイナスで沈む)
+/		: color		一色で塗りつぶす時の色指定
+/		: mono		規定の単色立ち絵
+/		: rule		トランジションルール
+/		: time		　　　〃　　　時間
+/		: vague		　　　〃　　　の滑らかさ
+/		: wait		　　　〃　　　の終了を待つ(default:true)
+/		: textoff	テキストを消去する(default:true)
+/-----------------------------------------------------------------------------*/
+kt.ld	= function(mp)
+{
+	checkTextOff(mp);
+	return tagHandlers.ld_auto(mp);
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	前景レイヤー表示
+/		前景レイヤーを変更する
+/	in	: file		立ち絵ファイル名
+/		: no		レイヤー番号(指定が無ければ新規/"last"なら直前)
+/		: index		前後位置
+/		: pos		立ち位置(right/left/center)(Def:center)
+/		: left, top	立ち絵の左上座標
+/		: center	　〃　の中心線の座標
+/		: bottom	　〃　の下端の高さ(horizonと同じか…)
+/		: horizon	地平線の高さ(0で画面下端、プラスで浮き上がりマイナスで沈む)
+/		: color		一色で塗りつぶす時の色指定
+/		: mono		規定の単色立ち絵
+/		: trans		トランジションするか？(default:false)
+/		: rule		　　　〃　　　ルール
+/		: time		　　　〃　　　時間
+/		: vague		　　　〃　　　の滑らかさ
+/		: wait		　　　〃　　　の終了を待つ(default:true)
+/		: textoff	テキストを消去する(default:true)
+/-----------------------------------------------------------------------------*/
+kt.fg	= function(mp)
+{
+	checkTextOff(mp);
+	with(mp)
+	{
+		//	トランジションするつもりなら
+		var doTrans	= .trans!=false || .rule != "" || .time != 0 || .vague != 0;
+		if(doTrans)
+			tagHandlers.backlay(%[]);	//	全ての画像を退避
+
+		tagHandlers.ld_notrans(mp);
+
+		if(doTrans)
+		{
+			.layer	= "base";
+			.rule	= "クロスフェード" if .rule === void;
+			.time	= defaultFGTransTime if .time === void;
+			.vague	= defaultVaguePoint if .vague === void;
+			return tagHandlers.transex(mp);
+		}
+	}
+	return 0;
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	立ち絵消去
+/		トランジションはしない
+/	in	: no		レイヤー番号(指定が無ければすべて/"last"なら直前)
+/		: pos		消去する位置
+/		: storage	消去する画像
+/-----------------------------------------------------------------------------*/
+kt.cl_notrans	= function(mp)
+{
+	with(mp)
+	{
+		//	レイヤー指定アリ
+		if(.layer !== void)
+			.layer	= string global.f.lastLayerNo if .layer == "last";
+		//	レイヤー番号指定アリ
+		else if(.no !== void)
+			.layer	= string .no;
+		//	場所指定アリ
+		else if(.pos !== void)
+		{
+			if(.pos != "all")
+			{
+				var l = kag.fore.layers;
+				for(var i=0; i<l.count; i++)
+				{
+					if(l[i].visible && l[i].Anim_loadParams && l[i].Anim_loadParams.pos == .pos)
+					{
+						.layer	= string i;
+						break;
+					}
+				}
+			}
+		}
+		//	画像名指定アリ
+		else if(.storage !== void)
+		{
+			.layer	= getLayerNoByStorage(mp);
+			if(.layer === void)
+			{//	指定の画像が見つからなかった
+				//	同じキャラの立ち絵を探す
+				var reg = new RegExp("^[^0-9a-z\\.]+", "i");
+				var ch = reg.exec(Storages.extractStorageName(.storage));
+				if(ch.count > 0)
+				{
+					var name = ch[0];
+					var l = kag.fore.layers;
+					for(var i=0; i<l.count; i++)
+					{
+						ch	= reg.exec(Storages.extractStorageName(l[i].storage));
+						if(ch.count > 0 && ch[0] == name)
+						{
+							.layer	= string i;
+							break;
+						}
+					}
+				}
+				invalidate reg;
+			}
+			if(.layer === void)
+			{
+				throw new Exception("\""+.storage+"\"を消去する命令が呼び出されていますが、この立ち絵は表示されていません。");
+				return;
+			}
+		}
+		//	スーパーポーズに使用しているレイヤーは、cl系列では消去できない
+		else if(global.f.superposeLayerNo !== void && .layer == global.f.superposeLayerNo)
+			return 0;
+
+		.page	= "back" if .page === void;
+
+		//	レイヤーの指定が無いか、"all"が指定されているとき
+		if(.layer === void || .layer == "all")
+		{//	すべて消去
+			dm("cl_notrans: all");
+			var l = this[.page].layers;
+			for(var i=l.count - 1; i>=0; i--)
+				tagHandlers.cl_notrans(%[layer:string(i),page:.page]) if l[i].visible;
+			return 0;
+		}
+//		else
+//			dm("cl_notrans: "+.layer);
+
+		.layer	= string .layer;
+		dm(@"cl_notrans: page = ${.page} / layer = ${.layer} / storage = ${this[.page].layers[+.layer].storage}");
+		tagHandlers.freeimage(mp);	//	非表示かつ画像を破棄
+	}
+	.f.lastLayerNo		= +mp.layer;
+	return 0;
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	立ち絵消去
+/		トランジションする
+/	in	: no		レイヤー番号(指定が無ければすべて/"last"なら直前)
+/		: pos		消去する位置
+/		: storage	消去する画像
+/		: rule		トランジションルール
+/		: time		　　　〃　　　時間
+/		: vague		　　　〃　　　の滑らかさ
+/		: wait		　　　〃　　　の終了を待つ(default:true)
+/		: textoff	テキストを消去する(default:true)
+/-----------------------------------------------------------------------------*/
+kt.cl_auto	= function(mp)
+{
+	tagHandlers.cl_notrans(mp);
+
+	with(mp)
+	{
+		.layer	= "base";
+		.rule	= "クロスフェード" if .rule === void;
+		.time	= defaultFGTransTime if .time === void;
+		.vague	= defaultVaguePoint if .vague === void;
+	}
+	return tagHandlers.transex(mp);
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	立ち絵消去
+/	in	: no		レイヤー番号(指定が無ければすべて/"last"なら直前)
+/		: pos		消去する位置
+/		: storage	消去する画像
+/		: rule		トランジションルール
+/		: time		　　　〃　　　時間
+/		: vague		　　　〃　　　の滑らかさ
+/		: wait		　　　〃　　　の終了を待つ(default:true)
+/		: textoff	テキストを消去する(default:true)
+/-----------------------------------------------------------------------------*/
+kt.cl	= function(mp)
+{
+	checkTextOff(mp);
+	return tagHandlers.cl_auto(mp);
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	前景レイヤー消去
+/	in	: no		レイヤー番号(指定が無ければすべて/"last"なら直前)
+/		: pos		消去する位置
+/		: storage	消去する画像
+/		: storages	消去する複数の画像
+/		: rule		トランジションルール
+/		: time		　　　〃　　　時間
+/		: vague		　　　〃　　　の滑らかさ
+/		: wait		　　　〃　　　の終了を待つ(default:true)
+/		: textoff	テキストを消去する(default:true)
+/-----------------------------------------------------------------------------*/
+kt.clfg	= function(mp)
+{
+	checkTextOff(mp);
+	with(mp)
+	{
+		//	トランジションするつもりなら
+		var doTrans	= .trans!=false || .rule != "" || .time != 0 || .vague != 0;
+		var tag	= tagHandlers;
+		if(doTrans)
+			tag.backlay(%[]);	//	全ての画像を退避←不要かも、てか邪魔
+
+		if(.storages != "")
+		{//	複数指定
+			var storages	= .storages.split(",");
+			for(var i=0; i<storages.count; i++)
+			{
+//				dm("storages["+i+"] = "+storages[i]);
+				.storage	= storages[i];
+				.layer		= void;	//	一度"cl_notrans"すると値が設定されてしまう為、クリアする
+				tag.cl_notrans(mp);
+			}
+		}
+		else
+			tag.cl_notrans(mp);
+
+		if(doTrans)
+		{
+			.layer	= "base";
+			.rule	= "クロスフェード" if .rule === void;
+			.time	= defaultFGTransTime if .time === void;
+			.vague	= defaultVaguePoint if .vague === void;
+			return tag.transex(mp);
+		}
+	}
+	return 0;
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	透明な前景レイヤーを消去する
+/	in	: page	消すページ(default:fore)
+/-----------------------------------------------------------------------------*/
+kt.cltransparent	= function(mp)
+{
+	with(mp)
+	{
+		.page	= "fore" if .page == "";
+		var	layers	= kag[.page].layers;
+		for(var i=0; i<layers.count; i++)
+		{
+			if(layers[i].visible && layers[i].opacity == 0)
+				tagHandlers.freeimage(%[page:.page,layer:string i]);
+		}
+	}
+	return 0;
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	前景レイヤー変更
+/	in	: no		レイヤー番号(指定が無ければすべて/"last"なら直前)
+/		: pos		変更する位置
+/		: storage	新しい画像(CSV形式)
+/		: index		前後位置(指定がないときは、変更前と同じ)
+/		: rule		トランジションルール
+/		: time		　　　〃　　　時間
+/		: vague		　　　〃　　　の滑らかさ
+/		: wait		　　　〃　　　の終了を待つ(default:true)
+/		: textoff	テキストを消去する(default:true)
+/-----------------------------------------------------------------------------*/
+kt.chgfg	= function(mp)
+{
+	checkTextOff(mp);
+	with(mp)
+	{
+		//	トランジションするつもりなら
+		var doTrans	= .trans!=false || .rule != "" || .time != 0 || .vague != 0;
+		if(doTrans)
+			tagHandlers.backlay(%[]);	//	全ての画像を退避
+
+		var layers	= .layer === void ? [] : .layer.split(",");
+		var nos		= .no === void ? [] : .no.split(",");
+		var poss	= .pos === void ? [] : .pos.split(",");
+		var storages= .storage.split(",");
+		var index	= .index === void ? [] : .index.split(",");
+		var lasts	= .last === void ? [] : .last.split(",");
+
+		var updatecnt	= 0;
+		for(var i=0; i<storages.count; i++)
+		{
+			.layer		= layers[i];
+			.pos		= poss[i];
+			.storage	= storages[i];
+			//	レイヤー指定アリ
+			if(.layer !== "")
+				.layer	= layers[i] == "last" ? string global.f.lastLayerNo : layers[i];
+			//	レイヤー番号指定アリ
+			else if(nos[i] !== void)
+				.layer	= string nos[i];
+			//	場所指定アリ
+			else if(.pos !== void)
+			{
+				var l = kag.fore.layers;
+				for(var i=0; i<l.count; i++)
+				{
+					if(l.Anim_loadParams.pos == .pos)
+					{
+						.layer	= string i;
+						break;
+					}
+				}
+			}
+			//	変更前の画像名を指定する
+			if(.layer === void && lasts[i] != "")
+			{
+				.layer	= getLayerNoByStorage(%[storage:lasts[i]]);
+			}
+			//	上記でもレイヤー番号が決定できないとき
+			if(.layer === void)
+			{
+				//	同じキャラクターを表示しているレイヤーを検索する
+				.layer	= getSameCharacterLayerNo(.storage);
+			}
+			if(.layer === void)
+			{
+//				throw new Exception("レイヤー番号を特定できませんでした。");
+//				return 0;	//	レイヤー番号を特定できなかった
+//				//	全く新しい画像として表示する、という解もあり。
+				continue;	//	無ければ無視して次へ
+			}
+			var formerlayer	= kag.fore.layers[+.layer];
+			if(.pos === void)
+			{
+				//	現在の画像のセンターを取得し、その座標へ出す
+				.center	= formerlayer.center;
+				.bottom	= formerlayer.basePos;
+			}
+			.index	= index[i] !== void ? index[i] : formerlayer.absolute;	//	indexをコピー
+			tagHandlers.ld_notrans(mp);
+			//	位置を継承している場合、揺れ前の位置も継承する。
+			if(.pos === void && formerlayer.reservedCenter !== void)
+			{
+				with(kag.back.layers[+.layer])
+				{
+					.reservedCenter	= formerlayer.reservedCenter;
+					.reservedBottom	= formerlayer.reservedBottom;
+				}
+			}
+			updatecnt++;
+		}
+
+		if(doTrans && updatecnt > 0)
+		{
+			.layer	= "base";
+			.rule	= "クロスフェード" if .rule === void;
+			.time	= defaultFGTransTime if .time === void;
+			.vague	= defaultVaguePoint if .vague === void;
+			return tagHandlers.transex(mp);
+		}
+	}
+	return 0;
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	前景レイヤー移動
+/	in	: no		レイヤー番号(指定が無ければすべて/"last"なら直前)
+/		: pos		移動先
+/		: left, top	移動先
+/		: center	　〃　の中心線の座標
+/		: bottom	　〃　の下端の高さ(horizonと同じか…)
+/		: storage	移動する画像
+/		: rule		トランジションルール
+/		: time		　　　〃　　　(またはmove)の時間
+/		: vague		　　　〃　　　の滑らかさ
+/		: wait		　　　〃　　　の終了を待つ(default:true(トランジション)/false(move))
+/		: textoff	テキストを消去する(default:true)
+/		: accel		moveのaccel
+/		: canskip	トランジション/移動の終了待ちをキャンセルできるか？
+/		: both	両面共にmoveさせる(default: false)
+/-----------------------------------------------------------------------------*/
+kt.movefg	= function(mp)
+{
+	checkTextOff(mp);
+	with(mp)
+	{
+		//	トランジションするつもりなら
+		var doTrans	= .trans!=false || .rule != "" || .vague != 0;
+		if(doTrans)
+			tagHandlers.backlay(%[]);	//	全ての画像を退避
+
+		.page	= "fore" if .page == void;
+
+		//	レイヤー指定アリ
+		if(.layer !== void)
+			.layer	= string global.f.lastLayerNo if .layer == "last";
+		//	レイヤー番号指定アリ
+		else if(.no !== void)
+			.layer	= string .no;
+		//	画像名指定アリ
+		else if(.storage !== void)
+			.layer	= getLayerNoByStorage(mp, .page);
+		if(.layer === void)
+		{
+			throw new Exception("レイヤーを指定できません。");
+			return 0;
+		}
+
+		//	新位置取得
+		var layer = kag[.page].layers[.layer];
+		if(.pos !== void)
+		{
+			.pos	= correctPosName[.pos];
+			.center	= kag.scPositionX[.pos];
+			.top	= kag.innerHeight - layer.height;	//	下端を画面下端に合わせる
+			layer.Anim_loadParams.pos	= .pos;	//	現在位置を記憶させておく
+		}
+		if(.center !== void)
+			.left	= .center - (layer.center - layer.left);	//	現在の左端座標と中心座標から、差分を求める
+		if(.left !== void)
+			.top		= layer.top if .top === void;
+		.opacity	= layer.opacity if .opacity === void;
+
+		//	トランジションで移動
+		if(doTrans)
+		{
+//			tagHandlers.backlay(mp);	//	対象の画像を裏へコピー
+			var l = kag[.page=="fore"?"back":"fore"].layers[.layer];
+			l.left		= .left;
+			l.top		= .top;
+			l.opacity	= .opacity;
+
+			.layer	= "base";
+			.rule	= "クロスフェード" if .rule === void;
+			.time	= defaultFGTransTime if .time === void;
+			.vague	= defaultVaguePoint if .vague === void;
+			return tagHandlers.transex(mp);
+		}
+		//	moveタグで移動
+		else if(.time !== void || .accel !== void)
+		{
+			.time	= defaultFGTransTime if .time === void;
+			.accel	= 0 if .accel === void;
+			var layer = kag[.page].layers[.layer];
+//			.path	= @"(${layer.left},${layer.top},${layer.opacity})(${.left},${.top},${.opacity})";
+			.top	= layer.top if .top === void;
+			.path	= @"(${.left},${.top},${.opacity})";
+			dm("move.path = "+.path);
+			var ret = tagHandlers.move(mp);
+			if(.wait != void)
+				return tagHandlers.wm(mp);
+			else
+				return ret;
+		}
+		//	画像を移動させるだけ
+		else
+		{
+//			tagHandlers.backlay(mp);	//	対象の画像を裏へコピー
+			var l = kag[.page=="fore"?"back":"fore"].layers[.layer];
+			l.left		= .left;
+			l.top		= .top;
+			l.opacity	= .opacity;
+		}
+		return 0;
+	}
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	状態再現
+/		変更する必要があるもののみ変更し、トランジションも最低限に行う
+/	in	: storages		表示する画像ファイルのリスト(CSV)
+/		: indexes		前後位置(CSV)
+/		: poss			立ち位置(CSV)
+/		: lefts, tops	左上座標のリスト(CSV)
+/		: centers		中心X座標のリスト(CSV)
+/		: bottoms		下端Y座標のリスト(CSV)
+/		: opacities		不透明度(CSV)
+/		: colors		一色で塗りつぶす時の色指定(CSV)
+/		: monos			規定の単色立ち絵(CSV)
+/		: fliplrs		左右反転のリスト(CSV)
+/		: flipuds		上下反転のリスト(CSV)
+/		: bg			表示する背景画像ファイル
+/		: fliplr		背景の左右反転
+/		: flipud		背景の上下反転
+/		: rule			トランジションルール
+/		: time			　　　〃　　　時間
+/		: vague			　　　〃　　　の滑らかさ
+/		: wait			　　　〃　　　の終了を待つ(default:true)
+/		: textoff		テキストを消去する(default:true)
+/		: force			強制的に書き換える(default:false)
+/		: avoid			どのような場合でも背景を書き換えない(default:false)
+/-----------------------------------------------------------------------------*/
+kt.rep	= function(mp)
+{
+	checkTextOff(mp);
+	var keys = [
+		[ "layers", "layer" ],
+		[ "indexes","index" ],
+		[ "lefts",	"left" ],
+		[ "tops",	"top" ],
+		[ "centers","center" ],
+		[ "bottoms","bottom" ],
+		[ "opacities", "opacity", 255 ],
+		[ "colors", "color", , true ],
+		[ "monos", "mono", , true ],
+		[ "fliplrs", "fliplr" ],
+		[ "flipuds", "flipud" ]
+	];
+	with(mp)
+	{
+		dm("rep: storages = "+.storages+" / indexes = "+.indexes+" / poss = "+.poss+" / lefts = "+.lefts);
+		.storages	= .storages!=void ? .storages.split(", ") : [];
+		.poss		= .poss.split(", ") if .poss!=void;
+		for(var i=0; i<keys.count; i++)
+		{
+			var key = keys[i][0];
+			mp[key]	= mp[key].split(", ") if mp[key] !== void;
+//			dm("mp["+key+"] = "+mp[key]);
+		}
+	}
+	var changed	= false;	//	変更が加わったか？
+	tagHandlers.backlay(%[]);	//	現在の状況を裏へ
+
+	//	背景を変更する(指定されているときのみ)
+	mp.force	= true if .f.derangedScreen;	//	画面が乱れているなら、強制更新
+	var forcereload	= false;
+	var loadbg	= false;
+	var b = kag.fore.base;
+	if(!+mp.avoid)
+	{
+		if((mp.bg !== void && kag.back.base.storage !== mp.bg) ||	//	画像変更
+		   (mp.fliplr !== void && mp.fliplr != b.Anim_loadParams.fliplr) ||	//	左右反転変更
+		   (mp.flipud !== void && mp.flipud != b.Anim_loadParams.flipud) ||	//	上下反転変更
+		   tagHandlers.iscinesco() ||	//	シネスコが実行されているとき
+			+mp.force)	//	強制更新
+		{
+			dm("背景: "+kag.fore.base.storage+"→"+mp.bg);
+			var bg	= mp.bg !== void ? mp.bg : kag.back.base.storage;
+			var flr	= mp.fliplr !== void ? mp.fliplr : b.Anim_loadParams.fliplr;
+			var fud	= mp.flipud !== void ? mp.flipud : b.Anim_loadParams.flipud;
+			tagHandlers.imageex(%[storage:bg, layer:"base", page:"back", fliplr:flr, flipud:fud, isbg:true]);
+			changed	= forcereload	= true;	//	背景が変わったときは、必ず前景も読み込みなおす
+			loadbg	= true;
+		}
+	}
+
+	//	まず、継続して使用しない前景を消去する
+	var	curno	= [];
+	var reserve	= [];
+	var	destno	= [];
+	var ls = kag.back.layers;
+	for(var i=0; i<mp.storages.count; i++)
+	{
+		var	no	= getLayerNoByStorage(%[storage:mp.storages[i]]);
+		if(no !== void)
+		{
+			reserve[no]	= true;
+			destno[no]	= mp.layers[i] if mp.layers != void;	//	指定したいレイヤー番号
+		}
+	}
+	for(var i=0; i<ls.count; i++)
+	{
+		if(ls[i].storage != "" && (!reserve[i] || destno[i] != i))	//	指定の画像が存在しないか、指定したい番号と現在の番号が異なる場合、
+		{
+			tagHandlers.cl_notrans(%[layer:string i]);	//	レイヤーを消去する
+			changed	= true;
+		}
+	}
+	for(var i=0; i<mp.storages.count; i++)
+		curno[i]	= getLayerNoByStorage(%[storage:mp.storages[i]], "back");
+
+//	for(var i=0; i<kag.back.layers.count; i++)
+//		dm("kag.back.layers["+i+"].storage = "+kag.back.layers[i].storage);
+
+	//	レイヤーの数が足りなければ、増やす
+	if(ls.count < mp.storages.count)
+		kag.allocateCharacterLayersWithoutOrder(mp.storages.count);
+
+	//	前景を変更する
+	for(var i=0; i<mp.storages.count; i++)
+	{
+		with(mp)
+		{
+			if(.storages[i] == "")
+				continue;
+			var elm = %[page:"back"];
+			var reload	= false;
+			elm.storage	= .storages[i];
+			elm.pos		= .poss !== void && .poss[i] != void ? correctPosName[.poss[i]] : void;
+			{//	表示する
+				dm("current: "+elm.storage+".layer = "+curno[i]);
+				var	rc, rb;
+				if(curno[i] === void)
+				{
+					//	非表示 → 表示
+					//	(表示する)
+					for(var j=0; j<keys.count; j++)
+					{
+						var key = keys[j];
+						if(mp[key[0]] != void && string mp[key[0]][i] != "")
+							elm[key[1]]	= mp[key[0]][i];
+						else
+							elm[key[1]]	= key[2] if key[2] !== void;
+					}
+					changed		= true;		//	変更(というか追加)された
+					reload		= true;	//	画像が読み込まれていない
+
+					if(elm.layer === void)
+					{//	layersでそれぞれにレイヤー番号が指定されてるときを除き、
+						//	空いているレイヤー番号を適当に決める
+						for(var i=0; i<kag.back.layers.count; i++)
+						{
+							if(!reserve[i])
+								elm.layer	= string i;
+						}
+					}
+				}
+				else
+				{
+					//	表示 → 表示
+					elm.layer	= string curno[i];
+					var layer = back.layers[+elm.layer];
+					var lparam = layer.Anim_loadParams;
+					if(lparam !== void)
+					{
+						if(elm.pos !== void && elm.pos !== lparam.pos)
+						{//	posが変化していたら、中心・下端の座標を更新
+							lparam.pos		= elm.pos;
+							layer.center	= kag.scPositionX[elm.pos];
+							layer.bottom	= 0;
+							changed	= true;
+						}
+						if(layer.reservedCenter !== void)
+						{
+							with(fore.layers[+elm.layer])
+							{
+								rc	= .reservedCenter;
+								rb	= .reservedBottom;
+							}
+						}
+						for(var j=0; j<keys.count; j++)
+						{
+							var key = keys[j];
+							if(mp[key[0]] != void && string mp[key[0]][i] != "")
+								elm[key[1]]	= mp[key[0]][i];
+							else
+								elm[key[1]]	= key[2] if key[2] !== void;
+							if(typeof layer[key[1]] != "undefined" && layer[key[1]] !== elm[key[1]])
+							{
+								layer[key[1]]	=elm[key[1]];
+								changed	= true;
+								reload	= true if key[3];
+							}
+						}
+					}
+				}
+				if(changed || reload || forcereload)
+				{
+					tagHandlers.ld_notrans(elm);//, dm("ld_notrans");
+					if(rc !== void)
+					{
+						with(back.layers[+elm.layer])
+							.reservedCenter = rc, .reservedBottom = rb;	
+					}
+				}
+				reserve[+elm.layer]	= true;
+			}
+		}
+	}
+
+	if(changed)
+	{
+		//	変更が加えられていて、背景が読み込まれていないとき
+		if(!loadbg && mp.bg === void && !+mp.avoid)
+			backupLayer(%[layer:"base"], true);
+
+		//	変更があったときのみトランジションする
+		with(mp)
+		{
+			.layer	= "base";
+			.rule	= "クロスフェード" if .rule === void;
+			.time	= defaultBGTransTime if .time === void;
+			.vague	= defaultVaguePoint if .vague === void;
+		}
+		return tagHandlers.transex(mp);
+	}
+	return 0;
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	状態再現
+/-----------------------------------------------------------------------------*/
+kt.ldall	= function(mp)
+{
+	var pn = [ "l", "r", "lc", "rc", "c" ];
+	var sept;
+	with(mp)
+	{
+		for(var i=0; i<pn.count; i++)
+		{
+			var n = pn[i];
+//			if(mp[n] !== void)
+			{
+				.storages	+= sept + (mp[n] === void ? "" : mp[n]);
+				.indexes	+= sept + (mp["i"+n] === void ? "" : mp["i"+n]);// if mp["i"+n]!==void;
+				.poss		+= sept + n;
+				sept	= ",";
+			}
+		}
+	}
+	dm("mp.storages = "+mp.storages);
+	return tagHandlers.rep(mp);
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	BGM再生
+/	in	: storage	再生ファイル名
+/		: track		再生トラック番号(CD-DA)
+/		: time		フェードインする時間(Def:0)
+/		: loop		ループするか(default:true)
+/		: delay		再生開始の遅延時間
+/		: wait		フェードインを待つか(default:false)
+/		: volume	ボリューム指定(default:100)
+/-----------------------------------------------------------------------------*/
+kt.play	= function(mp)
+{
+	mp.storage	= mp.track if mp.track !== void;
+	mp.storage	= mp.file if mp.file !== void;
+	mp.time		= 0 if mp.time === void;
+	mp.overlap	= mp.time if mp.time < mp.overlap;
+	mp.volume	= 100 if mp.volume === void;
+	mp.canskip	= true;
+	.tf.playedMusic	= %[] if .tf.playedMusic == void;
+	.tf.playedMusic[mp.storage]++;
+	var	play2play	= %[	//	このBGMを再生したら、このBGMのフラグも立つ
+		"bgm102"	=> "bgm130.ogg",
+		"bgm114"	=> "bgm128.ogg",
+		"bgm115"	=> "bgm128.ogg",
+		"bgm122"	=> "bgm107.ogg",
+		"bgm126"	=> "bgm130.ogg",
+		"bgm144"	=> "bgm116.ogg",
+		"bgm145"	=> "bgm116.ogg",
+		"hfbgm08"	=> "hfbgm03.ogg",
+	];
+	var	st	= play2play[Storages.chopStorageExt(mp.storage)];
+	.tf.playedMusic[st != void ? st : mp.storage]++;	//	再生回数の記録
+
+	tagHandlers.bgmopt(mp);			//	音量変更
+	if(mp.time <= 0)
+		tagHandlers.playbgm(mp);	//	フェードなし
+	else
+	{
+		tagHandlers.fadeinbgm(mp);	//	フェードあり
+		if(mp.wait)
+			return tagHandlers.wb(mp);	//	フェードインの終了待ち
+	}
+	return 0;
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	BGMの再生停止
+/	in	: time		フェードアウト時間
+/		: wait		フェードアウトを待つか(default:false)
+/-----------------------------------------------------------------------------*/
+kt.playstop	= function(mp)
+{
+	mp.time	= 0 if mp.time === void;
+	//	ノイズを軽減するため、200ミリ秒以下で止めているときは200ミリ秒でフェードアウトさせる
+	mp.time	= 200 if mp.time < 200;
+	mp.canskip	= true;
+	if(mp.time <= 0)
+		tagHandlers.stopbgm(%[]);
+	else
+	{
+		tagHandlers.fadeoutbgm(mp);
+		if(mp.wait)
+			return tagHandlers.wb(mp);
+	}
+	return 0;
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	BGMの一時停止
+/-----------------------------------------------------------------------------*/
+kt.playpause	= kt.pausebgm;
+
+/*FUNC-------------------------------------------------------------------------/
+/	BGMの再開
+/-----------------------------------------------------------------------------*/
+kt.playresume	= kt.resumebgm;
+
+/*FUNC-------------------------------------------------------------------------/
+/	効果音再生
+/	in	: storage	再生する効果音ファイル
+/		: time		フェードインする時間
+/		: waitfade	フェードイン終了を待つ(default:false)
+/		: wait		再生終了を待つ(default:false)
+/		: loop		ループ再生するか(default:false)
+/		: volume	ボリューム指定(default:100)
+/		: pan		パン指定(default:0/-100:左 <-> 右:100)
+/-----------------------------------------------------------------------------*/
+kt.se	= function(mp)
+{
+	mp.storage	= mp.file if mp.storage===void;
+	var no = selectSoundBuffer(mp.storage, false);
+	mp.buf	= no !== void ? no : .f.bufno;
+	mp.time	= 0 if mp.time === void;
+	mp.canskip	= true;
+	mp.volume	= 100 if mp.volume === void;
+	mp.pan		= 0 if mp.pan === void;
+
+	//	ファイルの有無をチェック
+	if(!isExistentSound(mp.storage))
+	{
+		throw new Exception(mp.storage+"に準ずるサウンドファイルが見つかりませんでした。");
+		return 0;
+	}
+
+	.tf.playedSE	= %[] if .tf.playedSE == void;
+	.tf.playedSE[mp.storage]++;	//	再生回数の記録
+
+	//	スキップモード時は鳴らさない
+	if(skipMode >= 2)
+		return 0;
+
+	tagHandlers.seopt(mp);		//	音量変更
+	if(mp.time <= 0)
+		tagHandlers.playse(mp);
+	else
+	{
+		tagHandlers.fadeinse(mp);
+		if(mp.waitfade)
+			tagHandlers.wf(mp);
+	}
+	if(mp.wait)
+		return tagHandlers.ws(mp);
+	return 0;
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	効果音のループ再生
+/	in	: storage	再生する効果音ファイル
+/		: time		フェードインする時間
+/		: waitfade	フェードイン終了を待つ(default:false)
+/		: wait		再生終了を待つ(default:false)
+/		: volume	ボリューム指定(default:100)
+/		: pan		パン指定(default:0/-100:左 <-> 右:100)
+/-----------------------------------------------------------------------------*/
+kt.seloop	= function(mp)
+{
+	mp.loop	= true;
+	return tagHandlers.se(mp);
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	効果音の再生停止
+/	in	: storage	停止する効果音ファイル(指定が無ければすべて停止)
+/		: time		フェードアウトする時間
+/		: waitfade	フェードアウト終了を待つ
+/-----------------------------------------------------------------------------*/
+kt.sestop	= function(mp)
+{
+	stopSound(mp.storage, mp.time, !mp.waitfade);
+	return 0;
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	効果音のフェード
+/	in	: buf		フェードするバッファ番号
+/		: storage	フェードする効果音ファイル(指定が無ければすべて)
+/		: time		フェードする時間
+/		: volume	到達音量(0〜100%)
+/		: waitfade	フェード終了を待つ
+/	memo: buf か storage は必ず必要
+/-----------------------------------------------------------------------------*/
+kt.fadeseorg= kt.fadese;
+kt.fadese	= function(mp)
+{
+	var buf;
+	if(mp.buf !== void)
+		buf	= +mp.buf;
+	else if(mp.storage != void)
+		buf	= getPlayBuffer(mp.storage);
+
+	if(buf === void)
+	{
+		dm("指定のバッファ、又は効果音ファイルは再生されていません。");
+		return 0;	//	スキップ時に呼び出されてもこうなる。
+	}
+
+	mp.buf	= buf;
+	tagHandlers.fadeseorg(mp);
+
+	if(mp.waitfade)
+		return tagHandlers.wf(%[buf:buf,canskip:mp.canskip]);
+	else
+		return 0;
+} incontextof kag;
+
+//	途中でwaitをはさんでいるコマンドは、正しく処理できないかも…
+//	→ macro.ksで記述
+//	→ conductor.pendingsを使えば実現可能。しかし、それならマクロのが早い
+@if(0)
+/*FUNC-------------------------------------------------------------------------/
+/	部屋移動・通常
+/	in	: storage	移動先の画像ファイル名
+/		: time		画像のトランジション時間(default:1000)
+/		: waittime	途中の待ち時間(default:1000)
+/-----------------------------------------------------------------------------*/
+kt.i2i	= function(mp)
+{
+	mp.time		= 1000 if mp.time===void;
+	mp.waittime	= 1000 if mp.waittime===void;
+	with(tagHandlers)
+	{
+		//	一度真っ黒
+		.blackout(%[time:no.time, rule:"シャッター左から", vague:128]);
+		//	ちょっと待って
+		.wait(%[time:mp.waittime]);
+		//	移動先へ
+		mp.rule	= "シャッター左から";
+		mp.vague= 128;
+		.bg(mp);
+	}
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	部屋移動・高速
+/	in	: storage	移動先の画像ファイル名
+/-----------------------------------------------------------------------------*/
+kt.i2i_fast	= function(mp)
+{
+	mp.time		= 400;
+	mp.waittime	= 600;
+	tagHandlers.i2i(mp);
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	建物から外へ(逆も)の移動・通常
+/	in	: storage	移動先の画像ファイル名
+/		: time		画像のトランジション時間(default:1000)
+/		: waittime	途中の待ち時間(default:1000)
+/-----------------------------------------------------------------------------*/
+kt.i2o	= function(mp)
+{
+	mp.time		= 1000 if mp.time===void;
+	mp.waittime	= 1000 if mp.waittime===void;
+	with(tagHandlers)
+	{
+		.blackout(%[time:mp.time, rule:"カーテン左から", vague:128]);
+		.wait(%[time:mp.waittime]);
+		mp.rule	= "カーテン左から";
+		mp.vague= 128;
+		.bg(mp);
+	}
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	建物から外へ(逆も)の移動・高速
+/	in	: storage	移動先の画像ファイル名
+/-----------------------------------------------------------------------------*/
+kt.i2o_fast	= function(mp)
+{
+	mp.time	= 800;
+	mp.waittime	= 600;
+	tagHandler.i2o(mp);
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	区域から区域の移動
+/	in	: storage	移動先の画像ファイル名
+/		: time		画像のトランジション時間(default:1000)
+/		: waittime	途中の待ち時間(default:1000)
+/-----------------------------------------------------------------------------*/
+kt.a2a	= function(mp)
+{
+	mp.time		= 1000 if mp.time===void;
+	mp.waittime	= 1500 if mp.waittime===void;
+	with(tagHandlers)
+	{
+		.blackout(%[time:mp.time, rule:"シャッター下から", vague:128]);
+		.wait(%[time:mp.waittime]);
+		mp.rule	= "シャッター左から";
+		mp.vague= 128;
+		.bg(mp);
+	}
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	区域から区域の移動・高速
+/	in	: storage	移動先の画像ファイル名
+/-----------------------------------------------------------------------------*/
+kt.a2a_fast	= function(mp)
+{
+	mp.time		= 800;
+	mp.waittime	= 1300;
+	tagHandlers.a2a(mp);
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	時間経過の再表示
+/		現在表示しているものをもう一度表示する
+/-----------------------------------------------------------------------------*/
+kt.pasttime	= function(mp)
+{
+	mp.time		= 800;
+	mp.waittime	= 1000;
+	with(tagHandlers)
+	{
+		mp.storage	= fore.base.storage;	//	現在表示中の画像
+		.blackout(%[time:mp.time, method:"crossfade", vague:128]);
+		.wait(%[time:mp.waittime]);
+		mp.rule	= "シャッター下から";
+		mp.vague= 128;
+		.bg(mp);
+	}
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	時間経過の再表示・長め
+/-----------------------------------------------------------------------------*/
+kt.pasttime_long	= function(mp)
+{
+	mp.time	= 1200;
+	mp.waittime	= 1700;
+	tagHandlers.pasttime(mp);
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	場面転換の再表示
+/-----------------------------------------------------------------------------*/
+kt.turnaround	= function(mp)
+{
+	mp.time		= 700;
+	mp.waittime	= 700;
+	with(tagHandlers)
+	{
+		mp.storage	= fore.base.storage;	//	現在表示中の画像
+		.blackout(%[time:mp.time, rule:"シャッター下から", vague:128]);
+		.wait(%[time:mp.waittime]);
+		mp.rule	= "シャッター下から";
+		mp.vague= 128;
+		.bg(mp);
+	}
+} incontextof kag;
+@endif
+
+/*FUNC-------------------------------------------------------------------------/
+/	連結された文字画像の利用
+/	in	: basename	使う画像ファイル名のベース(<basename><サイズ>-<長さ>.png)
+/		: len		長さ
+/-----------------------------------------------------------------------------*/
+kt.conngraph	= function(mp)
+{
+	var text	= "";
+	if(mp.char == "")
+		throw new Exception("conngraph: 履歴に使用する文字が指定されていません。");
+	if(mp.basename == "")
+		throw new Exception("conngraph: 連結文字画像のベース名が指定されていません。");
+	for(var i=0; i<mp.len; i++)
+		text	+= string mp.char;
+	mp.char		= true;	//	文字の表示と同様にする。
+	mp.storage	= mp.basename+int(current.fontSize)+"-"+mp.len;
+	if(kag.current.defaultEdge || isExistentImage(mp.storage))
+	{
+		mp.alt	= text;
+		return tagHandlers.graph(mp);
+	}
+	else
+	{
+		mp.text	= text;
+		return tagHandlers.ch(mp);
+	}
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	棒線
+/	in	: len	長さ
+/-----------------------------------------------------------------------------*/
+kt.line	= function(mp)
+{
+	mp.char		= "―";
+	mp.basename	= "line";
+	return tagHandlers.conngraph(mp);
+} incontextof kag;
+{
+	//	旧マクロの定義
+	var	macros = kag.mainConductor.macros;
+	var	alt="";
+	for(var i=1; i<=28; i++)
+	{
+		alt	+= "─";
+		macros["line"+i] = "[line len="+i+"]";
+	}
+}
+
+/*FUNC-------------------------------------------------------------------------/
+/	黒く塗りつぶされた四角(バーサーカーの咆え声)
+/	in	: len	長さ
+/-----------------------------------------------------------------------------*/
+kt.wacky	= function(mp)
+{
+	mp.char		= "■";
+	mp.basename	= "wacky";
+	return tagHandlers.conngraph(mp);
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	四角マクロ
+/	in	: len	長さ
+/-----------------------------------------------------------------------------*/
+kt.block	= function(mp)
+{
+	mp.char		= "■";
+	mp.basename	= "block";
+	return tagHandlers.conngraph(mp);
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	その場でラスタースクロール(横揺れ)
+/-----------------------------------------------------------------------------*/
+kt.wave	= function(mp)
+{
+	with(tagHandlers)
+	{
+		.backlay(%[]);
+		mp.method	= wave;
+		return .transex(mp);
+	}
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	フォントサイズを2倍角(縦横それぞれ2倍)にする
+/-----------------------------------------------------------------------------*/
+kt.quad	= function(mp)
+{
+	mp.rate	= 2 if mp.rate===void;
+	mp.size	= int current.defaultFontSize * mp.rate;
+	return tagHandlers.font(mp);
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	フォントサイズを3/2倍角(縦横それぞれ3/2倍)にする
+/-----------------------------------------------------------------------------*/
+kt.large	= function(mp)
+{
+	return tagHandlers.quad(%[rate:3/2]);
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	フォントサイズを2/3倍角(縦横それぞれ2/3倍)にする
+/-----------------------------------------------------------------------------*/
+kt.small	= function(mp)
+{
+	return tagHandlers.quad(%[rate:2/3]);
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	フォントサイズを1/2倍角(縦横それぞれ1/2倍)にする
+/-----------------------------------------------------------------------------*/
+kt.mini	= function(mp)
+{
+	return tagHandlers.quad(%[rate:1/2]);
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	元に戻す
+/-----------------------------------------------------------------------------*/
+kt.rf	= kt.resetfont;
+
+/*FUNC-------------------------------------------------------------------------/
+/	任意の画像を半透明で重ね合わせる(スーパーポーズ)
+/	in	: storage	画像ファイル名
+/		: opacity	不透明度(default:128)
+/-----------------------------------------------------------------------------*/
+kt.superpose	= function(mp)
+{
+	var num;
+	if(.f.superposeLayerNo === void)
+		.f.superposeLayerNo	= getFreeLayer();
+
+	with(mp)
+	{
+		.layer		= string .f.superposeLayerNo;
+		.page		= "back";
+		.opacity	= 128 if mp.opacity === void;
+		.absolute	= 99998;
+		.visible	= true;
+	}
+	return tagHandlers.imageex(mp);
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	スーパーポーズを解除
+/-----------------------------------------------------------------------------*/
+kt.superpose_off	= function(mp)
+{
+	if(.f.superposeLayerNo === void)
+		return 0;
+	var no = .f.superposeLayerNo;
+
+	with(mp)
+	{
+		.layer	= string(no);
+		.page		= "back";
+	}
+	.f.superposeLayerNo	= void;
+	return tagHandlers.freeimage(mp);
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	スクリーンサイズの変更
+/	in	: type	解像度(vga, VGA, svga, SVGA)
+/-----------------------------------------------------------------------------*/
+kt.changeScreenSize	= function(mp)
+{
+	var screensize = %[
+		'vga'	=> [640, 480],
+		'VGA'	=> [640, 480],
+		'svga'	=> [800, 600],
+		'SVGA'	=> [800, 600]
+	];
+	var size = screensize[mp.type];
+	if(size === void)
+		return 0;	//	登録されていないサイズへは変更できない
+	if(scWidth == size[0] && scHeight == size[1])
+		return 0;	//	既に指定のサイズであれば、特に何もする必要はない
+
+	var curfullscreen	= false;
+	curfullscreen <-> fullScreen;	//	フルスクリーン状態を解除
+	setInnerSize(size[0], size[1]);	//	ウィンドウのクライアントサイズを変更
+	curfullscreen <-> fullScreen;	//	フルスクリーン状態を復帰
+	return 0;
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	ムービーを再生する
+/-----------------------------------------------------------------------------*/
+kt.playmovie	= function(mp)
+{
+	if(mp.storage == "")
+		return 0;
+	with(tagHandlers)
+	{
+//		.changeScreenSize(%[type:"VGA"]);
+		isPossibleChangeScreen	= false;
+//		.video(%[left:0, top:0, width:640, height:480, visible:true]);
+		.video(%[left:0, top:0, width:800, height:600, visible:true]);
+		.openvideo(mp);
+		.playvideo(%[]);
+		isPossibleChangeScreen	= true;
+//		.changeScreenSize(%[type:"SVGA"]);
+	}
+	.tf.playedMovie	= %[] if .tf.playedMovie == void;
+	.tf.playedMovie[mp.storage]	= true;
+	return tagHandlers.wv(mp);
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	フォントの書体を変更する
+/-----------------------------------------------------------------------------*/
+kt.chgfont	= function(mp)
+{
+	var msgs = [ fore.messages, back.messages ];
+	for(var i=0; i<msgs.count; i++)
+	{
+		for(var j=0; j<msgs[i].count; j++)
+		{
+			with(msgs[i][j])
+			{
+				.setDefaultFont(mp);
+				.resetFont();
+			}
+		}
+	}
+	return 0;
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	テキストウィンドウのみの変更
+/	in	: frame	フレーム
+/-----------------------------------------------------------------------------*/
+kt.settextwindow	= function(mp)
+{
+	f.frameGraphic	= mp.frame;
+	var messages	= [ fore.messages, back.messages ];
+	for(var i=0; i<messages.count; i++)
+	{
+		for(var j=0; j<messages[i].count; j++)
+		{
+			//	"(通常)"という文字がテキストウィンドウ名に入っていれば、変更可能
+//			if(messages[i][j].frameGraphic.indexOf("(") >= 0)
+				messages[i][j].setPosition(mp);
+		}
+	}
+	return 0;
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	昼間モードにする
+/-----------------------------------------------------------------------------*/
+kt.setdaytime	= function(mp)
+{
+	tagHandlers.settextwindow(%[frame:"tw_昼パート(通常)"]);
+	return 0;
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	夜間モードにする
+/-----------------------------------------------------------------------------*/
+kt.setnighttime	= function(mp)
+{
+	tagHandlers.settextwindow(%[frame:"tw_夜パート(通常)"]);
+	return 0;
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	プールモードにする
+/-----------------------------------------------------------------------------*/
+kt.setpooltime	= function(mp)
+{
+	tagHandlers.settextwindow(%[frame:"tw_プール(通常)"]);
+	return 0;
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	昼用の暗めのテキスト背景にする
+/-----------------------------------------------------------------------------*/
+kt.setdeepdaytime	= kt.setdaytime;	//	setdaytimeと同じに変更
+
+/*FUNC-------------------------------------------------------------------------/
+/	Hシーン用のテキスト背景にする
+/-----------------------------------------------------------------------------*/
+kt.sethscene		= function(mp)
+{
+	tagHandlers.settextwindow(%[frame:"tw_Hシーン(通常)"]);
+	return 0;
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	テキストウィンドウのフレームをなくす
+/-----------------------------------------------------------------------------*/
+kt.invisibleframe	= function(mp)
+{
+	if(f.lastFrameGraphic === void)
+	{
+		f.lastFrameGraphic	= kag.current.frameGraphic;	//	現在のフレームを記憶
+		f.lastFrameOpacity	= kag.current.frameOpacity;
+	}
+	tagHandlers.settextwindow(%[frame:"",opacity:0]);
+	return 0;
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	テキストウィンドウのフレームを元に戻す
+/-----------------------------------------------------------------------------*/
+kt.visibleframe	= function(mp)
+{
+	if(f.lastFrameGraphic !== void)
+		tagHandlers.settextwindow(%[frame:f.lastFrameGraphic,opacity:f.lastFrameOpacity]);
+	f.lastFrameGraphic	= f.lastFrameOpacity	= void;
+	return 0;
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	背景の表示サイズをもう一方の表示サイズにあわせる
+/	in	: page	ページ(def:back)
+/-----------------------------------------------------------------------------*/
+kt.normalizesize	= function(mp)
+{
+	var	page	= mp.page != void ? mp.page : "back";
+	var	other	= page == "back" ? "fore" : "back";
+	kag[page].base.setSize(kag[other].base.width, kag[other].base.height);
+	return 0;
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	背景の表示サイズを実際のサイズにする
+/	in	: page	ページ(def:fore)
+/-----------------------------------------------------------------------------*/
+kt.setsizetoimagesize	= function(mp)
+{
+	var	page	= mp.page != void ? mp.page : "fore";
+	kag[page].base.setSizeToImageSize();
+	return 0;
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	テキストモードの変更
+/	in	: textmode	モード名
+/-----------------------------------------------------------------------------*/
+kt.settextmode	= function(mp)
+{
+	var empty = %[];
+	if(.f.textmode == mp.textmode && mp.force == false)
+		return 0;	//	特に変更する必要はない
+
+	var setting = textSettings[mp.textmode];
+	if(setting == void)
+		return 0;	//	指定の設定は存在しない。
+
+	with(tagHandlers)
+	{
+		.laycount(%[messages:setting[0]]);	//	レイヤー数を変更
+		.stopquake(empty);
+		.stopshock(empty);
+	}
+	lastMessagePos	= void;
+	f.textmode2pg	= setting[1];
+	f.textmode2lr	= setting[2];
+	var msgs = [ fore.messages, back.messages ];
+	for(var i=0; i<msgs.count; i++)
+	{
+		for(var j=0; j<msgs[i].count; j++)
+		{
+			var offset = j * 3;
+			with(msgs[i][j])
+			{
+				var tmp	= %[];
+				(Dictionary.assign incontextof tmp)(setting[3 + offset]);
+				if(tmp.frame != "" && tmp.frame.indexOf("global") == 0)	//	フレーム画像名が"global"から始まっている場合、
+					tmp.frame	= tmp.frame!;							//	eval して、その内容をフレーム画像とする
+				.setPosition(tmp);
+				.setDefaultFont(setting[4+offset]);
+				.resetFont();
+				.setDefaultStyle(setting[5+offset]);
+				.resetStyle();
+				.visible	= false;
+			}
+		}
+	}
+	currentWithBack	= true;
+	.f.textmode	= mp.textmode;
+	tagHandlers.settextonoff(%[]);	//	テキストONOFFの設定を元に戻す
+	return tagHandlers.cm(empty);	//	モードの変更を有効にするため、メッセージをフラッシュする
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	標準のテキストモードにする
+/-----------------------------------------------------------------------------*/
+kt.resettextmode	= function(mp)
+{
+	tagHandlers.settextmode(%[textmode:"basic"]);
+	.f.notextonoff	= false;	//	指定が無い限り、立ち絵表示切替の時にメッセージレイヤーを隠す
+	return 0;
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	インタリュードモードにする
+/-----------------------------------------------------------------------------*/
+kt.interlude_start	= function(mp)
+{
+	tagHandlers.settextmode(%[textmode:"interlude"]);
+	.f.notextonoff	= false;	//	指定が無い限り、立ち絵表示切替の時にメッセージレイヤーを隠す
+	return 0;
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	インタリュードモードを解除
+/-----------------------------------------------------------------------------*/
+kt.interlude_end	= kt.resettextmode;
+
+/*FUNC-------------------------------------------------------------------------/
+/	ナイトモードにする
+/-----------------------------------------------------------------------------*/
+kt.night_start	= function(mp)
+{
+	tagHandlers.settextmode(%[textmode:"night"]);
+	.f.notextonoff	= false;	//	指定が無い限り、立ち絵表示切替の時にメッセージレイヤーを隠す
+	return 0;
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	ナイトモードを解除
+/-----------------------------------------------------------------------------*/
+kt.night_end	= kt.resettextmode;
+
+/*FUNC-------------------------------------------------------------------------/
+/	ウィンドウモードにする
+/-----------------------------------------------------------------------------*/
+kt.window_start	= function(mp)
+{
+	tagHandlers.settextmode(%[textmode:"window"]);
+	.f.notextonoff	= true;	//	立ち絵表示切替では、メッセージレイヤーを隠さない
+
+	//	MessageLayer.clear2(自動改ページ後の消去)の変更
+	f.afterAutoFormFeed	= "drawSpeaker";
+	f.currentSpeaker = f.nextSpeaker = f.resetSpeaker = void;
+
+	return 0;
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	ウィンドウモードを解除
+/-----------------------------------------------------------------------------*/
+kt.window_end	= function(mp)
+{
+	current.frameGraphic	= .f.frameGraphic;	//	ウィンドウ画像を元に戻す
+	with(tagHandlers)
+	{
+		.settextmode(%[textmode:"basic"]);	//	テキストモードをリセット
+		.deffont(%[face:"user"]);			//	フォントをユーザー選択のものに
+		.resetfont(%[]);
+	}
+	f.notextonoff	= false;	//	指定が無い限り、立ち絵表示切替の時にメッセージレイヤーを隠す
+	f.afterAutoFormFeed	= void;
+	f.currentSpeaker = f.resetSpeaker = f.nextSpeaker	= void;
+	return 0;
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	発言
+/	in	: name	発言者名(指定がなければ、名前表示OFF)
+/-----------------------------------------------------------------------------*/
+kt.say	= function(mp)
+{
+	//	windowモードでなければ、
+	if(f.textmode != "window")
+		return 0;	//	何もしない
+//		tagHandlers.window_start(%[]);	//	変更する
+
+	f.nextSpeaker	= mp.name;
+	f.resetSpeaker	= true;
+	return 0;//tagHandlers.pg(%[]);
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	ウィンドウモード用のpg
+/-----------------------------------------------------------------------------*/
+kt.windowmode_pg	= function(mp)
+{
+	//	発言者が設定されていたら、消去後に発言者名を描画
+	mp.tagname	= "er4windowmode";
+	conductor.pendings.insert(0, mp);
+	return tagHandlers.p(%[]);
+} incontextof kag;
+
+//	er処理後に発言者名を描画
+kt.er4windowmode	= function(mp)
+{
+	tagHandlers.er(%[]);	//	メッセージレイヤークリア
+	f.resetSpeaker	= true;	//	発言者が消去されてしまったことを示す
+	return 0;
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	ウィンドウモード用のlr
+/-----------------------------------------------------------------------------*/
+kt.windowmode_lr	= function(mp)
+{
+	//	クリック待ち無しで、改行のみ行う
+	return tagHandlers.r(%[]);
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	タイガー道場劇場版用のpg
+/-----------------------------------------------------------------------------*/
+kt.themovie_pg	= function(mp)
+{
+	mp.tagname	= "er";
+	conductor.pendings.insert(0, mp);
+
+	return tagHandlers.p(%[]);
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	タイガー道場劇場版モード
+/-----------------------------------------------------------------------------*/
+kt.themovie_start	= function(mp)
+{
+	if(textSettings["themovie"] == void)
+	{
+		textSettings["themovie"]	= [
+			2,
+			"themovie_pg",		//	[pg] = [p][er]
+			"windowmode_lr",	//	[lr] = [r]
+			%[left:25,top:10,marginl:57,margint:30,marginr:57,marginb:21,frame:"tw_劇場版"],
+			fontSettings.window,
+			%[linespacing:13],
+			%[left:25,top:389,marginl:57,margint:30,marginr:57,marginb:21,frame:"tw_劇場版"],
+			fontSettings.window,
+			%[linespacing:13],
+		];
+	}
+	tagHandlers.settextmode(%[textmode:"themovie"]);
+	.f.notextonoff	= true;
+	return 0;
+} incontextof kag;
+kt.themovie_end	= kt.window_end;
+
+/*FUNC-------------------------------------------------------------------------/
+/	タイガー道場モード(メッセージウィンドウ表示)にする
+/-----------------------------------------------------------------------------*/
+kt.tiger_start	= function(mp)
+{
+	tagHandlers.settextmode(%[textmode:"tiger"]);
+	.f.notextonoff	= true;	//	立ち絵表示切替の時にメッセージレイヤーを隠さない
+	return 0;
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	タイガー道場モードを解除
+/	in	: no	タイガー道場No.
+/-----------------------------------------------------------------------------*/
+kt.tiger_end	= function(mp)
+{
+	tagHandlers.window_end(%[]);	//	ウィンドウモードと同じ終了処理
+	sf["gタイガー道場"+(+mp.no)]++ if mp.no !== void;	//	タイガー道場閲覧フラグON
+	return 0;
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	遠坂神社モード(メッセージウィンドウ表示)にする
+/-----------------------------------------------------------------------------*/
+kt.jinja_start	= function(mp)
+{
+	tagHandlers.settextmode(%[textmode:"jinja"]);
+	.f.notextonoff	= true;	//	立ち絵表示切替の時にメッセージレイヤーを隠さない
+	return 0;
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	遠坂神社モードを解除
+/-----------------------------------------------------------------------------*/
+kt.jinja_end	= function(mp)
+{
+	tagHandlers.window_end(%[]);	//	ウィンドウモードと同じ終了処理
+	return 0;
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	タイガー道場内のキャラクター発言
+/	in	: chara		キャラクター名
+/-----------------------------------------------------------------------------*/
+kt.talk	= function(mp)
+{
+	if(mp.chara == void)
+		return 0;
+
+	var head	= %[
+		tiger:"tw_",
+		jinja:"twj_"
+	];
+	var elm = %[frame:head[.f.textmode]+mp.chara];
+	with(tagHandlers)
+	{
+		elm.page	= "fore";
+		.position(elm);
+		elm.page	= "back";
+		.position(elm);
+		.ct(elm);
+	}
+	return 0;
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	藤ねえのしゃべり
+/-----------------------------------------------------------------------------*/
+kt.talktaiga	= function(mp)
+{
+	return tagHandlers.talk(%[chara:"タイガ"]);
+} incontextof kag;
+kt.talktiger	= kt.talktaiga;
+
+/*FUNC-------------------------------------------------------------------------/
+/	イリヤのしゃべり
+/-----------------------------------------------------------------------------*/
+kt.talkiria	= function(mp)
+{
+	return tagHandlers.talk(%[chara:"イリヤ"]);
+} incontextof kag;
+kt.talkiriya	= kt.talkiria;
+
+/*FUNC-------------------------------------------------------------------------/
+/	リズのしゃべり
+/-----------------------------------------------------------------------------*/
+kt.talkRizz	= function(mp)
+{
+	return tagHandlers.talk(%[chara:"リズ"]);
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	？？？のしゃべり
+/-----------------------------------------------------------------------------*/
+kt.talkUnknown	= function(mp)
+{
+	return tagHandlers.talk(%[chara:"？？？"]);
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	凛のしゃべり
+/-----------------------------------------------------------------------------*/
+kt.talkRin	= function(mp)
+{
+	return tagHandlers.talk(%[chara:"リン"]);
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	由紀香のしゃべり
+/-----------------------------------------------------------------------------*/
+kt.talkYukika	= function(mp)
+{
+	return tagHandlers.talk(%[chara:"ユキカ"]);
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	2つメッセージレイヤーを持っている場合の、メッセージレイヤー切替
+/-----------------------------------------------------------------------------*/
+kt.uvoice	= function(mp)
+{
+	tagHandlers.uvc(mp);
+	fore.messages[1].opacity	= 128;	//	他方のメッセージを半透明にする
+	return tagHandlers.er(%[]);
+} incontextof kag;
+kt.lvoice	= function(mp)
+{
+	tagHandlers.lvc(mp);
+	fore.messages[0].opacity	= 128;	//	他方のメッセージを半透明にする
+	return tagHandlers.er(%[]);
+} incontextof kag;
+
+//	メッセージを消去せずに切替
+kt.uvc	= function(mp)
+{
+	setCurrentMessageLayer(%[page:"fore",layer:"message0"]);
+	return 0;
+} incontextof kag;
+kt.lvc	= function(mp)
+{
+	setCurrentMessageLayer(%[page:"fore",layer:"message1"]);
+	return 0;
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	インタリュード開始の扉表示
+/	in	: route		セイバー、凛、桜
+/		: scene		シーン番号など
+/	memo: 表示前にテキストを消去するが、終わった後はテキストを表示しない
+/-----------------------------------------------------------------------------*/
+kt.interlude_in	= function(mp)
+{
+	mp.storage	= "インタリュード"+(mp.scene.length<4 ? "0" : "")+mp.scene;
+	mp.storage	+= "("+mp.route+")" if mp.route != "";
+	mp.time		= defaultBGTransTime if mp.time === void;
+	mp.rule		= "シャッター左から" if mp.rule === void;
+	mp.vague	= defaultVaguePoint;
+	tagHandlers.fadein(mp);
+	return tagHandlers.wait(%[time:2000,canskip:true]);
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	インタリュード終了の扉表示
+/-----------------------------------------------------------------------------*/
+kt.interlude_out	= function(mp)
+{
+	mp.storage	= "インタリュードアウト";
+	mp.time		= defaultBGTransTime if mp.time === void;
+	mp.rule		= "シャッター左から" if mp.rule === void;
+	mp.vague	= defaultVaguePoint;
+	return tagHandlers.fadein(mp);
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	デモモードへの切り替え
+/	in	: speed		文字表示速度("nowait"またはウェイトの値[ms単位])
+/-----------------------------------------------------------------------------*/
+kt.demomode	= function(mp)
+{
+	//	クリックを無視する
+	with(tagHandlers)
+	{
+		.l_org	= .l;
+		.l		= function(elm) { return 0; } incontextof .kag;
+		.p_org	= .p;
+		.p		= function(elm) { return 0; } incontextof .kag;
+		.delay(mp);
+	}
+	return 0;
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	デモモードの解除
+/-----------------------------------------------------------------------------*/
+kt.demomode_off	= function(mp)
+{
+	with(tagHandlers)
+	{
+		.l	= .l_org;
+		.p	= .p_org;
+		.delay(%[speed:"user"]);
+	}
+	return 0;
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	エフェクトスキップを無効にする
+/-----------------------------------------------------------------------------*/
+kt.canceleffectskip	= function(mp)
+{
+	.sf.effectSkip	= false;
+	return 0;
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	テキスト履歴を消去する
+/-----------------------------------------------------------------------------*/
+kt.clearhistory	= function(mp)
+{
+	historyLayer.clear();
+	return 0;
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	指定の画像を既表示とし、ギャラリーへ登録する
+/	in	: storage	画像ファイル名
+/-----------------------------------------------------------------------------*/
+kt.displayedon	= function(mp)
+{
+	if(mp.storage != void)
+	{
+		.tf.displayedPictures	= %[] if .tf.displayedPictures == void;
+		.tf.displayedPictures[mp.storage.toLowerCase()]++;
+	}
+	return 0;
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	表示された画像をギャラリーに登録しない
+/	in	: storage	画像ファイル名
+/-----------------------------------------------------------------------------*/
+kt.displayedoff	= function(mp)
+{
+	if(mp.storage != void)
+	{
+		.tf.displayedPictures	= %[] if .tf.displayedPictures == void;
+		var	storage	= mp.storage.toLowerCase();
+		if(storage != "" && .tf.displayedPictures[storage] < 2)
+			.tf.displayedPictures[storage] = 0;
+	}
+	return 0;
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	指定のBGMを既聴とする
+/	in	: storage	BGMファイル名
+/-----------------------------------------------------------------------------*/
+kt.playedbgm	= function(mp)
+{
+	if(mp.storage != void)
+	{
+		.tf.playedMusic	= %[] if .tf.playedMusic == void;
+		.tf.playedMusic[mp.storage]++;
+	}
+	return 0;
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	ルートフラグをON
+/	in	: route		セイバー、凛、桜
+/-----------------------------------------------------------------------------*/
+kt.selectroute	= function(mp)
+{
+	.f.route	= mp.route;
+	return 0;
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	指定の画像のレイヤー番号を取得
+/	in	: storage	前景画像名
+/		: page		fore, back
+/	out	: no		レイヤー番号が入る(&noで指定する)
+/	memo: 見つからないときは例外
+/-----------------------------------------------------------------------------*/
+kt.find	= function(mp)
+{
+	if(mp.storage == "")
+		throw new Exception("ストレージ名が指定されていません。");
+	var no = getLayerNoByStorage(mp, mp.page);
+	if(no === void)
+		throw new Exception(@"\"${mp.storage}\"は見つかりませんでした。");
+	global.no	= no;
+	return 0;
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	問い合わせ
+/	in	: msg		表示するメッセージ
+/		: yes		「はい」を選んだときの移動先ラベル
+/		: yes_storage　　　　　〃　　　　の移動先シナリオファイル(指定がなければ同一シナリオファイル内)
+/		: no		「いいえ」を選んだときの移動先ラベル
+/		: no_storage　　　　　〃　　　　の移動先シナリオファイル(指定がなければ同一シナリオファイル内)
+/		: default	初期状態をYESにするか(default:true)
+/-----------------------------------------------------------------------------*/
+kt.confirm	= function(mp)
+{
+	var jumpfunc	= function(result, yeselm, noelm)
+	{
+		if(result)
+			kag.process(yeselm.storage, yeselm.label);
+		else
+			kag.process(noelm.storage, noelm.label);
+	} incontextof kag;
+	var def	= mp["default"] !== void ? !mp["default"] : false;
+	if(MYaskYesNo(kag, fore.base, mp.msg, jumpfunc, %[label:mp.yes,storage:mp.yes_storage], %[label:mp.no,storage:mp.no_storage], def))
+		return tagHandlers.s();
+	else
+		return 0;
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	指定のページをマージして、指定のレイヤーへコピーする
+/	in	: page	マージするページ
+/		: layer	コピー先レイヤー
+/-----------------------------------------------------------------------------*/
+kt.mergescreen	= function(mp)
+{
+	var page	= mp.page !== void ? mp.page : "fore";
+	var layer	= mp.layer !== void ? mp.layer : "base";
+	mergeScreen(page, false, layer);
+	return 0;
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	TagEditorで[lr]タグを挿入させない為のタグ
+/	※	TagEditor上では、このタグの有る行の行末には[lr]を付加しない
+/		実行時には何もしない
+/-----------------------------------------------------------------------------*/
+kt.nolr	= function(mp)
+{
+	return 0;
+} incontextof kag;
+
+kt.br	= kt.r;	//	[br]は[r]
+
+/*FUNC-------------------------------------------------------------------------/
+/	既読シーン登録
+/	in	: name	シーン名(シーン一覧.txtの3番目の項目/1番目は日付,2番目は場所)
+/-----------------------------------------------------------------------------*/
+/*	//	既読シーンの数え方が変わったのでpending
+kt.readscene	= function(mp)
+{
+	if(mp.name)
+	{
+		global.sf.sceneCount[CurrentTicketNo] = %[] if global.sf.sceneCount[CurrentTicketNo] == void;
+		global.sf.sceneCount[CurrentTicketNo][mp.name]++;
+	}
+	else
+		throw new Exception("[readscene]タグでシーン名が指定されていません。");
+	return 0;
+} incontextof kag;
+*/
+
+/*FUNC-------------------------------------------------------------------------/
+/	レイヤーを揺らす
+/-----------------------------------------------------------------------------*/
+kt.lquake	= function(mp)
+{
+	with(mp)
+	{
+		.time	= -1 if .time === void;
+		.page	= "fore" if .page === void;	//	指定がないときは"fore"
+		if(.layer === void)
+		{
+			if(.storage != void)
+			{
+				.layer	= getLayerNoByStorage(mp, .page);
+				if(.layer === void)
+				{
+					.page	= .page != "back" ? "back" : "fore";
+					.layer	= getLayerNoByStorage(mp, .page);
+				}
+			}
+			else
+				throw new Exception("レイヤー番号かストレージ名のいずれかを必ず指定する必要があります。");
+		}
+		var tmp;
+		if(kag[.page].layers[+.layer].isQuaking ||	//	指定のレイヤーが揺れているか
+			((tmp = kag[.page == "fore" ? "back" : "fore"].layers[+.layer]).isQuaking && tmp.quakeObject.withback))	//	裏のレイヤーが揺れていて、表に対しても影響をあたえているなら
+			return 0;	//	揺らさない
+
+		kag[.page].layers[+.layer].beginQuake(mp);
+		if(.wait != void && .time > 0)
+			return tagHandlers.wlquake(mp);
+		else
+			return 0;
+	}
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	「レイヤーを揺らす」の終了を待つ
+/-----------------------------------------------------------------------------*/
+kt.wlquake	= function(mp)
+{
+	with(mp)
+	{
+		.page	= "fore" if .page === void;	//	指定がないときは"fore"
+		if(.layer === void)
+		{
+			if(.storage != void)
+			{
+				.layer	= getLayerNoByStorage(mp, .page);
+				if(.layer === void)
+				{
+					.page	= .page != "back" ? "back" : "fore";
+					.layer	= getLayerNoByStorage(mp, .page);
+				}
+			}
+			else
+				throw new Exception("レイヤー番号かストレージ名のいずれかを必ず指定する必要があります。");
+		}
+		return waitLayerQuake(mp);
+	}
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	「レイヤーを揺らす」を止める
+/	in	: layer		止めるレイヤー(allまたは、layer,storageともvoidなら全て停止)
+/		: storage	止める画像
+/-----------------------------------------------------------------------------*/
+kt.stoplquake	= function(mp)
+{
+	with(mp)
+	{
+		.page	= "fore" if .page === void;	//	指定がないときは"fore"
+		if(.layer == "all")
+			.layer	= .storage	= void;	//	void, void で全てを停止
+		if(.layer === void)
+		{
+			if(.storage != void)
+			{
+				.layer	= getLayerNoByStorage(mp, .page);
+				if(.layer === void)
+				{
+					.page	= .page != "back" ? "back" : "fore";
+					.layer	= getLayerNoByStorage(mp, .page);
+				}
+			}
+			else
+			{
+				//	レイヤーが見つからなかったら、全てを停止
+				var fr = kag.fore.layers, bk = kag.back.layers;
+				for(var i=(int)Math.max(fr.count, bk.count)-1; i>=0; i--)
+				{
+					fr[i].stopQuake() if fr[i];
+					bk[i].stopQuake() if bk[i];
+				}
+				return 0;
+			}
+		}
+		var	layer	= kag[.page].layers[+.layer];
+		if(layer.isQuaking)
+			layer.stopQuake();
+		else
+		{//	逆のページで揺れてるかも
+			.page	= .page != "fore" ? "back" : "fore";
+			layer	= kag[.page].layers[+.layer];
+			if(layer.isQuaking)
+				layer.stopQuake();
+		}
+		return 0;
+	}
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	前景レイヤーへテキストを描画する
+/	in	: id		識別番号(default:0)
+/		: page		書き出すページ(default:fore)
+/		: layer		書き出す前景レイヤー(指定がなければ、空いているレイヤーを得る)
+/		: text		描画するテキスト(<br>があれば、そこで改行する)
+/		: opacity	レイヤー不透明度(default:0)
+/	memo: レイヤーを検索するときは、"textdrawed-<id>"というファイル名で検索すると見つかる
+/-----------------------------------------------------------------------------*/
+kt.drawtext	= function(mp)
+{
+	var	page= mp.page!==void ? mp.page : "fore";
+	var	msg	= getLayerFromElm(%[page:page, layer:"message"]);	//	指定のページのアクティブなメッセージレイヤ
+	var	id	= +mp.id;
+	msg.addOverlay(id, mp.text, +mp.opacity);
+//	if(currentWithBack)
+	{
+		if(msg.comp.overlays[id] == void)
+			msg.comp.overlays[id]	= new MessageOverlayLayer(this, msg.comp);
+		msg.comp.overlays[id].assignImages(msg.overlays[id], true);
+	}
+	return 0;
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	テキストオーバーレイレイヤーを移動させる
+/	in	: id		識別番号(default:0)
+/		: page		書き出すページ(default:fore)
+/		: time		時間
+/		: accel		加速度
+/		: path		パス
+/		: spline	スプライン補間を行うか
+/-----------------------------------------------------------------------------*/
+kt.movetext	= function(mp)
+{
+	var	page= mp.page!==void ? mp.page : "fore";
+	var	msg	= getLayerFromElm(%[page:page, layer:"message"]);	//	指定のページのアクティブなメッセージレイヤ
+	msg.beginMoveOverlay(+mp.id, mp);
+//	if(currentWithBack)
+		msg.comp.beginMoveOverlay(+mp.id, mp);
+	return 0;
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	テキストオーバーレイレイヤーを破棄する
+/	in	: id		識別番号(default:0)
+/		: page		書き出すページ(default:fore)
+/	※	メッセージ消去と共に削除されるので、気にしなくても良い
+/-----------------------------------------------------------------------------*/
+kt.removetext	= function(mp)
+{
+	var	page= mp.page!==void ? mp.page : "fore";
+	var	msg	= getLayerFromElm(%[page:page, layer:"message"]);	//	指定のページのアクティブなメッセージレイヤ
+	msg.removeOverlay(+mp.id);
+//	if(currentWithBack)
+		msg.comp.removeOverlay(+mp.id);
+	return 0;
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	お金を得る
+/	in	: value	増える金額
+/-----------------------------------------------------------------------------*/
+kt.getmoney	= function(mp)
+{
+	tf.pocketMoney	+= mp.value;
+	return 0;
+} incontextof kag;
+
+/*FUNC-------------------------------------------------------------------------/
+/	レイヤーが各エフェクトの影響を受けないようにする
+/	in	: layer	
+/		: lv2	Level2効果(グレースケールや赤、ネガなど)に影響を受けるか
+/		: blur	ぼかしの影響を受けるか
+/-----------------------------------------------------------------------------*/
+/*kt.unaffect	= function(mp)
+{
+	with(mp)
+	{
+	}
+	return 0;
+} incontextof kag;
+*/
+/*FUNC-------------------------------------------------------------------------/
+/	
+/-----------------------------------------------------------------------------*/
+/*kt.	= function(mp)
+{
+	with(mp)
+	{
+	}
+	return 0;
+} incontextof kag;
+*/
+/*----------------------------------------------------------------------------/
+/	その他サブルーチン
+/----------------------------------------------------------------------------*/
+//	テキストをoffにするか、設定をチェックする ---------------------------------
+//	※ トランジションする可能性があるときは、必ず入れる。
+function checkTextOff(mp)
+{
+	kag.tagHandlers.backlay(%[layer:"message"]);	//	メッセージレイヤーを裏面へ
+	if(sf.notextonoff || .f.notextonoff)	//	テキストを消去しない設定のとき
+	{
+		mp.textoff	= false;		//	切り替え前にテキスト消去しない
+	}
+}
+
+//	空きレイヤーを探す ----------------------------------------------------
+function getFreeLayer(page="back")
+{
+	var i, l = kag[page].layers;
+	for(i = 0; i<l.count; i++)
+	{
+		if(!l[i].visible)
+		{
+//			dm("free layer: "+i);
+			break;
+		}
+	}
+	if(i == l.count)
+		kag.allocateCharacterLayersWithoutOrder(l.count+1);	//	レイヤーを増やす(前後位置の並び替えはしない)
+	return string i;
+}
+
+//	指定の画像ファイルを読み込んでいる前景レイヤーを探す ----------------------
+function getLayerNoByStorage(mp, page="fore", repeatcnt=0)
+{
+	with(Storages)
+	{
+		var l		= kag[page].layers;
+		var storage	= .chopStorageExt(.extractStorageName(mp.storage));
+		for(var i = 0; i<l.count; i++)
+		{
+			if(.chopStorageExt(.extractStorageName(l[i].storage)) == storage)
+			{
+				dm("getLayerNoByStorage: "+storage+" = "+i);
+				return string i;
+			}
+		}
+		//	１週目なら、逆のページで再検索
+//		if(repeatcnt == 0)
+//			return getLayerNoByStorage(mp, page == "fore" ? "back" : "fore", 1);
+		dm("getLayerNoByStorage: "+storage+" = void");
+		return void;
+	}
+}
+
+//	レイヤーを探す ------------------------------------------------------------
+/*
+function detectLayer(mp)
+{
+	with(mp)
+	{
+		//	レイヤー指定アリ
+		if(.layer !== void)
+			.layer	= string global.f.lastLayerNo if .layer == "last";
+		//	レイヤー番号指定アリ
+		else if(.no !== void)
+			.layer	= string .no;
+		//	場所指定アリ
+		else if(.pos !== void)
+		{
+			var l = kag.fore.layers;
+			for(var i=0; i<l.count; i++)
+			{
+				if(l.Anim_loadParams.pos == .pos)
+				{
+					.layer	= string i;
+					break;
+				}
+			}
+		}
+		//	画像名指定アリ
+		else if(.storage !== void)
+			.layer	= getLayerNoByStorage(mp);
+	}
+}
+*/
+
+//-	同じキャラクターを読み込んでいるレイヤーの番号 ----------------------------
+function getSameCharacterLayerNo(name)
+{
+	var re = new RegExp("^([^0-9]+)");	//	先頭から半角数字以外の部分=キャラクター名
+	var res = re.exec(name);
+	invalidate re;
+	var layerno	= void;
+	if(res.count > 0)
+	{
+		var cn = res[1];	//	キャラクター名
+		var l = kag.fore.layers;
+		for(var i=0; i<l.count; i++)
+		{
+			//	キャラクター名を含む画像を読み込んでいるレイヤーを検索
+			if(l[i].storage != void && l[i].storage.indexOf(cn)==0)
+			{
+				if(layerno === void)
+					layerno	= string i;
+				else
+					throw new Exception("同じキャラクターが画面上に複数存在するため、レイヤーを特定できません。\n特定する為に必要な情報を指定してください。");
+			}
+		}
+	}
+	return layerno;
+}
+
+//-	発言者を描画 --------------------------------------------------------------
+function drawSpeaker(bgimage="wm_sub")
+{
+	with(kag)
+	{
+		var name	= f.nextSpeaker;
+		if(name == "")
+		{
+			.current.fillRect(0, 0, 231, 43, 0x00000000);
+			if(.currentWithBack)
+				.current.comp.fillRect(0, 0, 231, 43, 0x00000000);
+		}
+		else
+		{
+			var layer = new Layer(kag, .current);
+			layer.loadImages(bgimage);
+			layer.type	= ltAlpha;
+			var func = function(target, img, name)
+			{
+				with(target)
+				{
+					.face	= dfAuto;
+					.fillRect(0, 0, img.imageWidth, img.imageHeight, 0x00000000);
+					.operateRect(0, 0, img, 0, 0, img.imageWidth, img.imageHeight, omAlpha, kag.sflags.messageFrameOpacity);
+					.font.height	= .defaultFontSize;
+					var fw = .font.getTextWidth(name);
+					var w = .defaultFontSize * 8;
+					with(kag.current)
+					{
+						var	l = (w - fw)>>1, t = 7;
+						if(.edge)
+							target.drawText(l, t, name, .chColor, 255, .antialiased, .edgeEmphasis, .edgeColor, .edgeExtent, 0, 0);
+						else if(.shadow)
+							target.drawText(l, t, name, .chColor, 255, .antialiased, 255, .shadowColor, 0, 2, 2);
+						else
+							target.drawText(l, t, name, .chColor, 255, .antialiased);
+					}
+				}
+			};
+			func(.current, layer, name);
+			if(.currentWithBack)
+				func(.current.comp, layer, name);
+			invalidate layer;
+		}
+		f.currentSpeaker	= name;
+		f.resetSpeaker		= false;	//	発言者が設定されている
+	}
+}
+
+/*-----------------------------------------------------------------------------/
+/	T付きタグを登録
+/-----------------------------------------------------------------------------*/
+{
+	var tt	= tagsWithT;
+	var	macros = kag.mainConductor.macros;
+	for(var i=0; i<tt.count; i++)
+		macros[tt[i]+"t"] = "["+tt[i]+" *]";
+}
+
+/*-----------------------------------------------------------------------------/
+/	文字置換タグの登録
+/-----------------------------------------------------------------------------*/
+{
+	var ex = exCharTags;
+	var	macros = kag.mainConductor.macros;
+	for(var i=0; i<ex.count; i++)
+	{
+		var e = ex[i];
+		if(typeof e[1] == "Integer")
+		{
+			//	特殊文字
+			macros[e[0]]	= "[ch text=&($"+e[1]+")]";
+		}
+		else if(typeof e[1] == "String")
+		{
+			//	文字イメージ
+			macros[e[0]]	= "[graph storage=&('"+e[1]+"'+kag.current.fontSize) alt=\""+e[2]+"\"]";
+		}
+	}
+}
+kt.rf	= kt.resetfont;	//	resetfont -> rf(短縮形)
+
+/*-----------------------------------------------------------------------------/
+/	アナザーマップのフラグチェック
+/-----------------------------------------------------------------------------*/
+function checkAnotherFlag()
+{
+	var	anotherflag	= [
+		"セイバーH",
+		"凛H",
+		"桜H",
+		"桜&ライダーH",
+		"氷室探偵団"
+	];
+	if(anotherflag.count == 0)
+		return true;
+	for(var i=0; i<anotherflag.count; i++)
+	{
+		if(tf[anotherflag[i]] > 0)
+			return true;
+	}
+	return false;
+}
+
+/*-----------------------------------------------------------------------------/
+/	キー入力をフック
+/-----------------------------------------------------------------------------*/
+@if(DEBUG==1)
+{
+	var keyhook	= function(key, shift)
+	{
+		//	シーンサムネールファイルを作成
+		if(key == #'T')
+		{
+			var dir	= System.exePath+"data/image/scenethumbnail/";
+			dm("dir: "+dir);
+			var fnheader	= "rpt_";
+//			var fn_ext		= "tlg";
+			var	fn_ext		= "bmp";
+			var thumbsize	= %[width:128,height:96];
+
+			//	ファイル名の決定
+			var storage;
+			if(global.play_storage != "")
+				storage	= Storages.chopStorageExt(Storages.extractStorageName(global.play_storage))+"."+fn_ext;
+			else if(global.flow_tracker_object.scriptfile != "")
+				storage	= Storages.chopStorageExt(Storages.extractStorageName(global.flow_tracker_object.scriptfile))+"."+fn_ext;
+			else
+			{//	ダイアログを開く
+				var params	= %[filter:"シーンサムネール([フローチャート名]-[フローID名]."+fn_ext+")|*."+fn_ext, 
+					initialDir:dir, title:"シーンサムネールの保存", save:true, defaultExt:fn_ext, name:""];
+				if(!Storages.selectFile(params))
+				{
+					return false;
+				}
+				storage	= Storages.extractStorageName(params.name);
+			}
+			storage	= fnheader + storage;
+			if(Storages.isExistentStorage(storage))
+			{
+				if(!askYesNo("同じファイルがすでに存在します。上書きしてもよろしいですか？", "上書き確認"))
+					return false;
+			}
+
+			//	サムネールの作成と保存
+			var vis		= [];
+			var messages= kag.fore.messages;
+			for(var i=0; i<messages.count; i++)
+			{
+				vis[i]	= messages[i].visible;
+				messages[i].visible	= false;	//	テキストレイヤーを隠す
+			}
+			lockSnapshot();
+
+			var thumb	= new global.Layer(this, primaryLayer);
+			thumb.setImageSize(thumbsize.width, thumbsize.height);
+			thumb.setSizeToImageSize();
+			Plugins.link("resize.dll");
+			AreaAverageReducation(kag.snapshotLayer, thumb);	//	スクリーンショットを縮小化
+			Plugins.unlink("resize.dll");
+
+			unlockSnapshot();
+			for(var i=0; i<messages.count; i++)
+				messages[i].visible	= vis[i];	//	テキストレイヤーを元に戻す
+
+			System.doCompact(clDeactivate);
+			thumb.saveLayerImage(dir + storage, "bmp24");
+/*
+			Plugins.link("imagesaver.dll");
+			SaveAsTLG5(thumb, dir + storage);	//	TLG5形式で保存
+			invalidate thumb;
+			Plugins.unlink("imagesaver.dll");
+*/
+			popupMessage("シーンサムネール \""+storage+"\" を保存しました。");
+			return true;	//	処理終了
+		}
+		//	未読シーン一覧を出力
+		if(key == #'L')
+		{
+			var	scenes	= getSceneDictionary();
+			var	array	= [];
+			array.assign(scenes);
+			var	keys	= [];
+			for(var i=0; i<array.count; i+=2)
+				keys.add(array[i]) if array[i] != "";
+//			for(var i=0; i<keys.count; i++)
+//				dm(i+": "+keys[i]);
+			var	func	= function(a, b) { return strcmp(b, a); };	//	昇順に並べる
+			shellsort(keys, func);
+//			keys.sort(strcmp);
+			var	cnt	= 0;
+			for(var i=0; i<keys.count; i++)
+			{
+				var	key	= keys[i];
+				if(tf["trail_"+key] < 1)
+				{
+					dm("未読["+i+"]: \"trail_"+key+"\"「"+scenes[key]+"」");
+					cnt++;
+				}
+			}
+			dm("未読数: %d/%d (%4.1f)".sprintf(cnt, keys.count, cnt/keys.count*100));
+			invalidate array;
+			invalidate scenes;
+		}
+		if(key == #'I')
+		{//	状態の記録
+			var	str;
+			with(mainConductor)
+				str	= .curStorage+"("+.curLine+","+.curPos+")/"+.curLabel+"/"+f.scripttitle;//+": "+.curLineStr;
+			Plugins.link("util.dll");
+			dm("clipboard: "+str);
+			popupMessage("シーン: "+f.scripttitle);
+			global.SetClipboardText(str+"\n");
+			Plugins.unlink("util.dll");
+			return;
+		}
+
+		//	キー押下により、任意に例外を発生させる
+		if(key == VK_SCROLL)
+		{
+			throw new Exception("ユーザーの意思により例外が発生されました。");
+		}
+		return false;
+	} incontextof kag;
+	kag.keyDownHook.add(keyhook);
+}
+@endif
+
+/*-----------------------------------------------------------------------------/
+/	End of init.tjs
+/-----------------------------------------------------------------------------*/

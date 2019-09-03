@@ -1,0 +1,1039 @@
+/*-----------------------------------------------------------------------------/
+/	Copyright (C) 2004 TYPE-MOON All Rights Reserved.
+/		花札ゲーム用のアイコンレイヤー
+/-----------------------------------------------------------------------------*/
+@if(__HF_ICONLAYER_DEFINED__==0)
+@set(__HF_ICONLAYER_DEFINED__=1)
+Scripts.execStorage("subroutine.tjs");
+Scripts.execStorage("HFChipLayer.tjs");
+
+//	アイコン
+class IconLayer extends ChipLayer
+{
+	var poss	= [
+		%[left:574,top:123,opacity:255],
+		%[left:189,top:440,opacity:255]
+	];
+	var movetime	= 400;
+	var moveaccel	= 0;
+	var _no = -1;
+
+	function IconLayer(win, par, storage, poss)
+	{
+		super.ChipLayer(...);
+
+		this.poss	= poss if poss != void;
+		loadImages(storage);
+		setSizeToImageSize();
+		setPos((par.width-width)>>1, (par.height-height)>>1);
+		opacity	= 0;
+		absolute= IconAbsolute;
+		visible	= true;
+		hitThreshold	= 256;	//	透過
+	}
+
+	function finalize()
+	{
+		super.finalize(...);
+	}
+
+	property on
+	{
+		setter(o)
+		{
+			imageLeft	= o ? 0 : -width;
+		}
+		getter	{ return imageLeft == 0; }
+	}
+
+	property no
+	{
+		setter(o)
+		{
+			if(o != no)
+			{
+				with(poss[o & 1])
+					moveTo(.left, .top, .opacity, movetime, moveaccel);
+				_no	= o;
+			}
+		}
+		getter	{ return _no; }
+	}
+}
+
+//	こいこいアイコン
+class KoikoiIconLayer extends IconLayer
+{
+	function KoikoiIconLayer()
+	{
+		name	= "こいこいアイコン";
+		super.IconLayer(...);
+		saveOriginal();
+		_no	= 0;
+	}
+
+	function disp(delay)
+	{
+		var w = org.imageWidth, h = org.imageHeight;
+		//	透明で大きい状態から、不透明で小さい状態へ変化
+		setPos(left - (w >> 1), top - (h >> 1));
+		setSize(w << 1, h << 1);
+		face	= dfOpaque, holdAlpha	= false;
+		operateStretch(0, 0, width, height, org, 0, 0, w, h, omOpaque,, window.currentInterpolationMode);
+		face	= dfAlpha;
+		magnifyToWithOpacity(w, h, 255, movetime, moveaccel, delay);
+		_no	= 1;
+	}
+
+	function hide(delay)
+	{
+		moveTo(,, 0, movetime, 0, delay);	//	透明になる
+		_no	= 0;
+	}
+
+	property no
+	{
+		setter(o)
+		{
+			if(o != no)
+			{
+				var w = org.imageWidth, h = org.imageHeight;
+				if(o)
+				{
+					//	透明で大きい状態から、不透明で小さい状態へ変化
+					setSize(w << 1, h << 1);
+//					dm("setSize("+w+"→"+width+", "+h+"→"+height+")");
+					face	= dfOpaque, holdAlpha	= false;
+					operateStretch(0, 0, width, height, org, 0, 0, w, h, omOpaque,, window.currentInterpolationMode);
+					face	= dfAlpha;
+					setPos(left - (w >> 1), top - (h >> 1));
+					magnifyToWithOpacity(w, h, 255, movetime, moveaccel);
+				}
+				else
+				{
+//					magnifyToWithOpacity(w << 1, h << 1, 0, movetime, moveaccel);
+//					moveTo(left, top + h, 0, movetime, 0);	//	落下して透明になる
+					moveTo(,, 0, movetime, 0);	//	透明になる
+				}
+				_no	= o;
+			}
+		}
+		getter	{ return _no; }
+	}
+}
+
+//	役チップ管理
+class YakuChipManager
+{
+	var parent;
+	var player;
+	var chips;
+	var bases	= %[
+		"五光" => 0, "四光" => 0, "雨四光" => 0, "三光" => 0,
+		"猪鹿蝶"=> 1, "タネ" => 1, "花見酒" => 1, "月見酒" => 1,
+		"タン" => 2, "赤短青短の重複" => 2, "赤短" => 2, "青短" => 2,
+		"カス" => 3, "ベルレフォーン" => 3,
+	];
+	var align;
+	var movetime = 300, moveaccel = 2;
+	var scraplist = [];
+	var timer;
+
+	var	played	= [];	//	音を再生させたか？
+
+	function YakuChipManager(par, pl)
+	{
+		parent	= par;
+		player	= pl;
+		chips	= [ %[], %[], %[], %[] ];
+		timer	= new Timer(delayScrap, "");
+
+		//	並びを整えるための情報
+		align	= [ [], [], [], [] ];
+		var keys = [];
+		keys.assign(bases);
+		for(var i=0; i<keys.count; i+=2)
+			align[keys[i+1]].add(keys[i]);
+	}
+
+	function finalize()
+	{
+		release(timer);
+		releaseArray(chips);
+		releaseArray(scraplist);
+	}
+
+	//	点呼の開始
+	function init()
+	{
+		for(var i=0; i<chips.count; i++)
+		{
+			var keys = [];
+			keys.assign(chips[i]);
+			for(var j=0; j<keys.count; j+=2)
+				keys[j+1].exist	= false;
+		}
+ 		clearScrap();	//	ついでに不要になったチップを処分
+ 	}
+
+	//	チップ情報の追加/更新
+	function updateChip(name, leftover, last)
+	{
+		var chip = chips[bases[name]];
+		var update = false;
+		if(chip[name] == void)
+		{
+			chip[name]	= new YakuChipLayer(parent.window, parent, name, this);
+			update	= true;
+
+			//	出現時に音を鳴らす
+			if(!played[0])
+				hfSound.役チップ出現	= played[0] = true;	//	1ターンに一回だけ鳴らす
+		}
+		with(chip[name])
+		{
+			update	= true if .last !== last;
+			.leftover	= leftover;
+			.last		= last;
+			.exist		= true;
+		}
+		dm(name+": "+last+", "+leftover.count);
+		return update;
+	}
+
+	//	チップの削除
+	function eraseChip(name, time=movetime, accel=moveaccel, delay=0)
+	{
+		var chip = chips[bases[name]];
+		if(chip[name] != void)
+		{
+			chip[name].erase(time, accel, delay);
+			delete chip[name];
+
+			//	消滅時に音を鳴らす
+			if(!played[1])
+				hfSound.役チップ解除	= played[1] = true;	//	1ターンに一回だけ鳴らす
+		}
+	}
+
+	//	すべてのチップを削除
+	function eraseAll(time=movetime, accel=moveaccel, delay)
+	{
+		for(var i=0; i<chips.count; i++)
+		{
+			var keys = [];
+			keys.assign(chips[i]);
+			for(var j=0; j<keys.count; j+=2)
+				keys[j+1].erase(time, accel, delay);
+			(Dictionary.clear incontextof chips[i])();
+		}
+		with(timer)
+		{
+			.enabled	= true;
+			.time		= movetime + 100;
+		}
+	}
+
+	//	チップの並びを合わせる
+	function alignment(delay=0)
+	{
+		var bpos = parent.yakufuda_pos[player];
+		for(var i=0; i<chips.count; i++)
+		{
+//			var keys = [];
+//			keys.assign(chips[i]);
+			var keys = align[i];
+			var t = bpos[1] + parent.smallheight * (i + 1);
+			if(player)
+			{//	Player(下側)
+				var	l	= parent.width;
+//				for(var j=keys.count-2; j>=0; j-=2)
+				for(var j=0; j<keys.count; j++)
+				{
+					if(chips[i][keys[j]] == void)
+						continue;
+//					with(keys[j+1])
+					with(chips[i][keys[j]])
+					{
+						if(.exist)
+						{
+							l	-= .width;
+							if(.left != l || .top != t - .height)
+								.moveTo(l, t - .height,, movetime, moveaccel, delay, .updateImage);
+							else
+								.updateImage(,, delay);
+						}
+						else
+							eraseChip(keys[j], movetime, moveaccel, delay);
+					}
+				}
+			}
+			else
+			{//	CPU(上側)
+				var l = 0;
+//				for(var j=keys.count-2; j>=0; j-=2)
+				for(var j=0; j<keys.count; j++)
+				{
+					if(chips[i][keys[j]] == void)
+						continue;
+//					with(keys[j+1])
+					with(chips[i][keys[j]])
+					{
+						if(.exist)
+						{
+							if(.left != l || .top != t - .height)
+								.moveTo(l, t - .height,, movetime, moveaccel, delay, .updateImage);
+							else
+								.updateImage(,, delay);
+							l	+= .width;
+						}
+						else
+							eraseChip(keys[j], movetime, moveaccel, delay);
+					}
+				}
+			}
+		}
+		played.clear();	//	効果音再生フラグをクリア
+	}
+
+	function scrap(chip)
+	{
+		scraplist.add(chip);
+	}
+
+	function clearScrap()
+	{
+		for(var i=0; i<scraplist.count; i++)
+		{
+			scraplist[i].stop();
+			invalidate scraplist[i];
+		}
+		scraplist.clear();
+	}
+
+	function delayScrap()
+	{
+		clearScrap();
+		timer.enabled	= false;
+	}
+}
+
+//	役チップ
+class YakuChipLayer extends ChipLayer
+{
+	var name;
+	var owner;
+	var appeared;
+	var exist;
+	var leftover, _last;
+	var number;
+	var delayTimer;
+
+	function YakuChipLayer(win, par, name, owner)
+	{
+		super.ChipLayer(...);
+
+		this.name	= name;
+		this.owner	= owner;
+		loadImages("hf_役チップ"+name);
+		absolute	= YakuChipAbsolute;
+		if(name != "カス")
+			setSize(imageWidth \ 2, imageHeight);
+		else
+		{
+			setSize(imageWidth \ 3, imageHeight);
+			with(number = new CountNumberLayer(win, par, this, 58, 9, "hf_役チップ点数C"))
+				.absolute	= absolute + 1000;
+		}
+
+		saveOriginal();
+		org.width	= width;
+	}
+
+	function finalize()
+	{
+		release(number);
+		super.finalize(...);
+	}
+
+	function setPos(l, t)
+	{
+		super.setPos(l, t);
+		if(number)
+			number.moveToHome();
+	}
+
+	//	所定の位置へ移動/生成直後は発生
+	function moveTo(l, t, opa, time, accel, delay, func)
+	{
+		if(!appeared)
+		{
+			//	出現
+			setPos(l, t + height);
+			opacity	= 0;
+			visible	= true;
+			appeared= true;
+		}
+		super.moveTo(l, t, 255, time, accel, delay, func);	//	所定の位置へ移動
+	}
+
+	//	消滅
+	function erase(time, accel, delay)
+	{
+		super.moveTo(, top + height, 0, time, accel, delay, eraseThis);
+		if(number != void)
+			number.erase(time, accel, delay);
+	}
+
+	//	終了時の処理
+	function eraseThis()
+	{
+		dispose(this);
+	}
+
+	var nextImageLeft;
+	function updateImage(obj, elm, delay=0)
+	{
+		//	表示が新しくなっていたら、更新の動き
+		if(nextImageLeft != imageLeft)
+			change(,, delay, updateNum);
+		else if(number != void && number.num != last)
+		{
+			if(delay == 0)
+				updateNum();
+			else
+			{
+				delayTimer	= new Timer(updateNum, "") if delayTimer == void;
+				delayTimer.interval	= delay;
+				delayTimer.enabled	= true;
+			}
+		}
+	}
+
+	function updateNum()
+	{
+//		dm("update num: "+name+" ("+number.num+"→"+last+")");
+		//	枚数表示の変更
+		if(name == "カス")
+			number.num	= last;
+		if(delayTimer != void)
+		{
+			invalidate delayTimer;
+			delayTimer	= void;
+		}
+	}
+
+	function change(time=600, accel=4, delay=0, func)
+	{
+		dm("change: "+delay+"/"+func);
+		time	\= 5;
+		var w = width, h = height * 1.5;
+		var nt = top - h;
+		doThat(delay, func);
+		mmTo(left, nt, w, h, time, accel);
+		mmTo(left + (width >> 1), nt, 0, h, time, accel,, changeImageLeft);
+		mmTo(left, nt, w, h, time, accel);
+		mmTo(left, top, width, height, time, -accel);
+		var d = 40;
+		time	-= d;
+		moveTo(left, top - 6,, time >> 1, accel, d);
+		moveTo(left, top,, time >> 1, -accel);
+	}
+
+	function changeImageLeft()
+	{
+		imageLeft	= org.imageLeft	= nextImageLeft;
+	}
+
+	function onMouseDown(x, y, button, shift)
+	{
+		if(button == mbRight)
+		{
+			with(parent)
+			{
+				if(!.popuped)
+					.onBeginPopup(this, true);
+				else
+					.onEndPopup();
+			}
+		}
+	}
+
+	function onMouseLeave()
+	{
+		parent.onEndPopup();
+	}
+
+	property last
+	{
+		setter(l)
+		{
+			if(l !== last)
+			{
+				dm(name+": "+last+" → "+l);
+				if(name == "カス")
+				{
+					if(l < 9)
+					{
+						if(last > l)
+							nextImageLeft	= 0;//	札を取られて、リーチ以下の状態になったとき
+						else
+							imageLeft	= 0;	//	最初のみ
+						number.storage	= "hf_役チップ点数C";
+					}
+					else if(l < 10)
+					{
+						nextImageLeft	= -width;
+						number.storage	= "hf_役チップ点数B";
+					}
+					else
+					{
+						nextImageLeft	= -(width << 1);
+						number.storage	= "hf_役チップ点数A";
+					}
+				}
+				else
+				{
+					if(l > 0)
+					{
+						if(last < l)
+							nextImageLeft	= 0;//	札を取られて、リーチ以下の状態になったとき
+						else
+							imageLeft	= 0;	//	最初のみ
+					}
+					else
+						nextImageLeft	= -width;
+				}
+				_last	= l;
+			}
+		}
+		getter	{ return _last; }
+	}
+}
+
+class CountNumberLayer extends ChipLayer
+{
+	var owner;
+	var offset = %[];
+	var _num;
+	var storage;
+	var fw;
+	var jumpHeight;
+
+	function CountNumberLayer(win, par, o, ocl, oct, st, jh=22)
+	{
+		name	= "CountNumber";
+		super.ChipLayer(...);
+
+		owner	= o;
+		jumpHeight	= jh;
+		with(offset)
+			.centerleft = ocl, .centertop = oct;
+		_num	= 0;
+		storage	= st;
+		changeImage();
+		opacity	= 0;
+		absolute= par.absolute;
+		hitThreshold	= 256;	//	全透過
+		visible	= true;
+	}
+
+	function finalize()
+	{
+		stop();
+		super.finalize(...);
+	}
+
+	function moveToHome()
+	{
+		setPos(owner.left + offset.centerleft - (width >> 1),
+			owner.top + offset.centertop - (height >> 1));
+//		dm(@"${left}, ${top} - ${owner.left}, ${owner.top} - ${offset.centerleft}, ${offset.centertop}");
+	}
+
+	//	数字画像を変更
+	function changeImage()
+	{
+		var layer = new global.Layer(window, this);
+		layer.loadImages(storage);
+		var str = string(num);
+		fw = layer.imageWidth \ 10;
+		var h = layer.imageHeight;
+		var lw = width, w = fw * str.length;
+		if(lw != w)
+		{
+			setSize(w, h);
+			left	-= (w - lw) >> 1;	//	変化した画像サイズに合わせて、位置を補正しておく
+		}
+		var l = 0;
+		for(var i=0; i<str.length; i++)
+		{
+			copyRect(l, 0, layer, fw * +str[i], 0, fw, h);
+			l	+= fw;
+		}
+		invalidate layer;
+	}
+
+	//	画像が変化したときの幅
+	function getNextWidth()
+	{
+		var str = string(num);
+		return str.length * fw;
+	}
+
+	//	アクション開始
+	function startJump(time=300)
+	{
+		time	>>= 1;
+		moveToHome();
+		moveTo(, top - jumpHeight, 255, time, -3,, changeImage);
+		var l = left, nw = getNextWidth();
+		if(nw !== width)
+		{//	画像のサイズが変化するとき、移動後のX座標を補正しておく
+			l	-= (nw - width) >> 1;
+		}
+		moveTo(l, top, 255, time, 3);
+		visible	= true;
+	}
+
+	//	消去
+	function erase(time, accel, delay)
+	{
+		super.moveTo(, top + height, 0, time, accel, delay);
+	}
+
+	property num
+	{
+		setter(n)
+		{
+			if(n !== num)
+			{
+				//	アクション開始
+				_num = n;
+				startJump();
+			}
+		}
+		getter	{ return _num; }
+	}
+}
+
+//	文数表示
+class TenDispLayer extends ChipLayer
+{
+	var offset	= 4;
+	var margin	= 4;
+
+	var num;
+	var faller;
+
+	var newpoint;
+
+	function TenDispLayer(win, par)
+	{
+		name	= "文数表示";
+		super.ChipLayer(...);
+		loadImages("hf_文");
+		setSizeToImageSize();
+		absolute	= ItemAbsolute;
+
+		num = new CountNumberLayer2(win, par, this, "hf_基本数字a");
+		faller = new CountNumberLayer2(win, par, this, "hf_基本数字b");
+		faller.visible	= false;
+	}
+
+	function finalize()
+	{
+		release(faller);
+		release(num);
+		super.finalize(...);
+	}
+
+	function setPos(l, t)
+	{
+		super.setPos(...);
+		updateNumberPos();
+	}
+
+	function updateNumberPos(layer = num)
+	{
+		with(layer)
+			.setPos(left - .width - margin, top + height - .height + offset);
+	}
+
+	function moveTo()
+	{
+		super.moveTo(...);
+		num.moveTo(...);
+	}
+
+	//	ポイントがマイナスされたとき
+	function minus(point, time=500, falltime=800, delay=0)
+	{
+		if(point == 0)
+			return 0;
+
+		//	数字が震えて、終わったら減る
+		var n = number - point;
+		newpoint	= n < 0 ? 0 : n;
+		with(num)
+			.shake(, time,, delay, changePoint);
+
+		//	ちょっとずらして、受けたポイント分を落す
+		with(faller)
+		{
+			.number	= point;
+			updateNumberPos(faller);
+			.opacity= 256;
+			.visible= false;
+			.fall(falltime,, time + 200);
+		}
+		return time + falltime;
+	}
+
+	function changePoint()
+	{
+//		dm(number+" → "+newpoint);
+		number	= newpoint;
+	}
+
+	property number
+	{
+		setter(n)
+		{
+			if(n !== num.number)
+			{
+//				dm(num.number+" -> "+n);
+				num.number	= n;
+				updateNumberPos();
+			}
+		}
+		getter	{ return num.number; }
+	}
+
+	property opacity
+	{
+		setter(o)	{ super.opacity = o; num.opacity = o; }
+		getter		{ return super.opacity; }
+	}
+}
+
+//	数字レイヤー
+class CountNumberLayer2 extends ChipLayer
+{
+	var owner;
+	var storage;
+	var _number;
+
+	function CountNumberLayer2(win, par, o, st)
+	{
+		name	= o.name+".number";
+		super.ChipLayer(...);
+		owner	= o;
+		storage	= st;
+		absolute= o.absolute + 1;
+		opacity	= 0;
+		visible	= true;
+	}
+
+	//	数字を描画
+	function drawNumber()
+	{
+		var layer;
+		with(layer = new global.Layer(window, this))
+		{
+			.loadImages(storage);
+			var fw = .imageWidth \ 10, fh = .imageHeight;
+			var str = string(int number);
+			setSize(fw * str.length, fh);
+			var l = 0;
+			for(var i=0; i<str.length; i++)
+			{
+				copyRect(l, 0, layer, fw * +str[i], 0, fw, fh);
+				l	+= fw;
+			}
+		}
+		invalidate layer;
+	}
+
+	//	落ちる
+	function fall(time=500, accel=0, delay=0, func)
+	{
+		moveTo(,top + (height << 1), 0, time, accel, delay, func);
+	}
+
+	function move_init()
+	{
+		super.move_init(...);
+		visible	= true;
+	}
+
+	property number
+	{
+		setter(n)
+		{
+			if(n !== number)
+			{
+				_number	= n;
+				drawNumber();
+			}
+		}
+		getter	{ return _number; }
+	}
+}
+
+//	MP表示
+class MPLayer extends ChipLayer
+{
+	var slashwidth = 14;
+	var movetime = 300, moveaccel = 2;
+	var numWidth = 23, numHeight = 30;
+	var mpst = "hf_魔力_数字";
+//	var slst = "hf_魔力_スラッシュ";
+	var mist = "hf_魔力_マイナス";
+	var plst = "hf_魔力_プラス";
+
+	var servantParam;
+	var maxMP;
+	var lastMP;
+	var delayTimer;
+
+	function MPLayer(win, par, max, sp)
+	{
+		super.ChipLayer(...);
+		maxMP		= max;
+		servantParam= sp;	//	sp[1]が現在MPでsp[2]が更新フラグ
+
+		createShareImages();
+		shareimages.load(win, par, mpst, mpst);
+		with(shareimages.get(mpst))
+			numWidth = .width \ 10, numHeight = .height;
+//		shareimages.load(win, par, slst, slst);
+		shareimages.load(win, par, mist, mist);
+		shareimages.load(win, par, plst, plst);
+		setSize(numWidth*(max<10 ? 3 : 4) + slashwidth, numHeight);
+		hitThreshold	= 256;
+		absolute= IconAbsolute;
+		opacity	= 0;
+		visible	= true;
+
+		drawCurrentMP();
+		drawBaseMP();
+	}
+
+	function finalize()
+	{
+		shareimages.release(mist);
+//		shareimages.release(slst);
+		shareimages.release(mpst);
+		releaseShareImages();
+		super.finalize(...);
+	}
+
+	function changeCurrentMP(delay=0)
+	{
+		if(delay > 0)
+		{
+			with(delayTimer = delayTimer != void ? delayTimer : new Timer(onTimer, ""))
+				.interval	= delay, .enabled	= true;
+		}
+		else
+			drawCurrentMP();
+	}
+
+	function onTimer()
+	{
+		invalidate delayTimer; delayTimer = void;
+		drawCurrentMP();
+	}
+
+	//	現在MPの描画
+	function drawCurrentMP()
+	{
+		if(lastMP === servantParam[1])
+			return;
+
+		//	現在MP
+//		dm(@"MP: ${lastMP} → ${servantParam[1]}(${servantParam[1]-lastMP})");
+		var num = shareimages.get(mpst);
+		var cur = +servantParam[1];
+		var diff = cur - lastMP;
+		cur	= (cur >= 0 && cur < 10 ? " " : "") + string cur;
+//		dm("current mp: \""+cur+"\"");
+		var nw = numWidth, nh = numHeight;
+		for(var i=0; i<cur.length; i++)
+		{
+			if(cur[i] == " ")
+				fillRect(i*nw, 0, nw, nh, 0x00000000);
+			else if(cur[i] == "-")
+			{
+				var m	= shareimages.get(mist);
+				fillRect(i*nw, 0, nw, nh, 0x00000000);
+				copyRect(i*nw + (nw - m.width), (nh - m.height)>>1, m, 0, 0, nw, nh);
+			}
+			else
+				copyRect(i*nw, 0, num, cur[i]*nw, 0, nw, nh);
+		}
+
+		if(lastMP !== void)
+		{
+			//	増減を表示する
+			var chr	= string diff;
+			chr	= "+"+chr if diff > 0;
+			with(new ParticleLayer(window, parent))
+			{
+				.setSize(nw * chr.length, nh);
+				for(var i=0; i<chr.length; i++)
+				{
+					if(chr[i] == "+" || chr[i] == "-")
+					{
+						var m	= shareimages.get(chr[i] == "+" ? plst : mist);
+						.fillRect(i*nw, 0, nw, nh, 0x00000000);
+						.copyRect(i*nw + (nw - m.width), (nh - m.height)>>1, m, 0, 0, nw, nh);
+					}
+					else
+						.copyRect(i*nw, 0, num, chr[i]*nw, 0, nw, nh);
+				}
+				.setPos(left + nw * 2 - .width, top);
+				.moveTo(, top + (diff>0 ? -.height : .height), 0, 300, -2,, .endOfMove);
+				.visible	= true;
+			}
+		}
+
+		lastMP	= +servantParam[1];	//	直前のMPを記憶
+	}
+
+	//	ベースとなる部分の描画(基本的に変更されない)
+	function drawBaseMP()
+	{
+		//	スラッシュ
+		var nw = numWidth, nh = numHeight;
+/*		var sl = shareimages.get(slst);
+		copyRect(nw*2, 0, sl, 0, 0, nw, nh);
+*/
+		//	最大MP
+		var num = shareimages.get(mpst);
+		var max = string maxMP;
+//		max	= (max >= 0 && max < 10 ? " " : "") + string max;
+//		dm("max mp: \""+max+"\"");
+		var l = nw * 2 + slashwidth;
+		for(var i=0; i<max.length; i++)
+			copyRect(l+i*nw, 0, num, max[i]*nw, 0, nw, nh) if max[i] != " ";
+	}
+}
+
+//	宝具アイコン管理
+class TreasureIconManager
+{
+	var movetime = 300, moveaccel = 2;
+	var margin = 1;
+
+	var window, parent;
+	var left, top;
+	var playerno;
+	var icons;
+	var lastlist;
+	var serial;
+
+	function TreasureIconManager(win, par, l, t, pn)
+	{
+		window	= win;
+		parent	= par;
+		left	= l;
+		top		= t;
+		playerno= pn;
+		icons	= %[];
+	}
+
+	function finalize()
+	{
+		releaseDictionary(icons);
+	}
+
+	function update(list=[], game)
+	{
+		var layer;
+		var l = left, t = top;
+		serial	= (serial + 1) & 0xFF;
+		for(var i=0; i<list.count; i++)
+		{
+			var name = list[i];
+//			dm("disp special: "+name);
+			if(icons[name] == void)
+			{
+				//	なければ追加
+				with(layer = new ParticleLayer(window, parent))
+				{
+					.name	= "宝具アイコン: "+name;
+					.loadImages("hf_宝具アイコン_"+name);
+					.setSizeToImageSize();
+					.setPos(l, t + (t > 400 ? .height : -.height));
+					.absolute	= IconAbsolute;
+					.opacity	= 0;
+					.moveTo(l, t, 255, movetime, moveaccel);
+					.hint	= game.getTreasureHint(name) if game != void;
+				}
+				icons[name]	= layer;
+				hfSound.宝具アイコン	= true;
+			}
+			else
+			{
+				//	あって、目的の場所にいなければ移動
+				with(icons[name])
+					.moveTo(l, t, 255, movetime, moveaccel) if .left != l || .top != t;
+			}
+			if(name == game.godhand)
+			{//	ゴッドハンドなら、使用回数表示を変える
+				icons[name]["point"]	= new global.Layer(window, icons[name]) if typeof icons[name].point == "undefined";
+				var point	= icons[name].point;
+				var num;
+				with(num = new global.Layer(window, icons[name]))
+				{
+					.loadImages("hf_宝具アイコン_数字");
+					.setSizeToImageSize();
+				}
+				var sv	= game.getPlayerServant(playerno, "バーサーカー");
+				var pt	= string sv[5];
+				with(point)
+				{
+					var nw = (num.width \ 10), nh = num.height;
+					.setSize(pt.length * nw, nh);
+					for(var j=0; j<pt.length; j++)
+						.copyRect(j*nw, 0, num, +pt[j] * nw, 0, nw, nh);
+					.setPos(91 + (((nw<<1) - .width)>>1), 3);
+					.type			= ltAlpha;
+					.hitThreshold	= 256;
+					.opacity		= 255;
+					.visible		= true;
+				}
+				invalidate num;
+			}
+
+			with(icons[name])
+			{
+				l	+= .width + margin;
+				.serial	= serial;
+			}
+		}
+		if(lastlist != void)
+		{
+			for(var i=0; i<lastlist.count; i++)
+			{
+				//	なくなっていたら、削除
+				var name = lastlist[i];
+//				dm("hide special: "+name);
+				if(icons[name].serial != serial)
+				{
+					with(icons[name])
+						.moveTo(.left, .top + .height, 0, movetime, moveaccel, 0, .endOfMove);
+					delete icons[name];
+				}
+			}
+		}
+		lastlist	= list;
+	}
+}
+
+@endif
+/*-----------------------------------------------------------------------------/
+/	End of IconLayer.tjs
+/-----------------------------------------------------------------------------*/

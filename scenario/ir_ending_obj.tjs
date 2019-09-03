@@ -1,0 +1,1450 @@
+/*******************************************************************************
+	風雲イリヤ城 - エンディング用サブスクリプト
+*******************************************************************************/
+
+
+
+/*###############################################################################
+
+		ED用各管理クラス
+
+###############################################################################*/
+
+/*===============================================================================
+		桜管理クラス
+===============================================================================*/
+class CIrEDSakura extends CIrServant
+{
+var		vector_data;
+
+	function CIrEDSakura( _scene, _parent )
+	{
+		vector_data = new CIrCharaVector();
+
+
+		super.CIrServant( ... );
+		type = "CIrEDSakura";
+	}
+	function finalize()
+	{
+		@if (DEBUG_MODE)
+		dm("finalize Sakura");
+		@endif
+
+		EasyObjectInvalidate( vector_data );
+		vector_data = void;
+
+		super.finalize( ... );
+	}
+
+
+	var		ANIME_FRAME_IN					= ANI_MASTER_USER+1;		// フレームイン用走り
+	var		ANIME_FRAME_STUMBLE				= ANI_MASTER_USER+2;		// こける
+	var		ANIME_FRAME_STUMBLE_DOWN		= ANI_MASTER_USER+3;		// こけて(着地)停止
+	var		ANIME_FRAME_STUMBLE_STAND_UP	= ANI_MASTER_USER+4;		// こけた後の起き上がり
+	var		ANIME_FRAME_TURN				= ANI_MASTER_USER+5;		// 起き上がりの振り向き
+	var		ANIME_FRAME_VANISH				= ANI_MASTER_USER+6;		// クラッシュ吹き飛び
+	var		ANIME_FRAME_DELETE				= ANI_MASTER_USER+100;		// 
+
+	function change_anime( _anime_no )
+	{
+		animation = _anime_no;
+		return;
+	}
+
+
+	var		page_no,next_page;
+	var		anime_time;
+
+	var		cg_no;
+		var		CG_VOID			= -1;
+		var		CG_STAND_00		=  0;
+		var		CG_DOWN_00		= 10;
+		var		CG_STAND_UP_00	= 20;
+		var		CG_VANISH_00	= 30;
+		var		CG_VANISH_01	= 40;
+
+var		RUN_SE_CYCLE = 10;	// 桜が歩いている時のSEのサイクル
+
+	// アニメ変更割り込み
+	function onAnimation()
+	{
+		switch ( animation )
+		{
+		case ANIME_FRAME_IN:
+			if (timing  ==  0) {
+				direction = MUKI_RIGHT;
+				vector_data.SetVector( 6.4,0, 0,0, 0,0 );
+			} else {
+				if (timing  ==  70) {
+					change_anime( ANIME_FRAME_STUMBLE );
+					break;
+				}
+			}
+			if ((timing%RUN_SE_CYCLE)  ==  0) {
+				PlaySE( SE_ENDING_SAKURA_RUN );
+			}
+
+			doAnimation( ANI_MASTER_RUN );
+			x += vector_data.UpdateVectorX();
+			z += vector_data.UpdateVectorZ();
+			break;
+		case ANIME_FRAME_STUMBLE:
+			if (timing  ==  0) {
+				direction = MUKI_RIGHT;
+				vector_data.SetVector( 4.5, 12, 0,-1.4, 0,0 );
+			}
+
+			doAnimation( ANI_MASTER_JUMP );
+			x += vector_data.UpdateVectorX();
+			z += vector_data.UpdateVectorZ();
+			if (z  <  0) {
+				z = 0;
+				change_anime( ANIME_FRAME_STUMBLE_DOWN );
+				break;
+			}
+			break;
+		case ANIME_FRAME_STUMBLE_DOWN:
+			if (timing  ==  0) {
+				PlaySE( SE_ENDING_SAKURA_FALLDOWN );
+
+				direction = MUKI_RIGHT;
+				vector_data.Clear();
+				cg_no = CG_DOWN_00;
+				doAnimation( ANIME_FRAME_STUMBLE_DOWN );
+			} else {
+				if (timing  ==  30) {
+					change_anime( ANIME_FRAME_STUMBLE_STAND_UP );
+					break;
+				}
+			}
+			break;
+		case ANIME_FRAME_STUMBLE_STAND_UP:
+			if (timing  ==  0) {
+				direction = MUKI_RIGHT;
+				vector_data.Clear();
+				doAnimation( ANIME_FRAME_STUMBLE_STAND_UP );
+			}
+
+			switch ( timing )
+			{
+			case  0:
+				cg_no = CG_STAND_UP_00;
+				break;
+			case 8:
+				cg_no = CG_STAND_00;
+				break;
+			case 15:
+				change_anime( ANIME_FRAME_TURN );
+				break;
+			}
+			break;
+		case ANIME_FRAME_TURN:
+			if (timing  ==  0) {
+				direction = MUKI_LEFT;
+				vector_data.Clear();
+				doAnimation( ANI_MASTER_STAND );
+			} else {
+				if (timing  ==  10) {
+					scene.SetSceneStopData( scene.SCENE_STOP_SAKURA_VANISH );
+					change_anime( ANIME_FRAME_VANISH );
+					break;
+				}
+			}
+			break;
+		case ANIME_FRAME_VANISH:
+			if (timing  ==  0) {
+			var	_hit_eff;
+				// ヒットエフェクト表示
+				with ( _hit_eff = new CIrShotHitEffect(scene, scene.etcRootObj) )
+				{
+					.priority = PRIORITY_NORMAL_EFFECT;
+					.origin   = ORIGIN_FIELD;
+					.x = x;
+					.y = y -z-32;
+					.z = 0;
+				}
+
+
+				PlaySE( SE_ENDING_SAKURA_CLASH );
+				direction = MUKI_RIGHT;
+				next_page = 0;
+				anime_time = 0;
+				doAnimation( ANIME_FRAME_VANISH );
+			}
+
+			anime_time -= 1;
+			if (anime_time  <=  0) {
+				page_no = next_page;
+				switch ( page_no )
+				{
+				case 0:
+					cg_no = CG_VANISH_00;
+					vector_data.SetVector( /*16*/24,18, 0,-1, 0,0 );
+					next_page = 1;
+					anime_time = 1;
+					break;
+				case 1:
+					cg_no = CG_VANISH_01;
+					next_page = 2;
+					anime_time = 1;
+					break;
+				case 2:
+					cg_no = CG_VANISH_00;
+					next_page = 1;
+					anime_time = 1;
+					break;
+/*				case 3:
+					vector_data.Clear();
+					cg_no = CG_DOWN_00;
+					next_page = 3;
+					anime_time = 65535;
+					break;
+*/				}
+			}
+
+			x += vector_data.UpdateVectorX();
+			z += vector_data.UpdateVectorZ();
+			if (z  <  0) {
+//				z = 0;
+//				next_page  = 3;
+//				anime_time = 0;
+//				onAnimation();
+				change_anime( ANIME_FRAME_DELETE );
+				break;
+			}
+			break;
+
+		case ANIME_FRAME_DELETE:
+			if (timing  ==  0) {
+				cg_no = CG_VOID;
+				enabled = false;
+			}
+			break;
+
+		default:
+			doAnimation();
+			break;
+		}
+		return;
+	}
+
+
+	function getImageFileInfo()
+	{
+		if (imageId  !==  void) {
+			return ( super.getImageFileInfo() );
+		}
+
+		var info = %[];
+		info.mirror = (direction==MUKI_LEFT) ? true : false;
+		info.centerX = DEF_CENTER_SAKURA_X;
+		info.centerY = DEF_CENTER_SAKURA_Y;
+		info.adapt = true;
+		info.hitRect = %[ left:0, top:0, right:0, bottom:0 ];
+
+		switch ( cg_no )
+		{
+		case CG_STAND_00:
+			info.filename = "ir_char_sakura0000";
+			break;
+
+		case CG_DOWN_00:
+			info.filename = "ir_char_sakura0400";
+			break;
+		case CG_STAND_UP_00:
+			info.filename = "ir_char_sakura1300";
+			break;
+
+		case CG_VANISH_00:
+			info.filename = "ir_char_sakura9000";
+			break;
+		case CG_VANISH_01:
+			info.filename = "ir_char_sakura9001";
+			break;
+
+
+
+		case CG_VOID:
+		default:
+			invalidate info;
+			return ( void );
+		}
+
+
+		return ( info );
+	}
+
+}
+
+
+/*===============================================================================
+		バーサーカー管理クラス
+===============================================================================*/
+class CIrServantEDBsCar extends CIrServantEDEtc
+{
+var		tmp_counter;
+	function CIrServantEDBsCar( _scene, _parent )
+	{
+		init_buffer();
+
+		super.CIrServantEDEtc( ... );
+		priority = PRIORITY_PLAYER;
+
+		type = "CIrServantEDBsCar";
+
+		init_data();
+	}
+	function finalize()
+	{
+		@if (DEBUG_MODE)
+		dm("finalize EDBsCar");
+		@endif
+
+		init_buffer();
+		super.finalize( ... );
+	}
+
+	function init_buffer()
+	{
+		super.init_buffer();
+		return;
+	}
+	function init_data()
+	{
+		anime_no   = 0;
+		page_no    = 0;
+		tmp_counter = 0;
+		change_anime();
+		return;
+	}
+	function change_clash( scroll_speed )
+	{
+		PlaySE( SE_ENDING_BS_CAR_CLASH );
+		vector_data.SetVector( scroll_speed,0, 0,0, 0,0 );
+
+		anime_no   = 1;
+		page_no    = 0;
+		change_anime();
+		return;
+	}
+	function fall( scroll_speed )
+	{
+//		PlaySE( SE_ENDING_BS_CAR_CLASH );
+		vector_data.SetVector( scroll_speed,0, 0,0, 0,0 );
+
+		anime_no   = 2;
+		page_no    = 0;
+		change_anime();
+		return;
+	}
+
+
+
+	// CG情報取得関数
+	function getCGInfo( _base_no, _page_no )
+	{
+		switch ( _base_no )
+		{
+		case 0:
+			cg_info.filename = "ir_ed_bc00%02d".sprintf(_page_no);
+			cg_info.mirror = false;
+			cg_info.adapt = true;
+			cg_info.centerX = 402/2;
+			cg_info.centerY = 303-80+16;
+			cg_info.adapt = true;
+			cg_info.hitRect = %[ left:-0, top:-0, right:0, bottom:-0 ];
+			break;
+		case -1:
+			break;
+		}
+		return ( true );
+	}
+
+
+	function move_anime()
+	{
+		switch ( anime_no )
+		{
+		case 0:
+			x += vector_data.UpdateVectorX();
+			z += vector_data.UpdateVectorZ();
+			if (x  >  (SCREEN_SIZE_W+480)) {
+				enabled = false;
+				anime_no = -1;
+				page_no =  0;
+				change_anime();
+				return ( false );
+			}
+			break;
+		case 1:
+			x += vector_data.UpdateVectorX();
+			z += vector_data.UpdateVectorZ();
+			if (x  <  (0-256)) {
+				enabled = false;
+				anime_no = -1;
+				page_no =  0;
+				change_anime();
+				return ( false );
+			}
+			break;
+		case 2:
+			x += vector_data.UpdateVectorX();
+			z += vector_data.UpdateVectorZ();
+
+			if (x  <  (0-256)) 
+			{
+				enabled = false;
+				anime_no = -1;
+				page_no =  0;
+				change_anime();
+				return ( false );
+			}
+			break;
+		}
+		return ( true );
+	}
+
+	// アニメ変更データセット処理
+	function change_anime()
+	{
+		switch ( anime_no )
+		{
+		case 0:
+			switch ( page_no )
+			{
+			case 0:
+				PlaySE( SE_ENDING_BS_CAR );
+//				vector_data.SetVector( /*20*//*3*/5,0, 0,0, 0,0 );
+				vector_data.SetVector( /*20*//*3*/2,0, 0,0, 0,0 );
+				getCGInfo( 0,0 );
+
+				anime_time = 1;
+				time_end_next = -1;
+				break;
+			case 1:
+				getCGInfo( 0,1 );
+				anime_time = 1;
+				time_end_next = -1;
+				break;
+			case 2:
+				getCGInfo( 0,0 );
+				anime_time = 1;
+				time_end_next =  0;
+				time_end_next_data =  1;
+				break;
+			}
+			if (tmp_counter  !=  120) {
+				tmp_counter += 1;
+				if (tmp_counter  ==  120)
+					vector_data.SetVector( /*20*/ /*0.975*/1.06,0, 0,0, 0,0 );
+			}
+			break;
+		case 1:
+			getCGInfo( 0,0 );
+			anime_time = 65535;
+			time_end_next =  0;
+			time_end_next_data =  0;
+			break;
+		case 2:
+			getCGInfo( 0,0 );
+			anime_time = 65535;
+			time_end_next =  0;
+			time_end_next_data =  0;
+			break;
+
+		case -1:
+			anime_time = 65535;
+			time_end_next =  0;
+			time_end_next_data =  0;
+			break;
+		}
+		return;
+	}
+}
+
+
+/*===============================================================================
+		凛(車)管理クラス
+===============================================================================*/
+class CIrServantEDCar extends CIrServantEDEtc
+{
+var		shirou;
+	function CIrServantEDCar( _scene, _parent )
+	{
+		init_buffer();
+
+		super.CIrServantEDEtc( ... );
+		priority = PRIORITY_PLAYER;
+
+		type = "CIrServantEDCar";
+
+		init_data();
+	}
+	function finalize()
+	{
+		@if (DEBUG_MODE)
+		dm("finalize EDCar");
+		@endif
+
+		init_buffer();
+		super.finalize( ... );
+	}
+
+	function init_buffer()
+	{
+		shirou = void;
+
+		super.init_buffer();
+		return;
+	}
+	function init_data()
+	{
+		anime_no   = 0;
+		page_no    = 0;
+		change_anime();
+		return;
+	}
+
+
+
+	// CG情報取得関数
+	function getCGInfo( _base_no, _page_no )
+	{
+		switch ( _base_no )
+		{
+		case 0:
+			cg_info.filename = "ir_char_rin90%02d".sprintf(_page_no);
+			cg_info.mirror = false;
+			cg_info.adapt = true;
+			cg_info.centerX = 480/2;
+			cg_info.centerY = 210-112;
+			cg_info.adapt = true;
+			cg_info.hitRect = %[ left:-0, top:-0, right:0, bottom:-0 ];
+			break;
+		case -1:
+			break;
+		}
+		return ( true );
+	}
+
+
+	// 捕獲士郎を足す
+	var		SHIROU_PRINT_OFFSET_LAYER	= -10;
+	var		SHIROU_PRINT_OFFSET_X		= -128;//-192;
+	var		SHIROU_PRINT_OFFSET_Y		=    8;
+	var		SHIROU_PRINT_OFFSET_Z		=    0;
+	function add_hokaku_shorou_obj()
+	{
+		with (shirou = new CIrServantEDShirou(scene, this))
+		{
+			.priority = priority+SHIROU_PRINT_OFFSET_LAYER;
+			.origin = ORIGIN_PARENT;
+			.x = SHIROU_PRINT_OFFSET_X;
+			.y = SHIROU_PRINT_OFFSET_Y;
+			.z = SHIROU_PRINT_OFFSET_Z;
+		}
+		return;
+	}
+
+
+	function move_anime()
+	{
+		switch ( anime_no )
+		{
+		case 0:
+			x += vector_data.UpdateVectorX();
+			z += vector_data.UpdateVectorZ();
+			if (x  >  (SCREEN_SIZE_W+480)) {
+				enabled = false;
+				anime_no = -1;
+				page_no =  0;
+				change_anime();
+				return ( false );
+			}
+			break;
+		}
+		return ( true );
+	}
+
+	// アニメ変更データセット処理
+	function change_anime()
+	{
+		switch ( anime_no )
+		{
+		case 0:
+			switch ( page_no )
+			{
+			case 0:
+				PlaySE( SE_ENDING_RIN_CAR );
+
+				vector_data.SetVector( 16,0, 0,0, 0,0 );
+				getCGInfo( 0,0 );
+
+				add_hokaku_shorou_obj();
+
+				anime_time = 1;
+				time_end_next = -1;
+				break;
+			case 1:
+				getCGInfo( 0,1 );
+				anime_time = 1;
+				time_end_next = -1;
+				break;
+			case 2:
+				getCGInfo( 0,0 );
+				anime_time = 1;
+				time_end_next =  0;
+				time_end_next_data =  1;
+				break;
+			}
+			break;
+		case -1:
+			anime_time = 65535;
+			time_end_next =  0;
+			time_end_next_data =  0;
+			break;
+		}
+		return;
+	}
+}
+
+
+/*===============================================================================
+		士郎(捕獲され)管理クラス
+===============================================================================*/
+class CIrServantEDShirou extends CIrServantEDEtc
+{
+	function CIrServantEDShirou( _scene, _parent )
+	{
+		init_buffer();
+
+		super.CIrServantEDEtc( ... );
+		type = "CIrServantEDShirou";
+
+		init_data();
+	}
+	function finalize()
+	{
+		init_buffer();
+		super.finalize( ... );
+	}
+
+	function init_buffer()
+	{
+		super.init_buffer();
+		return;
+	}
+	function init_data()
+	{
+		anime_no   = 0;
+		page_no    = 0;
+		change_anime();
+		return;
+	}
+
+
+
+	// CG情報取得関数
+	function getCGInfo( _base_no, _page_no )
+	{
+		switch ( _base_no )
+		{
+		case 0:
+			cg_info.filename = "ir_char_shirou90%02d".sprintf(_page_no);
+			cg_info.mirror = false;
+			cg_info.adapt = true;
+			cg_info.centerX = 251;
+			cg_info.centerY = 54;
+			cg_info.adapt = true;
+			cg_info.hitRect = %[ left:-0, top:-0, right:0, bottom:-0 ];
+			break;
+		}
+		return ( true );
+	}
+
+	// アニメ変更データセット処理
+	function change_anime()
+	{
+		switch ( anime_no )
+		{
+		case 0:
+			switch ( page_no )
+			{
+			case 0:
+				getCGInfo( 0,0 );
+				anime_time = 1;
+				time_end_next = -1;
+				break;
+			case 1:
+				getCGInfo( 0,1 );
+				anime_time = 1;
+				time_end_next = -1;
+				break;
+			case 2:
+				getCGInfo( 0,0 );
+				anime_time = 1;
+				time_end_next =  0;
+				time_end_next_data = 1;
+				break;
+			}
+			break;
+		}
+		return;
+	}
+}
+
+
+
+
+
+
+/*===============================================================================
+		藤ねぇ管理クラス
+===============================================================================*/
+class CIrServantEDFuji extends CIrServantEDEtc
+{
+	var		shadow;
+
+
+	function CIrServantEDFuji( _scene, _parent )
+	{
+		init_buffer();
+
+		super.CIrServantEDEtc( ... );
+		priority = PRIORITY_PLAYER;
+
+		type = "CIrServantEDFuji";
+
+		init_data();
+	}
+	function finalize()
+	{
+		@if (DEBUG_MODE)
+		dm("finalize CIrServantEDFuji");
+		@endif
+
+		init_buffer();
+		super.finalize( ... );
+	}
+
+	function init_buffer()
+	{
+		shadow = void;
+		super.init_buffer();
+		return;
+	}
+	function init_data()
+	{
+		anime_no   = 0;
+		page_no    = 0;
+
+		// 影の生成
+		if (SHADOW_ANIMATION  ==  1) {
+			EasyObjectInvalidate( shadow );
+			shadow = new CIrShadow( scene, this );
+			shadow.x = shadow.y = shadow.z = 0;
+			shadow.origin = ORIGIN_PARENT;
+			shadow.doUpdateCom = ShadowUpdateCom2;
+		}
+
+		change_anime();
+		return;
+	}
+ 	function ShadowUpdateCom2()
+ 	{
+		if (CheckValid(shadow)  ==  false)
+			return;
+ 		shadow.x = 0;
+ 		shadow.y = 0;
+		shadow.z = z;
+		return;
+ 	}
+
+
+
+	// CG情報取得関数
+	function getCGInfo( _base_no, _page_no )
+	{
+		switch ( _base_no )
+		{
+		case 0:
+			cg_info.filename = "ir_char_fuji90%02d".sprintf(_page_no);
+			cg_info.mirror = false;
+			cg_info.adapt = true;
+			cg_info.centerX = 48;
+			cg_info.centerY = 96;
+			cg_info.adapt = true;
+			cg_info.hitRect = %[ left:-0, top:-0, right:0, bottom:-0 ];
+			break;
+		case -1:
+			break;
+		}
+		return ( true );
+	}
+
+
+	function move_anime()
+	{
+		switch ( anime_no )
+		{
+		case 0:
+			x += vector_data.UpdateVectorX();
+			z += vector_data.UpdateVectorZ();
+			if (x  >  (SCREEN_SIZE_W+480)) {
+				enabled = false;
+				anime_no = -1;
+				page_no =  0;
+				change_anime();
+				return ( false );
+			}
+			break;
+		}
+		return ( true );
+	}
+
+	// アニメ変更データセット処理
+	function change_anime()
+	{
+		switch ( anime_no )
+		{
+		case 0:
+			switch ( page_no )
+			{
+			case 0:
+				PlaySE( SE_ENDING_FJ_IN );
+				vector_data.SetVector( 28,0, 0,0, 0,0 );
+				getCGInfo( 0,0 );
+
+				anime_time = 1;
+				time_end_next = -1;
+				break;
+			case 1:
+				getCGInfo( 0,1 );
+				anime_time = 1;
+				time_end_next = -1;
+				break;
+			case 2:
+				getCGInfo( 0,0 );
+				anime_time = 1;
+				time_end_next =  0;
+				time_end_next_data =  1;
+				break;
+			}
+			break;
+		case -1:
+			anime_time = 65535;
+			time_end_next =  0;
+			time_end_next_data =  0;
+			break;
+		}
+		return;
+	}
+}
+
+
+
+
+
+/*===============================================================================
+		EDサーバント管理クラス
+===============================================================================*/
+class CIrServantED extends CIrServant
+{
+var		vector_data;
+
+	function CIrServantED( _scene, _parent )
+	{
+		vector_data = new CIrCharaVector();
+
+		init_buffer();
+
+		super.CIrServant( ... );
+		type = "CIrServantED";
+	}
+	function finalize()
+	{
+		EasyObjectInvalidate( vector_data );
+		vector_data = void;
+		super.finalize( ... );
+	}
+
+	var		COM_CLICK_AVE			=11;//13;
+	var		NORMAL_CLICK_AVE		=8;//7;
+	var		PL_EX_CLICK_AVE			=7;//8;
+	var		PL_EX_CLICK_POS			=392;
+
+	var		START_SPEED			=  0;
+	var		CLICK_MOVE_SPEED	= 4.0;// 0.9;//0.8;
+	var		START_ADD_SPEED		= -1.2;//-0.25;//-0.2;
+	var		LIMIT_MIN_SPEED		= -4.0;//-0.9;//-0.7;
+	var		LIMIT_MAX_SPEED		= 16.0;// 5.0;
+	var		CHECK_UPDATE_SPEED	= 5.0;
+/*
+	var		START_SPEED			= 16;
+	var		CLICK_MOVE_SPEED	= (16+0.8);
+	var		START_ADD_SPEED		= (  -0.2);
+	var		LIMIT_MIN_SPEED		= (16-0.7);
+	var		LIMIT_MAX_SPEED		= (16+5.0);
+*/
+	var		player_id;
+
+	var		base_speed;
+
+	var		move_x;
+	var		tmp_speed;
+	var		move_speed;
+	var		add_speed;
+
+	var		ACT_MODE_WAIT	=0;
+	var		ACT_MODE_NORMAL	=1;
+	var		ACT_MODE_CLASH	=2;
+	var		ACT_MODE_FALL	=3;
+	var		ACT_MODE_FINISH =4;
+	var		act_mode;
+	function init_buffer()
+	{
+		act_mode   = ACT_MODE_WAIT;
+
+		player_id = 0;
+
+		base_speed = 0;
+
+		move_x     = 0;
+		tmp_speed  = 0;
+		move_speed = 0;
+		add_speed  = 0;
+		return;
+	}
+
+
+	function setPlayerID( _id )
+	{
+		player_id = _id;
+		return;
+	}
+
+	function startAction()
+	{
+		act_mode = ACT_MODE_NORMAL;
+		return;
+	}
+	function finishAction()
+	{
+		act_mode = ACT_MODE_FINISH;
+		return;
+	}
+	function getActMode()
+	{
+		return ( act_mode );
+	}
+
+	function setBaseSpeed( _speed )
+	{
+		base_speed = _speed;
+		return;
+	}
+
+	function setDefPlayerMoveSpeed()
+	{
+		tmp_speed  = 0;
+		move_speed = START_SPEED;
+		add_speed  = START_ADD_SPEED;
+		return;
+	}
+	function setDefComputerMoveSpeed()
+	{
+		tmp_speed  = 0;
+		move_speed = START_SPEED;
+		add_speed  = START_ADD_SPEED;
+		return;
+	}
+
+	function setDashSpeed()
+	{
+//		move_speed = CLICK_MOVE_SPEED;
+
+		if (move_speed  >  CHECK_UPDATE_SPEED)
+			return;
+
+		move_speed += CLICK_MOVE_SPEED;
+		if (move_speed  >  LIMIT_MAX_SPEED)
+			move_speed = LIMIT_MAX_SPEED;
+		if (move_speed < CLICK_MOVE_SPEED)
+			move_speed = CLICK_MOVE_SPEED;
+		return;
+	}
+
+	function getMovePos()
+	{
+		return ( base_speed+move_x );
+	}
+
+	function updateMoveSpeed()
+	{
+		move_speed += add_speed;
+		if (move_speed  <  LIMIT_MIN_SPEED)
+			move_speed = LIMIT_MIN_SPEED;
+		if (move_speed  >  LIMIT_MAX_SPEED)
+			move_speed = LIMIT_MAX_SPEED;
+		tmp_speed += move_speed;
+		move_x = tmp_speed \ 1;
+		tmp_speed -= move_x;
+		return;
+	}
+
+
+	// Click移動処理
+	function updateClickMove()
+	{
+		if (act_mode  !=  ACT_MODE_NORMAL)
+			return;
+
+		if (player_id  ==  0) {
+			// プレイヤー処理
+			if (scene.input.left  ==  0) {
+				setDashSpeed();
+				return;
+			}
+
+			if ((scene.ground_obj.GetNowFallLine()+PL_EX_CLICK_POS)  >  x) {
+			if (rand_ave(100)  <  PL_EX_CLICK_AVE) {
+				@if (DEBUG_MODE)
+				dm("愛の鞭！！");
+				@endif
+				setDashSpeed();
+				return;
+			}}
+
+		} else {
+			if (rand_ave(100)  <  COM_CLICK_AVE/*9*/) {
+				setDashSpeed();
+				return;
+			}
+		}
+
+		// ランダム処理
+		if (rand_ave(100)  <  NORMAL_CLICK_AVE)
+				setDashSpeed();
+		else	updateMoveSpeed();
+		return;
+	}
+
+	// つぶされた時のデータ処理
+	function ChangeFallObjClash()
+	{
+		act_mode = ACT_MODE_CLASH;
+		animation = ANI_DEAD;
+		priority = PRIORITY_SHADOW_UP;
+		base_speed = 0;
+		move_x = 0;
+		step();
+		return;
+	}
+	// 落下した時のデータ処理
+	function ChangeFallGround()
+	{
+		if (act_mode  ==  ACT_MODE_CLASH)
+				priority = PRIORITY_SHADOW_UP;
+		else	priority = PRIORITY_SHADOW_UP2;
+
+		act_mode = ACT_MODE_FALL;
+
+		base_speed = 0;
+		move_x = 0;
+		step();
+
+		if (CheckValid(shadow)  ==  true) {
+			shadow.x = shadow.y = shadow.z = 0;
+			shadow.origin = ORIGIN_PARENT;
+			shadow.doUpdateCom = ShadowUpdateCom;
+		}
+		return;
+	}
+	function ShadowUpdateCom()
+	{
+ 	}
+
+
+	// アニメ変更割り込み
+	function onAnimation()
+	{
+		doAnimation();
+		return;
+	}
+}
+
+
+
+
+
+
+
+
+
+/*===============================================================================
+		落下オブジェクト管理クラス
+===============================================================================*/
+class CIrServantEDFallObj extends CIrServantEDEtc
+{
+	function CIrServantEDFallObj( _scene, _parent )
+	{
+		init_buffer();
+
+		super.CIrServantEDEtc( ... );
+		type = "CIrServantEDFallObj";
+	}
+	function finalize()
+	{
+		init_buffer();
+		super.finalize( ... );
+	}
+
+
+var		ANIME_START_FALL	=0;
+var		ANIME_LANDING		=1;
+var		ANIME_FALLING		=2;
+var		ANIME_FALL			=3;
+var		ANIME_DAMMY			=65535;
+
+var		obj_type,file_type;
+var		OBJ_TYPE_POLE_L		=0;
+var		OBJ_TYPE_POLE_S		=1;
+var		OBJ_TYPE_FLOOR_L	=2;
+var		OBJ_TYPE_FLOOR_S	=3;
+var		OBJ_TYPE_STONE		=4;
+var		MAX_OBJ_TYPE		=5;
+
+var		OBJ_TYPE_FLOOR_L_EX	=MAX_OBJ_TYPE+0;
+var		OBJ_TYPE_POLE_L_EX	=MAX_OBJ_TYPE+1;
+
+
+	var	file_type_list =
+	[
+		OBJ_TYPE_POLE_L,
+		OBJ_TYPE_POLE_S,
+		OBJ_TYPE_FLOOR_L,
+		OBJ_TYPE_FLOOR_S,
+		OBJ_TYPE_STONE,
+
+		OBJ_TYPE_FLOOR_L,
+		OBJ_TYPE_POLE_L,
+	];
+
+	// 落下物の中心座標
+	var	cg_center = 
+	[
+		[192/2,176-48],
+		[ 96/2, 80-24],
+		[208/2,160-64],
+		[ 64/2, 80-16],
+		[112/2,147-24],
+
+		[112/2,147],
+		[192/2,176-48],
+	];
+	var	hit_rect = 
+	[
+/*
+		%[ sx:-48, ex:48, sy:-10, ey:32, sz:32,ez:-32 ],
+		%[ sx:-32, ex:32, sy:-24, ey:24, sz:32,ez:-32 ],
+		%[ sx:-64, ex:64, sy:-32, ey:48, sz:32,ez:-32 ],
+		%[ sx:-16, ex:16, sy:-16, ey: 8, sz:32,ez:-32 ],
+		%[ sx:-40, ex:40, sy:-16, ey: 8, sz:32,ez:-32 ],
+*/
+
+		%[ sx:(int)(-48*2/3), ex:(int)(48*2/3), sy:-10, ey:32, sz:32/2,ez:-32/2 ],
+		%[ sx:(int)(-32*2/3), ex:(int)(32*2/3), sy:-24, ey:24, sz:32/2,ez:-32/2 ],
+		%[ sx:(int)(-64*2/3), ex:(int)(64*2/3), sy:-32, ey:48, sz:32/2,ez:-32/2 ],
+		%[ sx:(int)(-16*2/3), ex:(int)(16*2/3), sy:-16, ey: 8, sz:32/2,ez:-32/2 ],
+		%[ sx:(int)(-40*2/3), ex:(int)(40*2/3), sy:-16, ey: 8, sz:32/2,ez:-32/2 ],
+
+		%[ sx:(int)(0), ex:(int)(0), sy:0, ey: 0, sz:0,ez:0 ],
+		%[ sx:(int)(0), ex:(int)(0), sy:0, ey: 0, sz:0,ez:0 ],
+
+/*
+		%[ sx:-26, ex:26, sy:-10, ey:24, sz:32/2,ez:0 ],
+		%[ sx:-24, ex:24, sy:-18, ey:18, sz:32/2,ez:0 ],
+		%[ sx:-32, ex:32, sy:-24, ey:24, sz:32/2,ez:0 ],
+		%[ sx:-16, ex:16, sy:-12, ey: 8, sz:32/2,ez:0 ],
+		%[ sx:-20, ex:40, sy:-12, ey: 8, sz:32/2,ez:0 ],
+*/	];
+	var	obj_size_rank = 
+	[
+		10*2,
+		4*2,
+		10*2,
+		4*2,
+		8*2,
+		10*2,
+		10*2,
+	];
+
+
+	var		shadow;
+
+	var		obj_size;
+
+	var		bound_count;
+	var		vx,vy,add_vx,add_vy;
+
+	function init_buffer()
+	{
+		shadow = void;
+
+		obj_size = 1;
+
+		bound_count = 0;
+
+		super.init_buffer();
+		return;
+	}
+	function init_data( _obj_type=void )
+	{
+		if (_obj_type  ===   void)
+				obj_type = rand_ave(MAX_OBJ_TYPE);
+		else	obj_type = _obj_type;
+
+		file_type = file_type_list[ obj_type ];
+		obj_size = obj_size_rank[ obj_type ];
+
+		// 影の生成
+		if (SHADOW_ANIMATION  ==  1) {
+			EasyObjectInvalidate( shadow );
+			shadow = new CIrShadow( scene, this );
+			shadow.x = shadow.y = shadow.z = 0;
+			shadow.origin = ORIGIN_PARENT;
+			shadow.doUpdateCom = ShadowUpdateCom2;
+		}
+		anime_no   = ANIME_START_FALL;
+		page_no    = 0;
+		change_anime();
+		return;
+	}
+
+
+	// CG情報取得関数
+	function getCGInfo()
+	{
+		cg_info.filename = "ir_ed_gareki%02d00".sprintf(file_type);
+		cg_info.mirror = false;
+		cg_info.adapt = true;
+		cg_info.adapt = true;
+		cg_info.hitRect = hit_rect[obj_type];
+		cg_info.centerX = cg_center[obj_type][0];
+		cg_info.centerY = cg_center[obj_type][1];
+		return ( true );
+	}
+
+
+	function GetAnimeNo()
+	{
+		return ( anime_no );
+	}
+	function ChangeAnimeFalling()
+	{
+		anime_no = ANIME_FALLING;
+		page_no =  0;
+		change_anime();
+		return;
+	}
+	function ChangeAnimeFall()
+	{
+		anime_no = ANIME_FALL;
+		page_no =  0;
+		change_anime();
+		return;
+	}
+	function ChangeAnimeFallingEx()
+	{
+		anime_no = ANIME_FALLING;
+		page_no =  0;
+		change_anime();
+		vector_data.SetVector( 0,0, 0,-0.7, 0,0 );
+		return;
+	}
+
+	function landing_ground()
+	{
+		if (bound_count  ==  0)
+			scene.LandingFallObjCallback( obj_size );
+
+		if (bound_count  ==  0) {
+			vx     = -4+rand_ave(4*2);
+			vy     =  6;
+			add_vx =  0;
+			add_vy = -2;
+//					add_vy = -0.5;
+		} else
+		if (bound_count  ==  2) {
+			vx     = 0;
+			vy     = 0;
+			add_vx = 0;
+			add_vy = 0;
+		} else {
+//					vx *= 0.6;
+//					vy *= 0.6;
+			vx *= 0.75;
+			vy *= 0.75;
+		}
+		vector_data.SetVector( vx,vy, add_vx,add_vy, 0,0 );
+		bound_count += 1;
+		return;
+	}
+
+
+	function updateMove()
+	{
+		x += vector_data.UpdateVectorX();
+		z += vector_data.UpdateVectorZ();
+		switch ( anime_no )
+		{
+		case ANIME_START_FALL:
+			if (z  <  0) {
+				z = 0;
+			}
+
+			scene.CheckFallObjHitServant( this );
+			if (z  ==  0) {
+				z = 0;
+				anime_time = 0;
+				time_end_next = 100;
+				time_end_next_data = ANIME_LANDING;
+				return ( false );
+			}
+			break;
+		case ANIME_LANDING:
+//			cg_info.centerX = cg_center[obj_type][0]-3+rand_ave(3*3);
+//			cg_info.centerY = cg_center[obj_type][1]-3+rand_ave(3*3);
+
+			if (z  <  0) {
+				z = 0;
+				anime_time = 0;
+				time_end_next = 100;
+				time_end_next_data = ANIME_LANDING;
+				return ( false );
+			}
+			break;
+		case ANIME_FALLING:
+			break;
+		case ANIME_FALL:
+			break;
+		}
+
+		if (x  <=  (0-128)) {
+			enabled = false;
+			anime_no = -1;
+			page_no =  0;
+			change_anime();
+			return ( false );
+		}
+		return ( true );
+	}
+
+	// アニメ変更データセット処理
+	function change_anime()
+	{
+		switch ( anime_no )
+		{
+		case ANIME_START_FALL:
+			switch ( page_no )
+			{
+			case 0:
+				vector_data.SetVector( 0,-24, 0,0, 0,0 );
+
+				getCGInfo();
+				anime_time = 65535;
+				time_end_next = -1;
+				break;
+			case 1:
+				anime_time = 65535;
+				time_end_next =  0;
+				time_end_next_data =  1;
+				break;
+			}
+			break;
+
+		case ANIME_LANDING:
+			switch ( page_no )
+			{
+			case 0:
+				landing_ground();
+
+				anime_time = 65535;
+				time_end_next = -1;
+				break;
+			case 1:
+				anime_time = 65535;
+				time_end_next =  0;
+				time_end_next_data =  1;
+				break;
+			}
+			break;
+
+		case ANIME_FALLING:
+			switch ( page_no )
+			{
+			case 0:
+				priority = PRIORITY_SHADOW_UP2;
+				anime_time = 65535;
+				time_end_next = -1;
+				break;
+			case 1:
+				anime_time = 65535;
+				time_end_next =  0;
+				time_end_next_data =  1;
+				break;
+			}
+			break;
+
+		case ANIME_FALL:
+			switch ( page_no )
+			{
+			case 0:
+				priority = PRIORITY_SHADOW_UP2;
+//				vector_data.SetVector( /*-16*/0,0, 0,0, 0,0 );
+				landing_ground();
+				anime_time = 65535;
+				time_end_next = -1;
+				break;
+			case 1:
+				anime_time = 65535;
+				time_end_next =  0;
+				time_end_next_data =  1;
+				break;
+			}
+			break;
+
+		case ANIME_DAMMY:
+			vector_data.SetVector( 0,0, 0,0, 0,0 );
+			anime_time = 65535;
+			time_end_next =  0;
+			time_end_next_data =  0;
+			break;
+		}
+		return;
+	}
+
+
+ 	function ShadowUpdateCom2()
+ 	{
+		if (CheckValid(shadow)  ==  false)
+			return;
+ 		shadow.x = 0;
+ 		shadow.y = 0;
+		shadow.z = -z + (-scene.ground_obj.FallCheck(x, y));
+		return;
+ 	}
+}
+
+
+
+
+
+
+
+
+
+
+
+

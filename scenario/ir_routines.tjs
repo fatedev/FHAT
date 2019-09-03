@@ -1,0 +1,254 @@
+//==============================================================================
+//
+// 汎用関数
+//
+//==============================================================================
+var _randObj = new Math.RandomGenerator();
+
+
+
+
+
+function random32( range )
+{
+	if( g_Painting )
+		dm( "描画中にランダム関数が呼び出された！！" );
+	if ( range === void )
+		return _randObj.random32();
+	else
+		if ( range <= 0 )
+			return 0;
+		else
+			return _randObj.random32()%range;
+}
+
+
+
+// lower 以上 upper 以下のランダム整数値を返す
+function randomRange( lower, upper )
+{
+	return lower + random32( upper-lower+1 );
+}
+
+
+// val が start 以上 end 以下もしくは start 以下 end 以上であれば真を返す
+function inRange( start, val, end )
+{
+	if ( (start<=val) && (val<=end) )
+		return true;
+	if ( (end<=val) && (val<=start) )
+		return true;
+	return false;
+}
+			
+// (x1,y1) (x2,y2)を結ぶ直線上において、X座標xに対応するY座標を得る
+function getYPosOnLine( x1, y1, x2, y2, x )
+{
+	return (y2-y1)/(x2-x1)*(x-x1)+y1;
+}
+
+
+// 指定した多角線の、指定したX座標に対応するY座標を返す
+// x が範囲外の場合はvoidを返す
+// points には、辞書配列%[x,y]を要素とするの配列を指定する
+function getYPosOnPolyline( points, x )
+{
+	var i;
+	var p1, p2;
+	for ( i=0; i<points.count-1; i++ )
+	{
+		p1 = points[i];
+		p2 = points[i+1];
+		if ( inRange( p1.x, x, p2.x ) )
+			return getYPosOnLine( p1.x, p1.y, p2.x, p2.y, x );
+	}
+	return void;
+}
+
+
+
+// (x1,y1) (x2,y2)を結ぶ直線上において、Y座標yに対応するX座標を得る
+function getXPosOnLine( x1, y1, x2, y2, y )
+{
+	return (x2-x1)/(y2-y1)*(y-y1)+x1;
+}
+
+
+// 指定した多角線の、指定したY座標に対応するX座標を返す
+// y が範囲外の場合はvoidを返す
+function getXPosOnPolyline( points, y )
+{
+	var i;
+	var p1, p2;
+	for ( i=0; i<points.count-1; i++ )
+	{
+		p1 = points[i];
+		p2 = points[i+1];
+		if ( inRange( p1.y, y, p2.y ) )
+			return getXPosOnLine( p1.x, p1.y, p2.x, p2.y, y );
+	}
+	return void;
+}
+
+
+// 角度（度）を -180 以上 180 未満に正規化する
+function normalize180( deg )
+{
+	deg = normalize360( deg );
+	if ( deg >= 180 )
+		return deg-360;
+	else
+		return deg;
+}
+
+
+// 角度（度）を 0 以上 360 未満に正規化する
+function normalize360( deg )
+{
+	// 負の値に対してMOD演算をした場合、結果も負になるので注意
+	deg %= 360;
+	if ( deg >= 0 )
+		return deg;
+	else
+		return (deg+360)%360;
+}
+
+
+
+// 座標(dx,dy)と原点の成す角度をラジアンで返す。座標がどの象限にあっても正しい値を返す
+function arctan( dx, dy )
+{
+	if ( dx==0 && dy==0 )
+		return 0;
+	// -45 〜 45度の範囲にいる場合
+	if ( dx >= Math.abs(dy) )
+		return Math.atan( dy/dx );
+	// -135〜-180, 135〜180度の範囲にいる場合
+	if ( dx <= -Math.abs(dy) )
+		return Math.PI-Math.atan( dy/-dx );
+	// 45〜135度の範囲にいる場合
+	 if ( dy >= 0 )
+		return Math.PI/2 - Math.atan( dx/dy );
+	// -45〜-135度の範囲にいる場合
+	//if( dy < 0 )
+		return -Math.PI/2 + Math.atan( dx/-dy );
+		
+}
+
+
+// 小さいほうの値を返す
+function min( val1, val2 )
+{
+	if ( val1 < val2 )
+		return val1;
+	else
+		return val2;
+}
+
+
+// 大きいほうの値を返す
+function max( val1, val2 )
+{
+	if ( val1 > val2 )
+		return val1;
+	else
+		return val2;
+}
+
+
+// val を lower 以上 upper 以下になるようにする
+function round( lower, val, upper )
+{
+	if( val < lower ) return lower;
+	if( val > upper ) return upper;
+	return val;
+}
+
+// 角度単位の変換 度(degree)→ラジアン(radian)
+function degToRad( deg )
+{
+	return deg*Math.PI/180;
+}
+
+// 角度単位の変換 ラジアン→度
+function radToDeg( rad )
+{
+	return rad*180/Math.PI;
+}
+
+
+// (dx, dy)だけ離れた点の距離を返す
+function hypot( dx, dy )
+{
+	return Math.sqrt( dx*dx + dy*dy );
+}
+
+// 配列 array の最後の値を返す
+function getLastOf( array )
+{
+	if ( array )
+		if ( array.count>0 )
+			return array[ array.count-1 ];
+	return void;
+}
+
+
+// 先読み攻撃のための計算ルーチン
+// --
+// ターゲットが座標(targetX,targetY)にいて、速度(targetVX,targetVY) で進んでいるものとする。
+// 攻撃者が座標(attackerX,attackerY) にいて、速度(attackerV)の弾を発射する。このとき、
+// どの方向に弾をうてば、うまい具合にターゲットに命中するかを計算する。
+// 戻り値は辞書配列で、命中予想地点を x, y に、命中予想時刻を t にセットする。
+// このx,yに向けて弾を発射すれば、時間 t 後に必ずターゲットに命中する.
+// 絶対に弾がターゲットに当たらない場合は void を返す。
+function calcHitPos( targetX, targetY, targetVX, targetVY, attackerX, attackerY, attackerV )
+{
+	var t = calcHitTime( targetX, targetY, targetVX, targetVY, attackerX, attackerY, attackerV );
+	if ( t < 0 )
+		return void; // 弾を当てることはできない
+	// 得られた時間から、ターゲットと弾が接触する座標を得る
+	var x = targetX + targetVX*t;
+	var y = targetY + targetVY*t;
+	// 構造体にまとめる
+	var info = %[];
+	info.x = x;
+	info.y = y;
+	info.t = t;
+	return info;
+}
+
+function calcHitTime( targetX, targetY, targetVX, targetVY, attackerX, attackerY, attackerV )
+{
+	/*
+	ターゲットと攻撃者の距離
+		dx = targetX-attackerX
+		dy = targetY-attackerY 
+	時間ｔ後の攻撃者とターゲットの距離^2
+		= (dx+targetVX*t)^2 + (dy+targetVY*t)^2
+	時間ｔ後の攻撃者とミサイルの距離^2
+		= (attackerV*t)^2
+	ターゲットに弾が命中するという事は、(攻撃者とターゲットの距離)＝(攻撃者と弾の距離) ということなので
+		(dx+targetVX*t)^2 + (dy+targetVY*t)^2 = (attackerV*t)^2
+	この式をｔについて解く。この式はｔについての二次方程式になっていて複数解になるため、
+	ゼロ以上で、かつ小さいほうの値を命中時刻として選ぶ	
+	*/
+	var dx = targetX-attackerX;
+	var dy = targetY-attackerY;
+	var A = (targetVX*targetVX) + (targetVY*targetVY) - attackerV*attackerV;
+	var B = 2*dx*targetVX + 2*dy*targetVY;
+	var C = dx*dx + dy*dy;
+	// 判別式
+	var D = B*B-4*A*C;
+	if ( D < 0 )
+		return -1; 
+	if ( A == 0 )
+		return -1;
+	// 時間tについての二次方程式を解く
+	var t1 = (-B+Math.sqrt( D )) / (2*A);
+	var t2 = (-B-Math.sqrt( D )) / (2*A);
+	// ２つ得られた時間解のうち、正数かつ小さいほうを選ぶ
+	if ( t1>=0 && t2>=0 ) return min(t1,t2);
+	if ( t1>=0 ) return t1;
+	if ( t2>=0 ) return t2;
+	return -1;
+}

@@ -1,0 +1,278 @@
+/*******************************************************************************
+	IRIYA - TALK
+*******************************************************************************/
+
+
+
+class CIrFuji extends CIriyaObject
+{
+	function CIrFuji( _scene, _parent )
+	{
+		super.CIriyaObject(...);
+		priority = PRIORITY_PLAYER;
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	function onAnimation()
+	{
+		imageId = timing\5%2;
+	}
+	
+	function getImageFileInfo()
+	{
+		var info = %[];
+		info.filename = "ir_char_fuji00%02d".sprintf(imageId);
+		info.adapt = true;
+		info.mirror = true;
+		info.centerX = 46;
+		info.centerY = 98;
+		return info;
+	}
+}
+
+
+
+class CIriyaTalk extends CIriyaSceneEx
+{
+	var FieldXSize		= 2200;
+	var FieldYSize		= 600;
+	var FirstCameraPosX	= 400;
+	var FirstCameraPosY	= 300;
+	var textObj;
+	
+	function CIriyaTalk( parent, scene_id )
+	{
+		super.CIriyaSceneEx( ... );
+		dm( "会話" );
+	}
+	
+	function finalize()
+	{
+		super.finalize( ... );
+	}
+	
+	function init()
+	{
+		super.init( ... );
+		optShowReadygo = false;
+		optShowTitle = false;
+		BgmPlay( BGM_TALK );
+	}
+
+	// 通常カメラを更新する（宝具を使っていないときに呼び出される）
+	function normalCameraUpdate( camera )
+	{
+		with( camera )
+		{
+			.motionDestX = playerObj.x;
+			.motionDestY = playerObj.y;
+		}
+		return true;
+	}
+
+	// index番目のプレイヤの初期化処理の際に呼び出される
+	function onInitPlayer( player, index )
+	{
+	}
+	
+	var masters = [
+		%[x:200, y:200, char:CHARA_ID_RIN],
+		%[x:160, y:300, char:CHARA_ID_SHIROU],
+		%[x:120, y:400, char:CHARA_ID_SAKURA]
+	];
+
+	var messages = [];
+	var messageIndex = 0;
+	function messageInit()
+	{
+		//
+		messages.load( "ir_talk.txt" );
+		switch( id )
+		{
+		case SCENE_TALK1:
+			messageIndex = messages.find( "#begin1" )+1;
+			break;
+		default:
+			messageIndex = messages.find( "#begin2" )+1;
+			break;
+		}
+		return messageNext();
+	}
+	
+	function messageNext()
+	{
+		// 空白行を飛ばす
+		while ( messageIndex<messages.count && messages[messageIndex]=="" )
+			messageIndex++;
+		// 空白行までをセットする
+		textObj.strings = [];
+		while ( messageIndex<messages.count && messages[messageIndex]!="" )
+		{
+			textObj.strings.add( messages[messageIndex] );
+			messageIndex++;
+		}
+		// 空白行を飛ばす
+		while ( messageIndex<messages.count && messages[messageIndex]=="" )
+			messageIndex++;
+		// これで終了？
+		if ( messageIndex>=messages.count )
+			return true;
+		if ( messages[messageIndex] == "#end" )
+			return true;
+		// まだ続きがある
+		return false;
+	}
+
+	// フィールドの初期化時に呼び出される
+	function initField()
+	{
+		createScreen = false;
+		super.initField();
+		// 背景用オブジェクト
+		with ( new CIrBackground(this,etcRootObj) )
+		{
+			.type = "Background";
+			.filename = "ir_talk_bg";
+		}
+		// テキストボックス
+		textObj = new CIrTextbox(this,etcRootObj);
+		// キャラクタ達を配置する
+		var i;
+		for ( i=0; i<players.count; i++ )
+			with( players[i] )
+			{
+				.x = 300-i*20;
+				.y = 200+i*50;
+				.direction = MUKI_RIGHT;
+				.animation = ANI_STAND;
+				.marker.enabled = false if (CheckValid(.marker));
+				.gauge.enabled = false if (.gauge);
+			}
+		// マスターを生成
+		for ( i=0; i<masters.count; i++ )
+			with( new CIrServant(this,etcRootObj) )
+			{
+				.x = masters[i].x;
+				.y = masters[i].y;
+				.direction = MUKI_RIGHT;
+				.animation = ANI_MASTER_STAND;
+				.characterId = masters[i].char;
+				.marker.enabled = false if (CheckValid(.marker));
+				.gauge.enabled = false if (.gauge);
+				.onAnimation = servantAnimation;
+			}
+		// 藤ねえ
+		var fuji;
+		with( fuji=new CIrFuji(this,etcRootObj) )
+		{
+			.x = 600;
+			.y = 300;
+		}
+		addShadow(fuji);
+		// ねこ
+		var i;
+		for ( i=0; i<2; i++ )
+			addNeko(-1);
+	}
+	
+	
+	function addNeko( type )
+	{
+		with( new CIrNeko(this,etcRootObj,type) )
+		{
+			.x = randomRange( 400, SCREEN_SIZE_W-300 );
+			.y = randomRange( 150, SCREEN_SIZE_H-250 );
+			.direction = random32(2) ? MUKI_LEFT : MUKI_RIGHT;
+		}
+	}
+	
+	function servantAnimation( char )
+	{
+		char.doAnimation();
+	}
+	
+	//--------------------------------------------------------------------------
+	// イベント進行
+	//--------------------------------------------------------------------------
+	function onEventFirst()
+	{
+		textObj.show();
+	}
+	
+	var isLastPage;
+	var waittimer = 0;
+	var evmode;
+	function onEventStart()
+	{
+		with( normalCamera )
+		{
+			.motionDestX = .x = playerObj.x;
+			.motionDestY = .y = playerObj.y;
+			.motionType = MOTIONTYPE_INVERCE;
+		}
+		isLastPage = messageInit();
+	}
+	
+	function onEventLast()
+	{
+		switch( id )
+		{
+		case SCENE_TALK1: next=SCENE_TALK1_NEXT; break;
+		case SCENE_TALK2: next=SCENE_TALK2_NEXT; break;
+		default:
+			dm( "対応していないシーン番号 : "+id );
+			next=SCENE_TITLE;
+			break;
+		}
+	}
+	
+	function onEventPlaying()
+	{
+		switch( evmode )
+		{
+		// ページ開始
+		case 0:
+			textObj.write( !isLastPage );
+			evmode = 1;
+			break;
+		// ページ表示中
+		case 1:
+			if( ! textObj.writeDone )
+			{
+				if( input.left==0 )
+					textObj.skip();
+				break;
+			}
+			waittimer = 0;
+			evmode = 2;
+			break;
+		// ページクリック待ち
+		case 2:
+			waittimer++;
+			if( isAutoPlayMode() )
+			{
+				if( waittimer<10 )
+					break;
+			}
+			else
+				if( input.left!=0 )
+					break;
+			evmode = 3;
+			break;
+		// 次のページへ
+		case 3:
+			if( isLastPage )
+			{
+				eventSwitch = EVENTSWITCH_FADEOUT;
+				break;
+			}
+			isLastPage = messageNext();
+			evmode = 0;
+			break;
+		}
+	}
+}

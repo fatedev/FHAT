@@ -1,0 +1,728 @@
+/*-----------------------------------------------------------------------------
+/	Copyright (C) 1999-2005 TYPE-MOON All Rights Reserved.
+/		チケットメニュー
+/----------------------------------------------------------------------------*/
+@if(__TICKETMENULAYER_DEFINED__==0)
+@set(__TICKETMENULAYER_DEFINED__=1)
+
+//	ボタン画像をそのままドラッグ中の画像として使用するか？
+@set(USE_BUTTON_IMAGE=0)
+
+//	チケットの上書きができるかどうか
+@set(ENABLED_TICKET_OVERRIDE=1)
+
+Scripts.execStorage("ExButtonLayer.tjs");
+Scripts.execStorage("ExtendMenuLayer.tjs");
+Scripts.execStorage("SaveLoadMenuLayer.tjs");	//	InputLayerを使用
+
+Scripts.execStorage("ScenePlayMenuLayer.tjs");	//	既読数を取得
+
+class TicketMenuLayer// extends ExtendMenuLayer
+{
+	var ticketLeft	= 56;
+	var ticketTops	= [ 97, 242, 387 ];
+	var lastplayLefts	= [ 182, 212, 242, 272, 302, 332 ];
+	var lastplayLeftStep= -10;
+	var lastplayTop		= 17;
+	var playtimeLefts	= [ 590, 643 ];
+	var playtimeLeftStep= -10;
+	var playtimeTop		= 17;
+	var gamedateLefts	= [ 355, 434 ];
+	var gamedateTop		= 16;
+	var achievementRate	= %[left:253, "left2" => 294, top:88, step:12];	//	left2は小数点以下
+	var input			= %[left:152,top:50,width:392,height:21];
+	var numImages		= [ "tk_numA", "tk_numB", "tk_numC" ];
+	var thumbnailPos	= [ 12, 11 ];
+	var erasePos		= [ 392, 84 ];
+	var startPos		= [ 550, 79 ];
+	var copyPos			= [ 471, 84 ];
+	var specialLeft		= 561;
+	var specialTops		= [ 70, 234, 398 ];
+	var startHint		= [ "このチケットでゲームを始めます。", "新しくゲームを始めます。" ];
+	var specialHint		= [ "裏マップへ移動します。", "???" ];
+	var scenelistfile	= "シーン一覧.txt";
+
+	//	裏マップのフラグリスト
+	var flaglist		= [
+//		"trail_魔境編-33"	//	テスト用
+	];
+
+	var enterse	= "";	//	ボタンにEnter
+	var clickse	= "";	//	ボタンをクリック(チケット選択)
+	var erasese	= "";	//	チケットを削除
+
+	var defaulttime		= 400;
+	var defaultaccel	= 0;
+
+	var special_storage	= "title.ks";	//	裏マップへ行くためのストレージ
+	var special_label	= "*secretmap";	//	        〃          ラベル
+
+	var title;
+	var buttons;
+	var ticket;
+	var num;
+	var stamp;
+
+	var ticketWidth, ticketHeight;
+
+	var return_storage;
+	var return_label;
+
+	var showed, acceptable;
+
+	var name;
+	var window;
+	var parent;
+
+	var	scenelist;
+
+	function TicketMenuLayer(win, par)
+	{
+		name	= "チケットメニュー";
+		window	= win;
+		parent	= win.back.base;
+		win.current.visible	= win.current.comp.visible	= false;	//	メッセージは非表示
+		stopBGM();
+
+		//	背景
+		parent.loadImages(%[storage:"tk_bg"]);
+
+		//	タイトル
+		with(title = new global.Layer(win, parent))
+		{
+			.loadImages("tk_title");
+			.setSizeToImageSize();
+			.setPos(26, 21);
+			.hitThreshold	= 256;
+			.visible	= true;
+		}
+
+		//	QUITボタン
+		with(buttons = new ExButtonLayer(win, parent, "quit", 688, 549, "tk_quit", "ゲームを終了します。"))
+		{
+			.target		= this;
+			.mode		= 3;
+			.entersound	= enterse;	//	enter音は統一
+			.hitThreshold	= 0;
+			.focusable	= true;
+			.opacity	= 255;
+			.visible	= true;
+		}
+
+		//	数字画像
+		num	= [];
+		for(var i=0; i<numImages.count; i++)
+		{
+			with(num[i] = new global.Layer(win, parent))
+			{
+				.loadImages(numImages[i]);
+				.setSize(.imageWidth \ 10, .imageHeight);
+			}
+		}
+
+		//	チケット
+		ticket	= [];
+		for(var i=0; i<MaxTickets; i++)
+		{
+			ticket[i] = new global.TicketLayer(win, parent, this, ticketLeft, ticketTops[i]-(50+i*10), i, num);
+		}
+	}
+
+	function finalize()
+	{
+		release(stamp);
+		releaseArray(ticket);
+		release(num);
+		release(buttons);
+		release(title);
+	}
+
+	var timer;
+	var focus_item;
+	function show(time=defaulttime, accel=defaultaccel)
+	{
+		if(showed)
+			return;
+		showed	= acceptable = true;
+
+//		dm("show("+Scripts.getTraceString()+")");
+		window.fore.base.beginTransition(%[time:time,method:"crossfade"]);
+
+		var delay	= 100;
+		for(var i=0; i<MaxTickets; i++)
+			ticket[i].move(ticketLeft, ticketTops[i],, time + delay * (i+1), -2,, 0);
+
+		var no		= +global.sf.lastPlayTicketNo;
+		var item	= buttons.get("start."+no);
+		timer	= new Timer(finishShow, "");
+		timer.interval	= time + 50;
+		timer.enabled	= true;
+		focus_item	= item;
+		moveCursor(parent, ticketLeft + item.left + (item.width >> 1), ticketTops[no] + item.top + (item.height >> 1), time);	//	〃 へカーソル移動
+	}
+
+	function finishShow()
+	{
+//		dm("finishShow: focusedLayer = "+kag.focusedLayer+"("+Scripts.getTraceString()+")");
+		focus_item.focus();
+		kag.focusedLayer	= focus_item;
+		invalidate timer;
+		timer	= void;
+
+		//	右クリックを、「ゲームを終了」「前に戻る」等に割り当てる
+		setRClickExp("kag.onCloseQuery()");
+	}
+
+	function closeThis()
+	{
+		//	ボタンを押せなくする
+		acceptable	= false;
+//		buttons.enableAll(false);
+
+		//	右クリックコマンドをリセット
+		resetRClickExp();
+
+		hideTicketMenu();	//	メニューを閉じて、元に戻る
+	}
+
+	function onMouseDown(x, y, button, shift)
+	{
+		if(!acceptable)
+			return;
+		if(button == mbRight)
+		{
+			//	閉じる
+			kag.onCloseQuery();
+		}
+	}
+
+	function onButtonDown(btn)
+	{
+		if(!acceptable)
+			return;
+		var tmp	= btn.id.split(".");
+		switch(tmp[0])
+		{
+		case "quit":	//	閉じる
+			kag.onCloseQuery();
+			break;
+
+		case "start":	//	ゲーム開始/初期化
+			playSound(clickse);
+			loadTicketFile(+tmp[1]);	//	チケットデータを読み込む
+			closeThis();
+			break;
+
+		case "erase":	//	データ削除
+			kag.askYesNo2("復元できませんが、消去してもよろしいですか？", eraseData, +tmp[1]);	//	確認メッセージを表示
+			break;
+		}
+	}
+
+	//	コピーボタンのドラッグ＆ドロップ
+	var dragger;
+	var	copyClickLeft, copyClickTop;
+	var	dragticket;
+	var	dragenter;
+	function onDragStart(obj, x, y)
+	{
+		var tmp	= obj;
+		var	l, t;
+		do {
+			l	+= tmp.left;
+			t	+= tmp.top;
+			tmp	= tmp.parent;
+		} while(tmp != null);
+		with(dragger = new global.Layer(window, parent))
+		{
+@if(USE_BUTTON_IMAGE==1)
+			.assignImages(obj);
+			.setSize(obj.width, obj.height);
+			.imageLeft	= -.width * 2;
+@endif
+@if(USE_BUTTON_IMAGE==0)
+			.loadImages("tk_dragger");
+			.setSizeToImageSize();
+			.type	= ltAdditive;
+@endif
+			.setPos(l, t);
+			.hitThreshold	= 256;
+			.opacity	= 128;
+			.visible	= true;
+		}
+		copyClickLeft	= x;
+		copyClickTop	= y;
+
+		with(dragenter = new global.Layer(window, parent))
+		{
+			.loadImages("tk_enter");
+			.setSizeToImageSize();
+			.hitThreshold	= 256;
+			.opacity		= 255;
+			.type			= ltAdditive;
+			.visible		= false;
+		}
+		dragticket	= -1;
+	}
+
+	function onDragMove(obj, x, y)
+	{
+		if(dragger == void)
+			return;
+
+		var	cx = parent.cursorX, cy = parent.cursorY;
+		dragger.setPos(cx - copyClickLeft, cy - copyClickTop);
+
+		var	tmp	= obj.id.split(".");
+		var	src	= +tmp[1];
+		for(var i=0; i<ticket.count; i++)
+		{
+			if(src != i && inRect(cx, cy, ticket[i])
+@if(ENABLED_TICKET_OVERRIDE==0)
+				 && !ticket[i].exist
+@endif
+			)
+			{
+				dragticket	= i;
+				with(dragenter)
+				{
+					.setPos(ticket[i].left-3, ticket[i].top-3);
+					.visible	= true;
+				}
+				return;
+			}
+		}
+		dragenter.visible	= false;
+		dragticket	= -1;
+	}
+
+	function onDragEnd(obj, x, y)
+	{
+		if(dragger == void)
+			return;
+
+		if(dragticket >= 0
+@if(ENABLED_TICKET_OVERRIDE==0)
+			 && !ticket[dragticket].exist
+@endif
+		)
+		{
+			//	コピーしてもよいか問い合わせる
+			var	tmp	= obj.id.split(".");
+			var	src	= +tmp[1];
+			window.askYesNo2("チケットを"+(
+@if(ENABLED_TICKET_OVERRIDE==1)
+				ticket[dragticket].exist ? "上書き" :
+@endif
+			"コピー")+"してもよろしいですか？", copyData, src, dragticket);
+		}
+
+		invalidate dragger;
+		dragger	= void;
+		release(dragenter);
+	}
+
+	function copyData(result, src, dest)
+	{
+		if(!result)
+			return;
+
+@if(ENABLED_TICKET_OVERRIDE==1)
+		//	チケットが存在するなら削除する
+		if(ticket[dest].exist)
+		{
+			deleteTicketFile(dest);
+			ticket[dest].clear();
+		}
+@endif
+		//	チケットをコピーする
+		if(copyTicketFile(src, dest) != "")
+			return;
+
+		//	チケットを再描画
+		ticket[dest].init();
+		buttons.get("start."+dest).hint		= startHint[0];
+	}
+
+	function eraseData(result, num)
+	{
+		if(result)
+		{
+			deleteTicketFile(num);	//	チケットデータを削除する
+
+			//	表示を更新
+			ticket[num].clear();
+
+			buttons.get("start."+num).hint	= startHint[1];
+			with(buttons.get("erase."+num))
+			{
+				.enabled	= false;
+				.visible	= false;
+			}
+			with(buttons.get("copy."+num))
+			{
+				.enabled	= false;
+				.visible	= false;
+			}
+			playSound(erasese);
+		}
+	}
+}
+
+class TicketLayer extends FadeLayer
+{
+	var	onwer;
+	var	no;
+	var	num;
+	var	half;
+	var	text;
+
+	var	erase;
+	var	copy;
+	var	start;
+
+	var	tf;		//	このチケットに対応するフラグ
+
+	var	exist;
+
+	function TicketLayer(win, par, o, l, t, no, num)
+	{
+		super.FadeLayer(...);
+		this.owner	= o;
+		this.no		= no;
+		this.num	= num;
+
+		init(l, t);
+
+		hitThreshold	= 256;
+		opacity	= 255;
+		visible	= true;
+	}
+
+	function finalize()
+	{
+		release(text);
+		super.finalize();
+	}
+
+	function init(l=left, t=top)
+	{
+		loadImages("tk_ticket");
+		setSizeToImageSize();
+//		type	= ltAlpha;
+
+		//	コメント
+		if(text == void)
+		{
+			with(text = new InputLayer(window, this, false))
+			{
+				.name			= "コメント";
+				.setPos(152, 51);
+				.setSize(392+119, 19);
+				.font.height	= 19;
+				.Edit_textColor	= 0xFFFFFF;
+				.Edit_color		= 0x000000;
+				.Edit_opacity	= 0;
+				.shadowcolor	= 0x000000;
+				.hint			= "コメントが記入可能です。";
+				.visible		= true;
+			}
+		}
+
+		//	チケットが存在する/しないによる処理
+		var fname	= getTicketFileNameAtNum(no);
+		exist	= false;
+		for(var i=0; i<MaxTicketBackup; i++)
+		{
+			try
+			{
+				if(fname != "" && Storages.isExistentStorage(fname))
+				{
+					drawTicket(no, num);
+					exist	= true;
+
+					var layer	= new global.Layer(window, this);
+					layer.loadImages(fname);
+					operateRect(owner.thumbnailPos[0], owner.thumbnailPos[1], layer, 0, 0, layer.imageWidth, layer.imageHeight, omOpaque);
+					invalidate layer;
+					dm(@"\"${fname}\"を開きました。");
+					break;
+				}
+			}
+			catch(e)
+			{
+				dm(@"\"${fname}\"を開けませんでした。(${e.message})");
+			}
+
+			//	一つ前のファイルを試す
+			fname	= getTicketFileNameAtNum(no, i+1);
+		}
+
+		//	消去ボタン
+		if(erase == void)
+		{
+			with(erase = owner.buttons.add("erase."+no, owner.erasePos[0], owner.erasePos[1], "tk_erase",
+				"チケットを捨てます。\n(注意: 一度捨てると元に戻せません)"))
+			{
+				.target		= owner;
+				.parent		= this;
+				.mode		= 3;
+				.entersound	= owner.enterse;
+				.hitThreshold	= 0;
+				.opacity	= 255;
+			}
+		}
+
+		//	コピーボタン
+		if(copy == void)
+		{
+			with(copy = owner.buttons.add("copy."+no, owner.copyPos[0], owner.copyPos[1], "tk_copy",
+				"このボタンを空のチケットへドラッグ＆ドロップ\nすると、チケットがコピーされます。"))
+			{
+				.target		= owner;
+				.parent		= this;
+				.mode		= 3;
+				.entersound	= owner.enterse;
+				.hitThreshold	= 0;
+				.opacity	= 255;
+				.onMouseDown	= function(x, y, button, shift)
+				{
+					state	= 2;
+					if(typeof target.onDragStart != "undefined")
+						target.onDragStart(this, x, y);
+//dm("drag start: "+name);
+				} incontextof copy;
+				.onMouseUp	= function(x, y, button, shift)
+				{
+					state	= 1;
+					if(typeof target.onDragEnd != "undefined")
+						target.onDragEnd(this, x, y);
+//dm("drag end: "+name);
+				} incontextof copy;
+				.onMouseMove	= function(x, y)
+				{
+					if(state == 2)
+					{
+						if(typeof target.onDragMove != "undefined")
+							target.onDragMove(this, x, y);
+//dm(@"drag: ${name} ${x}, ${y} => ${window.primaryLayer.cursorX}, ${window.primaryLayer.cursorY}");
+					}
+				} incontextof copy;
+			}
+		}
+
+		//	スタートボタン
+		if(start == void)
+		{
+			with(start = owner.buttons.add("start."+no, owner.startPos[0], owner.startPos[1], "tk_start", owner.startHint[exist ? 0 : 1]))
+			{
+				.target		= owner;
+				.parent		= this;
+				.mode		= 3;
+				.entersound	= owner.enterse;
+				.hitThreshold	= 0;
+				.focusable	= true;
+				.opacity	= 255;
+				.visible	= true;
+			}
+		}
+
+		//	ボタンを有効/無効にする
+		with(owner.buttons.get("erase."+no))
+			.enabled = .visible = .focusable = exist;
+		with(owner.buttons.get("copy."+no))
+			.enabled = .visible = .focusable = exist;
+
+		setPos(l, t);
+	}
+
+	function drawTicket(i, num)
+	{
+		//	最終プレイ日時
+		var	layer	= num[0];
+		var lp	= global.sf.lastPlayDatetime[i];
+		if(lp !== void)
+		{
+			var l	= owner.lastplayLefts;
+			var step= owner.lastplayLeftStep;
+			var t	= owner.lastplayTop;
+			var j;
+			drawNum(lp[0], layer, l[0], t, step, 4, false);
+			for(j=1; j<4; j++)
+				drawNum(lp[j], layer, l[j], t, step, 2, false);
+			for(; j<lp.count; j++)
+				drawNum(lp[j], layer, l[j], t, step, 2);
+		}
+
+		//	プレイ時間描画
+		layer	= num[1];
+		var tm	= global.sf.playTime[i] \ 60000;	//	ミリ秒→分
+		if(tm !== void)
+		{
+			var l	= owner.playtimeLefts;
+			var step= owner.playtimeLeftStep;
+			var t	= owner.playtimeTop;
+			drawNum(tm \ 60, layer, l[0], t, step, 3, false);	//	時間
+			drawNum(tm % 60, layer, l[1], t, step, 2);			//	分
+		}
+
+		//	ゲーム内日付描画
+		var gd	= global.sf.gameDate[i];
+		if(gd !== void)
+		{
+			var l	= owner.gamedateLefts;
+			var t	= owner.gamedateTop;
+
+			var	layer	= new global.Layer(window, this);
+			layer.loadImages("tk_"+(gd-7)+"day");
+			operateRect(l[0], t, layer, 0, 0, layer.imageWidth, layer.imageHeight);
+			var	gt	= global.sf.gameTimezone[i];
+			if(gt !== void)
+			{
+				layer.loadImages("tk_"+gt);
+				operateRect(l[1], t, layer, 0, 0, layer.imageWidth, layer.imageHeight);
+			}
+			invalidate layer;
+		}
+
+		//	チケットコメント
+		if(global.sf.ticketComment[i] != "")
+			text.text	= global.sf.ticketComment[i];
+
+		//	達成率
+		loadFlag();
+		var	result	= countAlreadyRead(this.tf, owner.scenelist);	//	ScenePlayMenuLayer.tjs 内の関数
+		var	all		= result[0];
+		var	count	= result[1];
+		owner.scenelist	= result[2];
+
+		var percent	= count * 100 / all;		//	"100.0"
+		dm("percent = "+percent+"("+count+"/"+all+")");
+		var l = owner.achievementRate.left, t = owner.achievementRate.top, step = owner.achievementRate.step;
+		layer = num[2];
+		var inte = "%3d".sprintf(percent);
+		dm("inte = "+inte);
+		for(var i=0; i<inte.length; i++)
+		{
+			operateRect(l, t, layer, inte[i] * layer.width, 0, layer.width, layer.height) if inte[i] != " ";
+			l	+= step;
+		}
+		var dot = (percent * 10) % 10;
+		dm("dot = "+dot);
+		operateRect(owner.achievementRate.left2, t, layer, dot * layer.width, 0, layer.width, layer.height);
+	}
+
+	function drawNum(num, layer, l, t, step, digit, drawzero=true)
+	{
+		digit	= (string num).length if !drawzero;
+		for(var i=0; i<digit; i++)
+		{
+			var n	= num % 10;
+			operateRect(l, t, layer, n * layer.width, 0, layer.width, layer.height);
+			l	+= step;
+			num	= num \ 10;
+		}
+	}
+
+	//	コメントが更新されたとき
+	function onChangeText(obj)
+	{
+		global.sf.ticketComment[no]	= obj.text;
+	}
+
+	function clear()
+	{
+		loadImages("tk_ticket");
+		text.text	= "";
+		exist	= false;
+		release(this.tf);
+		this.tf	= void;
+	}
+
+	function setPos(l, t)
+	{
+		super.setPos(...);
+//		half.setPos(left + width, top);
+	}
+
+	//	フラグ情報を読み込み
+	function loadFlag()
+	{
+		if(this.tf == void)
+			this.tf	= loadTicketFile(no, true);
+	}
+
+	function getFlag(i)
+	{
+		loadFlag();
+		return this.tf["裏マップ-%02d".sprintf(i)];
+	}
+
+	property left
+	{
+		setter(l)
+		{
+			super.left	= l;
+//			half.left	= left + width;
+		}
+		getter	{ return super.left; }
+	}
+
+	property top
+	{
+		setter(t)
+		{
+			super.top	= t;
+//			half.top	= t;
+		}
+		getter	{ return super.top; }
+	}
+
+	property comment
+	{
+		getter	{ return text.text; }
+	}
+
+	property showed
+	{
+		getter	{ return owner.showed; }
+	}
+}
+
+//	KAGからメニューを開く
+var ticket_menu;
+function showTicketMenu(st, ret)
+{
+	if(ticket_menu !== void)
+		return;
+
+	with(ticket_menu = new TicketMenuLayer(kag, kag.back.base))
+	{
+		.show();
+		.return_storage	= st;
+		.return_label	= ret;
+	}
+}
+
+function hideTicketMenu()
+{
+	if(ticket_menu == void)
+		return;
+
+//	ticket_menu.hide(,, closeTicketMenu);
+	kag.process(ticket_menu.return_storage, ticket_menu.return_label);
+}
+
+function closeTicketMenu()
+{
+	if(ticket_menu != void)
+	{
+		dispose(ticket_menu);
+		ticket_menu	= void;
+	}
+}
+
+/*-----------------------------------------------------------------------------
+/	End of File
+/----------------------------------------------------------------------------*/
+@endif

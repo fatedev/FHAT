@@ -1,0 +1,448 @@
+/*-----------------------------------------------------------------------------/
+/	Copyright (C) 2004 TYPE-MOON All Rights Reserved.
+/		花札タイトルプラグイン
+/-----------------------------------------------------------------------------*/
+@if(__HANAFUDATITLEPLUGIN_DEFINED__==0)
+@set(__HANAFUDATITLEPLUGIN_DEFINED__=1)
+Scripts.execStorage("HFButtonLayers.tjs");
+Scripts.execStorage("HFMenuLayer.tjs");
+Scripts.execStorage("Hanafuda.tjs");
+
+class HanafudaTitleLayer extends Layer
+{
+	var fadetime	= 800;
+	var	bgimage		= [ "hf_背景", "hf_t背景" ];
+	var	btndata	= [
+//		[ name, left, top, image, storage, label, tiger pos, appear flag ],
+		[ "story",		483,  88,	"hf_tストーリー",		"hanafuda.ks",	"*storymode",	3 ],
+		[ "quit",		 53, 470,	"hf_t終了",				"hanafuda.ks",	"*quit" ],
+		[ "config",		 57, 335,	"hf_t設定" ],
+		[ "rule",		 58, 190,	"hf_tルール" ],
+		[ "free",		170,  89,	"hf_tフリー対戦",		"hanafuda.ks",	"*freemode",	0,	"hanafuda_storyclear" ],
+		[ "normal",		273,  88,	"hf_tノーマルモード",	"hanafuda.ks",	"*normalmode",	1,	"hanafuda_storyclear" ],
+		[ "tutorial",	379,  89,	"hf_tチュートリアル",	"hanafuda.ks",	"*tutorial",	2 ]
+	];
+	var opentime	= 400, openaccel = 0;
+	var tigerdata	= [ "hf_tトラ", 172, 105, 53, 0 ];	//	名前, X, stepX, Y, stepY
+	var titledata	= [ "hf_ttitle", 609, 32 ];
+
+	var	enterse		= "hfse008.wav";
+	var	clickse		= "hfse006.wav";
+
+	var buttons;
+	var others;
+	var plugin;
+
+	var initialized;
+
+	var rulemenu;	//	ルール設定
+	var configmenu;	//	コンフィグ
+	var selectmenu;	//	キャラクター選択
+	var reference;	//	札一覧、役一覧
+	var	listmenu;	//	宝具一覧
+	var	game;
+
+	var popup, chat;	//	設定(ポップアップの有無/セリフの有無)
+
+	var acceptable;
+
+	function HanafudaTitleLayer(win, par, plugin)
+	{
+		this.plugin	= plugin;
+		super.Layer(...);
+		initialized	= false;
+		hitThreshold	= 0;
+		absolute		= 100000;
+
+		//	設定読み込み
+		popup	= tf.HanafudaPopup !== void ? tf.HanafudaPopup : true;
+		chat	= tf.HanafudaChat !== void ? tf.HanafudaChat : true;
+
+		game	= new Koikoi(0, 1);	//	宝具一覧から参照する為、必要。
+	}
+
+	function finalize()
+	{
+		//	設定記録
+		tf.HanafudaPopup= popup;
+		tf.HanafudaChat	= chat;
+
+		release(game);
+		release(listmenu);
+		release(reference);
+		release(selectmenu);
+		release(configmenu);
+		release(rulemenu);
+		releaseArray(others);
+		releaseDictionary(buttons);
+		super.finalize(...);
+	}
+
+	//-------------------------------------------------------------------------
+	//	フェード処理
+	var fadeelm;
+	function fade(opa, time=1000, accel=0, delay=0, erase=false)
+	{
+		fadeelm = %[];
+		with(fadeelm)
+		{
+			.lastopacity= opacity;
+			.opacity	= opa;
+			.time		= time;
+			.accel		= accel;
+			.erase		= erase;
+			.starttick	= System.getTickCount() + delay;
+		}
+		System.addContinuousHandler(fade_handler);
+	}
+
+	function fade_handler(tick)
+	{
+		with(fadeelm)
+		{
+			var past = tick - .starttick;
+			if(past > .time)
+				fade_finish();
+			else if(past > 0 && past != .last)
+			{
+				fade_construct(calcAccel(past / .time, .accel));
+				.last	= past;
+			}
+		}
+	}
+
+	function fade_construct(per)
+	{
+		with(fadeelm)
+		{
+//			dm("construct: "+per+"("+.last+")");
+			opacity	= int((.opacity - .lastopacity) * per + .lastopacity + 0.5);
+		}
+	}
+
+	function fade_finish()
+	{
+		fade_construct(1.0);
+		fade_stop();
+	}
+
+	function fade_stop()
+	{
+		if(fadeelm)
+		{
+			System.removeContinuousHandler(fade_handler);
+			var erase = fadeelm.erase;
+			invalidate fadeelm;
+			fadeelm	= void;
+			if(opacity == 0)
+				visible	= false;
+			if(erase)
+				plugin.onLayerClosed();
+		}
+	}
+
+	//-------------------------------------------------------------------------
+	//	初期化・終了処理
+	function init(time, accel)
+	{
+		//	背景の読み込み
+		loadImages(bgimage[tf.hanafuda_storyclear ? 1 : 0]);
+		setSizeToImageSize();
+		setPos(0, 0);
+
+		//	ボタンの準備
+		buttons	= %[];
+		others	= [];
+		for(var i=0; i<btndata.count; i++)
+		{
+			var bd = btndata[i], btn;
+			//	フラグが指定されている場合は、フラグが立っていないとダメ。
+			if(bd[7] != void && !global.tf[bd[7]])
+				continue;
+			with(btn = new HanafudaTitleButtonLayer(window, this, bd[3]))
+			{
+				.setPos(bd[1], bd[2]);
+				.name	= bd[0];
+				.jump_storage	= bd[4];
+				.jump_label		= bd[5];
+				.visible		= true;
+//				.move2dir		= true;
+				.enterse		= enterse;
+				buttons[bd[0]]	= btn;
+			}
+
+			//	トラマーク
+			if(bd[6] !== void)
+			{
+				with(others[i] = new global.Layer(window, this))
+				{
+					.loadImages(tigerdata[0]);
+					.setSizeToImageSize();
+					.setPos(tigerdata[1] + tigerdata[2] * bd[6], tigerdata[3] + tigerdata[4] * bd[6]);
+					.visible	= true;
+				}
+			}
+		}
+
+		//	その他
+		with(others[others.count] = new global.Layer(window, this))
+		{
+			.loadImages(titledata[0]);
+			.setSizeToImageSize();
+			.setPos(titledata[1], titledata[2]);
+			.visible	= true;
+		}
+
+		//	BGM開始
+		hfSound.bgm3	= true;
+
+		initialized	= true;
+		opacity	= 0;
+		visible	= true;
+		fade(255, time === void ? fadetime : time);
+		acceptable	= true;
+	}
+
+	function uninit(time, accel)
+	{
+		initialized	= false;
+		fade(0, time === void ? fadetime : time,,, true);
+		acceptable	= false;
+	}
+
+	function quit()
+	{
+//		plugin.hide();	//	プラグイン経由で閉じる
+		plugin.goNext();
+		acceptable	= false;
+	}
+
+	//	札一覧の表示
+	function showFudaReference()
+	{
+		reference	= new HanafudaReferenceLayer(window, this) if reference == void;
+		configmenu.enabled	= false;
+		reference.showFuda();
+	}
+
+	//	役一覧の表示
+	function showYakuReference()
+	{
+		reference	= new HanafudaReferenceLayer(window, this) if reference == void;
+		configmenu.enabled	= false;
+		reference.showYaku();
+	}
+
+	//	札一覧・役一覧の消去
+	function hideReference()
+	{
+		reference.hide();
+		configmenu.enabled	= true;
+	}
+
+	//	宝具一覧の表示
+	function showTreasureList()
+	{
+		listmenu	= new HanafudaTreasureMenuLayer(window, this) if listmenu == void;
+		configmenu.enabled	= false;
+		listmenu.show();
+	}
+
+	//	宝具一覧の消去
+	function hideTreasureList()
+	{
+		listmenu.hide();
+		configmenu.enabled	= true;
+	}
+
+	function hideMenu()
+	{
+		configmenu.hide();
+	}
+
+	//-------------------------------------------------------------------------
+	//	イベント処理
+	function onMouseDown(x, y, button, shift)
+	{
+		if(!initialized || !acceptable)
+			return;
+
+		if(button == mbRight)
+		{
+			//	移動先を指定して、閉じる
+			var	btn	= buttons.quit;
+			with(plugin)
+				.storage = btn.jump_storage, .label = btn.jump_label;
+			quit();
+		}
+	}
+
+	function onButtonDown(btn)
+	{
+		if(!initialized || !acceptable)
+			return;
+
+		playSound(clickse);
+		if(btn.name == "config")
+		{
+			//	設定メニューを開く
+			if(configmenu === void)
+				configmenu	= new HahafudaConfigMenuLayer(window, this, "title");
+
+			configmenu.show(opentime, openaccel);
+		}
+		else if(btn.name == "rule")
+		{
+			//	設定メニューを開く
+			if(rulemenu === void)
+				rulemenu	= new HanafudaRuleMenuLayer(window, this);
+			rulemenu.show(opentime, openaccel);
+		}
+		else
+		{
+			//	BGM停止
+//			hfSound.bgm3	= false;	//	各メニューに入ったときも鳴っている必要があるので、ここでは停止させない
+
+			//	移動先を指定して、閉じる
+			with(plugin)
+				.storage = btn.jump_storage, .label = btn.jump_label;
+			quit();
+		}
+	}
+}
+
+class HanafudaTitleButtonLayer extends PushButtonLayer
+{
+	var exchg	= %[
+		VK_UP		=> VK_DOWN,
+//		VK_PADUP	=> VK_DOWN,
+		VK_DOWN		=> VK_UP,
+//		VK_PADDOWN	=> VK_UP
+	];
+
+	function HanafudaTitleButtonLayer()
+	{
+		super.PushButtonLayer(...);
+	}
+
+	function onKeyDown(key, shift)
+	{
+		var k;
+		if((k = exchg[key]) !== void)
+			key	= k;
+		return super.onKeyDown(key, shift, true);
+	}
+
+	function onMouseEnter()
+	{
+		super.onMouseEnter(...);
+		focus();
+	}
+
+	function onMouseLeave()
+	{
+		super.onMouseLeave(...);
+		window.focusedLayer	= void;
+	}
+}
+
+//-----------------------------------------------------------------------------
+//	花札タイトルプラグイン
+class HanafudaTitlePlugin extends KAGPlugin
+{
+	var window;
+	var title;
+
+	var showed;
+
+	var storage, label;
+
+	function HanafudaTitlePlugin(win)
+	{
+		super.KAGPlugin();
+		window	= win;
+	}
+
+	function finalize()
+	{
+		release(title);
+		super.finalize(...);
+	}
+
+	function show(time, accel)
+	{
+		if(showed)
+			return;
+		showed	= true;
+
+		title	= new HanafudaTitleLayer(window, window.fore.base, this);
+		title.init(time, accel);
+	}
+
+	function hide(time, accel)
+	{
+		if(!showed)
+			return;
+		showed	= false;
+
+		title.uninit(time, accel);
+		title	= void;
+	}
+
+	function onLayerClosed()
+	{
+		close();
+		goNext();
+	}
+
+	function close()
+	{
+		showed	= false;
+		if(title)
+		{
+			invalidate title;
+			title	= void;
+		}
+	}
+
+	function goNext()
+	{
+		if(typeof global.kag != "undefined")
+		{
+			//	閉じた後の処理(ラベルジャンプなど)
+			kag.process(storage, label);
+		}
+	}
+
+	function onRestore(f, clear, elm)
+	{
+		// すべての、栞を読み出すときに呼ばれる
+		hide();	//	状態が復元されるので閉じる
+	}
+}
+if(typeof global.kag != "undefined")
+{
+	//	プラグインを登録
+	kag.addPlugin(global.hanafudatitle_object = new HanafudaTitlePlugin(kag));
+
+	//	呼び出しタグを追加
+	kag.tagHandlers.hanafudatitle_start	= function(elm)
+	{
+		with(hanafudatitle_object)
+		{
+			.show(elm.time, elm.accel);
+		}
+		return 0;
+	} incontextof kag;
+
+	kag.tagHandlers.hanafudatitle_close	= function(elm)
+	{
+		hanafudatitle_object.close();
+		return 0;
+	} incontextof kag;
+}
+
+@endif
+/*-----------------------------------------------------------------------------/
+/	End of HanafudaTitlePlugin.tjs
+/-----------------------------------------------------------------------------*/

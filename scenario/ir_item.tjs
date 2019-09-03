@@ -1,0 +1,2068 @@
+/*******************************************************************************
+
+	宝具使用時のイベント進行
+
+*******************************************************************************/
+
+var DEFENSE_CLICK_COUNT = 5;
+var DEFENSE_CLICK_TIME = FRAME_PER_SEC*1.5;
+
+var PRIORITY_HOUGU_TARGET	= PRIORITY_HOUGU+1000;
+var PRIORITY_HOUGU_GUARDEFF	= PRIORITY_HOUGU+3000;
+var PRIORITY_HOUGU_ATTACKER	= PRIORITY_HOUGU+5000;
+var	PRIORITY_HOUGU_CUTIN	= PRIORITY_HOUGU+8000; // 宝具使用時のカットイン
+var PRIORITY_HOUGU_MESSAGE	= PRIORITY_HOUGU+9000;
+var PRIORITY_HOUGU_FLASH	= PRIORITY_HOUGU+10000; // 宝具使用中のフェード用
+
+var HIT_DISTANCE = 60;
+
+var CUTIN_FADEIN_TIMELENGTH = 10;
+var CUTIN_FADEOUT_TIMELENGTH = 10;
+var CUTIN_FADEOUT_TIMING = 20;
+var CUTIN_SPEED_RATE = 0.05;
+
+
+class CIrMasterCutin extends CIriyaObject
+{
+	var characterId;
+
+	function CIrMasterCutin( _scene, _parent )
+	{
+		super.CIriyaObject(...);
+		origin = ORIGIN_WINDOW;
+		priority = PRIORITY_HOUGU_CUTIN;
+		allowAnimationWhileUsingHougu = true;
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	function show()
+	{
+		x = 10;
+		y = -200;
+		motionDestX = x;
+		motionRateY = CUTIN_SPEED_RATE;
+		motionDestY = y+300;
+		motionType = MOTIONTYPE_INVERCE;
+		motionStart();
+		fadeIn( CUTIN_FADEIN_TIMELENGTH );
+	}
+
+	function hide()
+	{
+		fadeOut( CUTIN_FADEOUT_TIMELENGTH );
+	}
+	
+	function onAnimation()
+	{
+		switch( timing )
+		{
+		case 0:
+			show();
+			break;
+		case CUTIN_FADEOUT_TIMING:
+			accelY = 2;
+			motionType = MOTIONTYPE_DEFAULT;
+			motionStart();
+			hide();
+			break;
+		case CUTIN_FADEOUT_TIMING+CUTIN_FADEOUT_TIMELENGTH:
+			enabled = false;
+			break;
+		}
+	}
+	
+	function getImageFileInfo()
+	{
+		var file;
+		switch( characterId )
+		{
+		case CHARA_ID_RIN:
+			file="ir_cutin_rin00";
+			break;
+		case CHARA_ID_SAKURA:
+			file="ir_cutin_sakura00";
+			break;
+		case CHARA_ID_SHIROU:
+			file="ir_cutin_shirou00";
+			break;
+		default:
+			return void;
+		}
+		var info = %[];
+		info.filename = file;
+		info.mirror = false;
+		info.adapt = false;
+		info.centerX = 0;
+		info.centerY = 300;
+		return info;
+	}
+}
+
+
+
+class CIrServantCutin extends CIriyaObject
+{
+	function CIrServantCutin( _scene, _parent )
+	{
+		super.CIriyaObject(...);
+		origin = ORIGIN_WINDOW;
+		priority = PRIORITY_HOUGU_CUTIN;
+		allowAnimationWhileUsingHougu = true;
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	function show()
+	{
+		x = 580;
+		y = 200;
+		motionDestX = x;
+		motionDestY = y-300;
+		motionRateY = CUTIN_SPEED_RATE;
+		motionType = MOTIONTYPE_INVERCE;
+		motionStart();
+		fadeIn( CUTIN_FADEIN_TIMELENGTH );
+	}
+	
+	function hide()
+	{
+		fadeOut( CUTIN_FADEOUT_TIMELENGTH );
+	}
+	
+	function onAnimation()
+	{
+		switch( timing )
+		{
+		case 0:
+			show();
+			break;
+		case CUTIN_FADEOUT_TIMING:
+			accelY = -2;
+			motionType = MOTIONTYPE_DEFAULT;
+			motionStart();
+			hide();
+			break;
+		case CUTIN_FADEOUT_TIMING+CUTIN_FADEOUT_TIMELENGTH:
+			enabled = false;
+			break;
+		}
+	}
+	
+	function getImageFileInfo()
+	{
+		var file;
+		switch( characterId )
+		{
+		case CHARA_ID_SABER:
+			file = "ir_cutin_saber00";
+			break;
+		case CHARA_ID_ARCHER:
+			file = "ir_cutin_archer00";
+			break;
+		case CHARA_ID_RIDER:
+			file = "ir_cutin_rider00";
+			break;
+		case CHARA_ID_LANCER:
+			file = "ir_cutin_lancer00";
+			break;
+		case CHARA_ID_CASTER:
+			file = "ir_cutin_caster00";
+			break;
+		default:
+			return void;
+		}
+		var info = %[];
+		info.filename = file;
+		info.mirror = false;
+		info.adapt = false;
+		info.centerX = 0;
+		info.centerY = 300;
+		return info;
+	}
+}
+
+
+
+
+class CIrSingleServantCutin extends CIriyaObject
+{
+	var characterId;
+	
+	function CIrSingleServantCutin( _scene, _parent )
+	{
+		super.CIriyaObject(...);
+		origin = ORIGIN_WINDOW;
+		priority = PRIORITY_HOUGU_CUTIN+10;
+		allowAnimationWhileUsingHougu = true;
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	function onAnimation()
+	{
+		switch( timing )
+		{
+		case 0:
+			x = 300;
+			y = 150;
+			motionDestX = x-300;
+			motionDestY = y;
+			motionRateX = 0.2;
+			motionRateY = 0;
+			motionType = MOTIONTYPE_INVERCE;
+			motionStart();
+			fadeIn( CUTIN_FADEIN_TIMELENGTH );
+			break;
+
+		case CUTIN_FADEOUT_TIMING:
+			accelX = -2;
+			motionType = MOTIONTYPE_DEFAULT;
+			motionStart();
+			fadeOut( CUTIN_FADEOUT_TIMELENGTH );
+			break;
+			
+		case CUTIN_FADEOUT_TIMING+CUTIN_FADEOUT_TIMELENGTH:
+			enabled = false;
+			break;
+		} 
+	}
+
+	function getImageFileInfo()
+	{
+		var file;
+		switch( characterId )
+		{
+		case CHARA_ID_SABER:
+			file = "ir_cutin_saber01";
+			break;
+		case CHARA_ID_ARCHER:
+			file = "ir_cutin_archer01";
+			break;
+		case CHARA_ID_RIDER:
+			file = "ir_cutin_rider01";
+			break;
+		case CHARA_ID_LANCER:
+			file = "ir_cutin_lancer01";
+			break;
+		case CHARA_ID_CASTER:
+			file = "ir_cutin_caster01";
+			break;
+		case CHARA_ID_BERSERCAR:
+			file = "ir_cutin_bersercar01";
+			break;
+		default:
+			return void;
+		}
+		var info = %[];
+		info.filename = file;
+		info.mirror = false;
+		info.adapt = false;
+		info.centerX = 400;
+		info.centerY = 0;
+		return info;
+	}
+}
+
+
+
+
+
+
+
+class CIrHouguGauge extends CIriyaObject 
+{
+	function CIrHouguGauge( _scene, _parent )
+	{
+		super.CIriyaObject(...);
+		allowAnimationWhileUsingHougu = true;
+		priority = PRIORITY_HOUGU_CUTIN;
+		origin = ORIGIN_WINDOWCENTER;
+		x = 0;
+		y = 130;
+	}
+	
+	var max;
+	var value;
+	function onDraw()
+	{
+		var img = images.get( getImageFileInfo(0) );
+		layer.setSize( img.width, 64 );
+		layer.copyRect( 0, 0, img, 0, 0, 272, 64 );
+		layer.copyRect( 38, 38, img, 38, 102, 192*value/max, 22 );
+		return true;
+	}
+
+	function getImageFileInfo()
+	{
+		var info =%[];
+		info.filename = "ir_sys_defense00";
+		info.mirror = false;
+		info.adapt = true;
+		info.centerX = 272\2;
+		info.centerY = 0;
+		return info;
+	}
+}
+
+
+
+class CIrHouguGuardEff extends CIriyaObject
+{
+	function CIrHouguGuardEff( _scene, _parent )
+	{
+		super.CIriyaObject( ... );
+		priority = PRIORITY_HOUGU_GUARDEFF;
+		animation = 0;
+		origin = ORIGIN_PARENT;
+		direction = parent.direction;
+		allowAnimationWhileUsingHougu = true;
+		enabled = ENABLE_HOUGUEFF;
+	}
+	
+	function onAnimation()
+	{
+		switch( animation )
+		{
+		case 0:
+			var i = timing\3;
+			if ( i<5 )
+				imageId = i;
+			else
+				animation = 1;
+			break;
+		case 1:
+			imageId = 5;
+			fadeOut(30);
+			animation = 2;
+			break;
+		case 2:
+			break;
+		}
+	}
+	
+	function onDraw()
+	{
+		var img = images.get( getImageFileInfo() );
+		layer.type = ltAdditive;
+		layer.setSize( img.width, img.height );
+		layer.fill( 0 );
+		layer.copyRect( 0, 0, img, 0, 0, img.width, img.height );
+		layer.fillRect( 0, 0, 1, img.height, 0 );
+		return true;	
+	}
+	
+	
+	function getImageFileInfo()
+	{
+		var info = %[];
+		info.filename = "ir_eff_guard%02d".sprintf(imageId);
+		info.mirror = direction==MUKI_RIGHT;
+		info.adapt = false;
+		info.centerX = 212+50;
+		info.centerY = 234;
+		return info;
+	}
+}
+
+
+
+class CIrHouguDefense extends CIriyaObject
+{
+	var timerCountDown;
+	var succeeded;
+	var buttonObj;
+	var gaugeObj;
+	var imageId;
+	
+	var IMG_TIMER		= 0;
+	var IMG_SUCCEEDED	= 10;
+	var IMG_FAILED		= 20;
+	
+	function CIrHouguDefense( _scene, _parent )
+	{
+		super.CIriyaObject(...);
+		allowAnimationWhileUsingHougu = true;
+		priority = PRIORITY_HOUGU_MESSAGE;
+		origin = ORIGIN_WINDOWCENTER;
+		x = 0;
+		y = 80;
+		layer.setSize(400,150);
+		timerCountDown = DEFENSE_CLICK_TIME;
+		succeeded = false;
+		// ボタン連打指示
+		with( buttonObj=new CIrFightButton(scene, this) )
+		{
+			.allowAnimationWhileUsingHougu = true;
+			.animation = ANI_BUTTON_FIGHT;
+		}
+		// ゲージの表示
+		with( gaugeObj=new CIrHouguGauge(scene,this) )
+		{
+			.allowAnimationWhileUsingHougu = true;
+			.max = DEFENSE_CLICK_COUNT;
+			.value = 0;
+		}
+		//
+		imageId = IMG_TIMER;
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	var timer_sec;
+	var timer_msec;
+	
+	function onAnimation()
+	{
+		switch( animation )
+		{
+		case 0:
+			timer_sec  = timerCountDown \ FRAME_PER_SEC;
+			timer_msec =(timerCountDown % FRAME_PER_SEC)*1000\FRAME_PER_SEC;
+			// クリック回数が規定回数以上になれば成功
+			if ( gaugeObj.value>=DEFENSE_CLICK_COUNT )
+			{
+				succeeded = true;
+				animation = 1;
+				imageId = IMG_SUCCEEDED;
+				break;
+			}
+			// 残り時間がゼロになったら失敗
+			if ( timerCountDown <= 0 )
+			{
+				succeeded = false;
+				animation = 2;
+				imageId = IMG_FAILED;
+				break;
+			}
+			// クリックされた回数を数える
+			if ( scene.input.left == 0 )
+				gaugeObj.value++;
+			// 残り時間を減らす
+			timerCountDown--;
+			break;
+		case 1:
+		case 2:
+			if ( timing==0 )
+			{
+				buttonObj.fadeOut(10);
+				gaugeObj.fadeOut(10);
+			}
+			if ( timing<30 )
+				break;
+			fadeOut(10);
+			animation = 3;
+			break;
+		case 3:
+			break;
+		}				
+	}
+	
+	var TIME_X = 0;
+	var TIME_Y = 0;
+	var TIME_W = 96;
+	var DIGIT_W = 32;
+	var DIGIT_H = 32;
+	var text_x;
+	
+	function drawDigit( img, digit )
+	{
+		layer.copyRect( text_x, TIME_Y, img, TIME_W+DIGIT_W*digit, 0, DIGIT_W, DIGIT_H );
+		text_x += DIGIT_W;
+	}
+	
+	function drawColon( img )
+	{
+		drawDigit( img, 10);
+	}
+	
+	function drawTime( img )
+	{
+		layer.copyRect( text_x, TIME_Y, img, 0, 0, TIME_W, DIGIT_H );
+		text_x += TIME_W;
+	}
+	
+	
+	function onDraw()
+	{
+		layer.fill( 0 );
+		if ( animation==0 )
+		{
+			var i = IMG_TIMER + timing\15 % 2;
+			var w = TIME_W+DIGIT_W*4;
+			var img = images.get( getImageFileInfo(i) );
+			text_x = (layer.width-w)/2;
+			drawTime( img );
+			drawDigit( img, timer_sec     %10 );
+			drawColon( img );
+			drawDigit( img, timer_msec\100%10 );
+			drawDigit( img, timer_msec\10 %10 );
+		}
+		else
+		{
+			var img = images.get( getImageFileInfo() );
+			var x = (layer.width-img.width)/2;
+			layer.copyRect( x, 0, img, 0, 0, img.width, img.height );
+		}
+		return true;
+	}
+	
+	function getImageFileInfo( id )
+	{
+		if ( id===void )
+			id = imageId;
+		var info = %[];
+		switch( id )
+		{
+		case IMG_TIMER:
+			info.filename = "ir_info_time3";
+			break;
+		case IMG_TIMER+1:
+			info.filename = "ir_info_time";
+			break;
+		case IMG_SUCCEEDED:
+			info.filename = "ir_sys_defense01";
+			info.clipRect = %[left:0, top:0, width:224, height:48];
+			break;
+		case IMG_FAILED:
+			info.filename = "ir_sys_defense01";
+			info.clipRect = %[left:0, top:48, width:224, height:48];
+			break;
+		}
+		info.centerX = layer.width/2;
+		info.centerY = 0;
+		info.mirror = false;
+		info.adapt = true;
+		return info;
+	}
+}
+
+
+
+
+
+class CIrCasterDefenseEffect extends CIriyaObject
+{
+	function CIrCasterDefenseEffect( _scene, _parent )
+	{
+		super.CIriyaObject(...);
+		origin = ORIGIN_PARENT;
+		priority = parent.priority+10;
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	function onAnimation()
+	{
+		//
+		direction = parent.direction;
+	}	
+	
+	function getImageFileInfo()
+	{
+		var info = %[];
+		info.filename = "ir_eff_caster60";
+		info.mirror = (direction==MUKI_RIGHT) ? false : true;
+		info.centerX = 28-40;
+		info.centerY = 112;
+		info.adapt = true;
+		return info;
+	}
+}
+
+
+
+
+
+class CIrCustomHouguEvent extends CIriyaObject
+{
+	var ANI_HOUGU_INIT 	= -1;
+	var ANI_HOUGU_EVENT	= -2;
+	var ANI_HOUGU_END	= -3;
+	var ANI_HOUGU_END2	= -4;
+	var ANI_HOUGU_NOTARGET = -5;
+
+	var attacker;	// 攻撃者
+	var attackerOldPriority;
+	var target;		// 被攻撃者
+	var targetOldPriority;
+	var onDisactive;
+	
+	function CIrCustomHouguEvent( _scene, _parent )
+	{
+		super.CIriyaObject( ... );
+		allowAnimationWhileUsingHougu = true;
+		animation = ANI_HOUGU_INIT;
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+
+	property camera
+	{
+		getter(){ return scene.normalCamera; }
+	}
+
+	function init()
+	{
+		sound( SE_USEITEM );
+		scene.fade( 0, 128, 15 );
+		// 使用者を最前面にする
+		with( attacker )
+		{
+			attackerOldPriority	= .priority;
+			.condition = CONDITION_NORMAL;
+			.priority = PRIORITY_HOUGU_ATTACKER;
+			.visible = true;
+			.allowAnimationWhileUsingHougu = true;
+			if ( .characterId != CHARA_ID_BERSERCAR )
+			{
+				.animation = ANI_STAND;
+				.stop();
+				.direction = (.x<target.x)? MUKI_RIGHT : MUKI_LEFT;
+				.gauge.visible = false if (.gauge);
+				.marker.visible = false if (.marker);
+			}
+		}
+		// ターゲットを最前面に
+		if ( attacker != target )
+			with( target )
+			{
+				targetOldPriority = .priority;
+				.condition = CONDITION_NORMAL;
+				.priority = PRIORITY_HOUGU_TARGET;
+				.visible = true;
+				if ( .type == OBJTYPE_SERVANT )
+				{
+					.gauge.visible = false if (.gauge);
+					.marker.visible = false if (.marker);
+					.winnerEff.visible = false if (CheckValid(.winnerEff));
+				}
+			}
+		// 使用者にカメラを合わせる
+		with( camera )
+		{
+			.motionType = MOTIONTYPE_INVERCE;
+			.motionFollow = attacker;
+			.mode = CAMERAMODE_TARGET;
+		}
+	}
+
+	function disactive()
+	{
+		// 終了イベントを発生
+		if( onDisactive )
+			onDisactive(this);
+		// 使用者の描画優先度を元に戻す
+		with( attacker )
+		{
+			.priority = attackerOldPriority;
+			.allowAnimationWhileUsingHougu = false;
+			if ( .characterId != CHARA_ID_BERSERCAR )
+			{
+				.animation = ANI_STAND;
+				.stop();
+				.gauge.visible = true if (.gauge);
+				.marker.visible = true if (.marker);
+			}
+		}
+		// エフェクトを削除
+		if( defEff )
+			defEff.enabled = false;
+		// ターゲットの描画優先度を元に戻す
+		if ( attacker != target )
+			with( target )
+			{
+				.priority = targetOldPriority;
+				//.allowAnimationWhileUsingHougu = false;
+				if ( .type == OBJTYPE_SERVANT )
+				{
+					.gauge.visible = true if (.gauge);
+					.marker.visible = true if (.marker);
+				}
+			}
+		// イベント削除
+		enabled = false;
+	}
+
+	function showMasterCutin()
+	{
+		with( new CIrMasterCutin(scene,this) )
+			.characterId = attacker.masterId;
+	}
+	
+	function showServantCutin()
+	{
+		with ( new CIrServantCutin(scene,this) )
+			.characterId = attacker.characterId;
+	}
+	
+	function showSingleServantCutin()
+	{
+		with ( new CIrSingleServantCutin(scene,this) )
+			.characterId = attacker.characterId;
+	}
+
+	function focusTarget()
+	{
+		with( camera )
+		{
+			.motionType = MOTIONTYPE_INVERCE;
+			.motionFollow = target;
+			.mode = CAMERAMODE_TARGET;
+		}
+	}
+	
+	var screen;
+	var defObj;
+	function doAnimation()
+	{
+		switch( animation )
+		{
+		case ANI_HOUGU_INIT:
+			init();
+			if ( attacker.isPlayer )
+			{
+				showMasterCutin();
+				showServantCutin();
+			}
+			else
+			{
+				showSingleServantCutin();
+				if ( target.isPlayer )
+					defObj = new CIrHouguDefense(scene,this);
+			}
+			if( target == attacker )
+				animation = ANI_HOUGU_NOTARGET;
+			else
+				animation = ANI_HOUGU_EVENT;
+			break;
+			
+		case ANI_HOUGU_NOTARGET:
+			if ( timing < 30 )
+				break;
+			animation = ANI_HOUGU_END;
+			break;
+		
+		case ANI_HOUGU_END:
+			switch(timing)
+			{
+			case 0:
+				if( attacker.characterId==CHARA_ID_BERSERCAR )
+				{
+					animation = ANI_HOUGU_END2;
+					break;
+				}
+				attacker.animation = ANI_勝利;
+				scene.fade( 128, 0, 15 );
+				camera.mode = CAMERAMODE_DEFAULT;
+				camera.motionFollow = void;
+				break;
+			case 40:
+				if( CheckValid(screen) )
+					screen.fadeOut(20);
+				target.damageTimeLeft = 0;
+				break;
+			case 60:
+				if( CheckValid(screen) )
+					screen.enabled = false;
+				disactive();
+				break;
+			}
+			break;
+
+		case ANI_HOUGU_END2:
+			switch(timing)
+			{
+			case 0:
+				scene.fade( 128, 0, 15 );
+				camera.mode = CAMERAMODE_DEFAULT;
+				camera.motionFollow = void;
+				break;
+			case 10:
+				if( CheckValid(screen) )
+					screen.fadeOut(20);
+				target.damageTimeLeft = 0;
+				break;
+			case 30:
+				if( CheckValid(screen) )
+					screen.enabled = false;
+				disactive();
+				break;
+			}
+			break;
+
+		}
+	}
+	
+	function onAnimation()
+	{
+		if ( target.damageTimeLeft > 0 )
+		{
+			target.drawOffsetX = randomRange(-5,5);
+			target.drawOffsetY = randomRange(-5,5);
+		}
+		else
+		{
+			target.drawOffsetX = 0;
+			target.drawOffsetY = 0;
+		}
+	}
+	
+	var dummyTarget;
+	var defEff;
+	var guardEff;
+
+	function targetDamage( target_direction=void )
+	{
+		if ( target==attacker )
+			return;
+		//
+		if( defObj && defObj.succeeded )
+		{
+			// ターゲットが防御している場合
+			with( dummyTarget = new CIrServant(scene,this) )
+			{
+				.images = scene.servantImages;
+				.priority = PRIORITY_HOUGU_TARGET;
+				.shadow.enabled = false;
+				.marker.enabled = false if( .marker );
+				.gauge.enabled = false if( .gauge );
+				.animation = ANI_HOUGU_DEFENSE;
+				.allowAnimationWhileUsingHougu = true;
+				.characterId = target.characterId;
+				.masterId = target.masterId;
+				.visible = true;
+				.onAnimation = dummyTargetAnimation;
+				.x = target.x;
+				.y = target.y;
+				.z = target.z;
+				if ( target_direction )
+					.direction = target_direction;
+				else
+					.direction = target.direction;
+				.fadeIn(10);
+			}
+			// キャスターの場合は防御エフェクトを生成
+			if( target.characterId == CHARA_ID_CASTER )
+				with( defEff = new CIrCasterDefenseEffect(scene,dummyTarget) )
+				{
+					.images = scene.servantImages;
+					.fadeIn(10);
+					.allowAnimationWhileUsingHougu = true;
+					.direction = dummyTarget.direction;
+				}
+			target.fadeOut(10);
+		}
+		else
+		{
+			// ターゲットが防御していない場合
+			target.stop();
+			target.animation = ANI_DAMAGE;
+			target.allowAnimationWhileUsingHougu = true;
+			target.hp -= attacker.INFO.HOUGU_DAMAGE;
+			attacker.point += attacker.INFO.HOUGU_DAMAGE;
+		}
+	}
+	
+	function dummyTargetAnimation(obj)
+	{
+		obj.doAnimation();
+	}
+
+	function targetDamaged()
+	{
+		if( defObj && defObj.succeeded )
+		{
+			// ターゲットが防御している場合
+			target.visible = true;
+			target.fadeIn(10);
+			dummyTarget.fadeOut(10);
+			// エフェクトを削除
+			if( defEff )
+				defEff.fadeOut(10);
+		}
+		else
+		{
+			// ターゲットが防御していない場合
+			target.houguDamaged();
+		}
+	}
+	
+	function targetCondition()
+	{
+		with( attacker )
+		{
+			.condition = .INFO.HOUGU_CONDITION;
+			.conditionTimeLeft = .INFO.HOUGU_CONDITIONTIME;
+			if ( attacker==target || target.condition==CONDITION_NODAMAGE )
+				return;
+		//	target.condition = .INFO.HOUGU_TARGETCONDITION;
+		//	target.conditionTimeLeft = .INFO.HOUGU_TARGETCONDITIONTIME;
+		}
+	}
+
+	var proc_done = false;
+	function targetHit()
+	{
+		if ( dummyTarget==void )
+			return;
+		if( proc_done )
+			return;
+		proc_done = true;
+		// 共通の防御エフェクトを作成、表示
+		with( guardEff=new CIrHouguGuardEff(scene,dummyTarget) )
+		{
+			.images = scene.systemImages;
+		}
+		
+	}	
+}
+
+
+
+class CIrBersercarHouguEvent extends CIrCustomHouguEvent
+{
+	function CIrBersercarHouguEvent( _scene, _parent )
+	{
+		super.CIrCustomHouguEvent( ... );
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	function onAnimation()
+	{
+		doAnimation();
+	}
+}
+
+
+
+class CIrLancerHouguEvent extends CIrCustomHouguEvent
+{
+	function CIrLancerHouguEvent( _scene, _parent )
+	{
+		super.CIrCustomHouguEvent(...);
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	var LANCEREVENT_BEGIN = 1;
+	var LANCEREVENT_ATTACK = 2;
+	var LANCEREVENT_WAIT = 4;
+	var LANCEREVENT_END = 5;
+	var lance;
+	
+	function onAnimation()
+	{
+		super.onAnimation(...);
+		switch( animation )
+		{
+		case ANI_HOUGU_EVENT:
+			if ( timing<20 )
+				break;
+			animation = LANCEREVENT_BEGIN;
+			break;
+		case LANCEREVENT_BEGIN:
+			attacker.animation = ANI_HOUGU;
+			animation = LANCEREVENT_ATTACK;
+			break;
+			
+		case LANCEREVENT_ATTACK:
+			if ( attacker.animation != ANI_HOUGU3 )
+				break;
+			with( new CIrLancerHouguEff( scene, this ) )
+			{
+				.direction = attacker.direction;
+				.x = attacker.x;
+				.y = attacker.y;
+				.z = attacker.z+80;
+				.images = images;
+			}
+			sound( SE_LANCER_HOUGU );
+			with( lance = new CIrLancerHougu(scene,this) )
+			{
+				.direction = attacker.direction;
+				.x = attacker.x;
+				.y = attacker.y;
+				.z = attacker.z+80;
+				.images = images;
+				.target = target;
+				.attacker = this;
+				.onFocusTarget = focusTarget;
+				.onTargetDamage = targetDamage;
+				.onHit = targetHit;
+			}
+			animation = LANCEREVENT_WAIT;
+			break;
+		case LANCEREVENT_WAIT:
+			if ( CheckValid(lance) && lance.enabled )
+				break;
+			targetDamaged();
+			animation = LANCEREVENT_END;
+			break;
+		case LANCEREVENT_END:
+			if ( timing<30 )
+				break;
+			targetCondition();
+			animation = ANI_HOUGU_END;
+			break;
+		default:
+			doAnimation();
+			break;
+		}
+	}
+}
+
+class CIrLancerHouguEff extends CIriyaObject
+{
+	function CIrLancerHouguEff( _scene, _parent )
+	{
+		super.CIriyaObject( ... );
+		priority = PRIORITY_HOUGU_ATTACKER;
+		allowAnimationWhileUsingHougu = true;
+		enabled = ENABLE_HOUGUEFF;
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	function onAnimation ()
+	{
+		switch( animation )
+		{
+		case 0:
+			var i = timing\4;
+			if ( i <= 5 )
+			{
+				imageId = i;
+				break;
+			}
+			enabled = false;			
+			break;
+		}
+	}
+	
+	function getImageFileInfo()
+	{
+		var info = %[];
+		info.filename = "ir_eff_lancer%02d".sprintf( 50+imageId );
+		info.mirror = (direction==MUKI_RIGHT)? false: true;
+		info.adapt = false;
+		info.centerX = 220;
+		info.centerY = 100;
+		return info;
+	}
+}
+
+
+
+class CIrLancerHougu extends CIriyaObject
+{
+	var target;
+	var attacker;
+	var onFocusTarget;
+	var onTargetDamage;
+	var onHit;
+	
+	function CIrLancerHougu( _scene, _parent )
+	{
+		super.CIriyaObject(...);
+		priority = PRIORITY_HOUGU_ATTACKER;
+		allowAnimationWhileUsingHougu = true;
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	function onAnimation()
+	{
+		imageId = 56;
+		switch( animation )
+		{
+		case 0:
+			animation = 1;
+			break;
+		// 一度画面外へ出て行く
+		case 1:
+			if ( timing==0 )
+			{
+				var dx = (direction==MUKI_RIGHT) ? SCREEN_SIZE_W+200 : -200;
+				motionDestX = scene.normalCamera.windowToField(dx,0).x;
+				motionDestY = y;
+				motionDestZ = z;
+				motionSpeed = 40;
+				motionType = MOTIONTYPE_LINER;
+				motionStart();
+			}
+			if ( ! motionDone )
+				break;
+			visible = false;
+			animation = 2;
+		// ターゲットにカメラを移動する
+		case 2:
+			if ( timing==0 )
+				onFocusTarget();
+			if ( ! scene.normalCamera.motionDone )
+				break;
+			animation = 3;
+			break;	
+		// 画面外から出てくる
+		case 3:
+			imageId=1;
+			if ( timing==10 )
+			{
+				if ( Math.abs(attacker.x-target.x) < SCREEN_SIZE_W*2 )
+				{
+					if ( direction==MUKI_LEFT ) // 反転
+						direction = MUKI_RIGHT;
+					else
+						direction = MUKI_LEFT;
+				}
+				var dx = (direction==MUKI_LEFT) ? SCREEN_SIZE_W+200 : -200;
+				x = scene.normalCamera.windowToField(dx,0).x;
+				y = target.y;
+				z = target.z;
+				motionDestX = (direction==MUKI_LEFT) ? x-1200 : x+1200;
+				motionDestY = target.y;
+				motionDestZ = target.z+40;
+				motionType = MOTIONTYPE_LINER;
+				motionSpeed = 60;
+				motionStart();
+				visible = true;
+				animation = 4;
+			}
+			break;
+		// ターゲットにダメージアニメをさせる
+		case 4:
+			if ( timing==0 )
+			{
+				onTargetDamage(
+					(this.direction==MUKI_LEFT) ? MUKI_RIGHT : MUKI_LEFT
+				);
+			}
+			if ( distanceOf(target.x, target.y) < HIT_DISTANCE )
+				onHit();
+			if ( ! motionDone )
+				break;
+			stop();
+			fadeOut(10);
+			animation = 5;
+			break;
+		case 5:
+			if ( fadeProcessing )
+				break;
+			enabled = false;
+			break;
+		}
+	}
+	
+	function getImageFileInfo()
+	{
+		var info = %[];
+		info.filename = "ir_eff_lancer56";
+		info.mirror = (direction==MUKI_RIGHT)? false: true;
+		info.adapt = false;
+		info.centerX = 240;
+		info.centerY = 8;
+		return info;
+	}
+}
+
+
+
+
+class CIrRiderHouguEff extends CIriyaObject
+{
+	var info = %[];
+	
+	function CIrRiderHouguEff( _scene, _parent )
+	{
+		super.CIriyaObject(...);
+		allowAnimationWhileUsingHougu = true;
+		origin = ORIGIN_PARENT;
+		enabled = ENABLE_HOUGUEFF;
+	}
+
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	function onAnimation()
+	{
+		var i;
+		switch( animation )
+		{
+		case 0:
+			info.centerX = 112;
+			info.centerY = 96;
+			priority = PRIORITY_HOUGU_ATTACKER;
+			i = 50+timing\2;
+			if ( i<=63 )
+				imageId = i;
+			else
+				animation = 1;
+			break;
+		case 1:
+			imageId = 64 + timing\2%10;
+			break;
+		case 2:
+			info.centerX = 353;
+			info.centerY = 120;
+			priority = PRIORITY_HOUGU_ATTACKER;
+			imageId = 74 + timing\2%10;
+			break;
+		}
+	}
+	
+	function getImageFileInfo()
+	{
+		info.filename = "ir_eff_rider%02d".sprintf(imageId);
+		info.mirror = (parent.direction==MUKI_RIGHT) ? false : true;
+		info.adapt = false;
+		return info;
+	}
+}
+
+
+class CIrRiderHouguEvent extends CIrCustomHouguEvent
+{
+
+	function CIrRiderHouguEvent( _scene, _parent )
+	{
+		super.CIrCustomHouguEvent(...);
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	var RIDEREVENT_BEGIN = 1;
+	var RIDEREVENT_WAIT = 2;
+	var RIDEREVENT_GO = 3;
+	var RIDEREVENT_FOCUS = 4;
+	var RIDEREVENT_IN = 5;
+	var RIDEREVENT_DAMAGE = 6;
+ 	var RIDEREVENT_END = 7;
+	var posx, posy, posz;
+	var eff;	
+	var oldCameraMode;
+	var oldCameraMotionType;
+	var XLimit;
+	
+	function onAnimation()
+	{
+		super.onAnimation(...);
+		switch( animation )
+		{
+		case ANI_HOUGU_EVENT:
+			if ( timing<30 )
+				break;
+			animation = RIDEREVENT_BEGIN;
+			break;
+			
+		case RIDEREVENT_BEGIN:
+			oldCameraMode = scene.normalCamera.mode;
+			oldCameraMotionType = scene.normalCamera.motionType;
+			scene.normalCamera.mode = CAMERAMODE_CUSTOM;
+			scene.normalCamera.stop();
+			posx = attacker.x;
+			posy = attacker.y;
+			posz = attacker.z;
+			eff = new CIrRiderHouguEff(scene,attacker);
+			sound( SE_RIDER_HOUGU );
+			attacker.animation = ANI_HOUGU;
+			animation = RIDEREVENT_WAIT;
+			break;
+			
+		case RIDEREVENT_WAIT:
+			if ( attacker.animation == ANI_HOUGU )
+				break;
+			eff.animation = 2 if(CheckValid(eff));
+			animation = RIDEREVENT_GO;
+			break;
+
+		// 一度画面外へ出て行く
+		case RIDEREVENT_GO:
+			if ( timing == 0 )
+			{
+				with( attacker )
+				{
+					.priority = PRIORITY_HOUGU_ATTACKER;            
+					var dx = (.direction==MUKI_RIGHT) ? SCREEN_SIZE_W+400 : -400;
+					XLimit = scene.normalCamera.windowToField(dx,0).x;
+					if ( .direction==MUKI_RIGHT )
+					{
+						.speedX = -10;
+						.accelX = 2;
+					}
+					else
+					{
+						.speedX = 10;
+						.accelX = -2;
+					}
+					//.motionDestX = scene.normalCamera.windowToField(dx,0).x;
+					//.motionDestY = .y;
+					//.motionDestZ = .z;
+					//.motionSpeed = 40;
+					//.motionType = MOTIONTYPE_LINER;
+					//.motionStart();
+					//.fadeOut(15);
+				}
+			}
+			//if ( ! attacker.motionDone )
+			//	break;
+			with(attacker)
+			{
+				if ( .direction==MUKI_RIGHT && .x<XLimit )
+					break;
+				if ( .direction==MUKI_LEFT && .x>XLimit )
+					break;
+			}			
+			attacker.visible = false;
+			eff.visible = false if(CheckValid(eff));
+			animation = RIDEREVENT_FOCUS;
+			break;
+			
+		// ターゲットにカメラを移動する
+		case RIDEREVENT_FOCUS:
+			if ( timing==0 )
+			{
+				scene.normalCamera.mode = oldCameraMode;
+				scene.normalCamera.motionType = oldCameraMotionType;
+				focusTarget();
+			}
+			if ( ! scene.normalCamera.motionDone )
+				break;
+			animation = RIDEREVENT_IN;
+			break;	
+		// 画面外から出てくる
+		case RIDEREVENT_IN:
+			if ( timing<10 )
+				break;
+			eff.visible = true if(CheckValid(eff));
+			with( attacker )
+			{
+				if ( Math.abs(posx-target.x) < SCREEN_SIZE_W )
+					if ( .direction==MUKI_LEFT ) // 反転
+						.direction = MUKI_RIGHT;
+					else
+						.direction = MUKI_LEFT;
+				var dx = (.direction==MUKI_LEFT) ? SCREEN_SIZE_W+350 : -350;
+				.x = scene.normalCamera.windowToField(dx,0).x;
+				.y = target.y;
+				.z = target.z+40;
+				.motionDestX = (.direction==MUKI_RIGHT) ? .x+(SCREEN_SIZE_W+350*2) : .x-(SCREEN_SIZE_W+350*2);
+				.motionDestY = .y;
+				.motionDestZ = .z;
+				.motionSpeed = 25;
+				.motionType = MOTIONTYPE_LINER;
+				.motionStart();
+				.visible = true;
+				.fadeIn(10);
+			}
+			animation = RIDEREVENT_DAMAGE;
+			break;
+		// ターゲットにダメージアニメをさせる
+		case RIDEREVENT_DAMAGE:
+			if ( timing==0 )
+				targetDamage(
+					(attacker.direction==MUKI_LEFT) ? MUKI_RIGHT:MUKI_LEFT
+				);
+			if ( attacker.distanceOf(target.x, target.y) < HIT_DISTANCE )
+				targetHit();
+			if ( !attacker.motionDone || attacker.fadeProcessing )
+				break;
+			attacker.fadeOut(15);
+			attacker.stop();
+			if( CheckValid(eff) )
+			{
+				eff.animation = 3;
+				eff.fadeOut(10);
+			}
+			animation = RIDEREVENT_END;
+			break;
+			
+		case RIDEREVENT_END:
+			if ( timing == 10 )
+				targetDamaged();
+			if ( timing<30 )
+				break;
+			scene.normalCamera.motionTarget = attacker;
+			eff.enabled = false if( CheckValid(eff) );
+			attacker.fadeIn(10);
+			attacker.x = posx;
+			attacker.y = posy;
+			attacker.z = posz;
+			targetCondition();
+			animation = ANI_HOUGU_END;
+			break;		
+		default:
+			doAnimation();
+			break;
+		}
+	}
+}
+
+
+
+class CIrArcherHouguEvent extends CIrCustomHouguEvent
+{
+	function CIrArcherHouguEvent( _scene, _parent )
+	{
+		super.CIrCustomHouguEvent(...);
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	var ARCHEREVENT_BEGIN = 1;
+	var ARCHEREVNET_FOCUS = 2;
+	var ARCHEREVENT_FOCUSWAIT = 3;
+	var ARCHEREVENT_DAMAGE = 4;
+	var ARCHEREVENT_END = 5;
+		
+	function onAnimation()
+	{
+		super.onAnimation(...);
+		switch( animation )
+		{
+		case ANI_HOUGU_EVENT:
+			attacker.animation = ANI_HOUGU;
+			if ( timing<30 )
+				break;
+			animation = ARCHEREVENT_BEGIN;
+			break;
+		// 宝具使用アニメを開始
+		case ARCHEREVENT_BEGIN:
+			if ( timing==0 )
+			{
+				sound( SE_ARCHER_HOUGU );
+			}
+			if ( timing<30 )
+				break;
+			animation = ARCHEREVNET_FOCUS;
+			break;
+		// ターゲットにカメラを移動
+		case ARCHEREVNET_FOCUS:
+			focusTarget();
+			animation = ARCHEREVENT_FOCUSWAIT;
+			break;
+		// カメラの移動待ち
+		case ARCHEREVENT_FOCUSWAIT:
+			if ( ! scene.normalCamera.motionDone )
+				break;
+			animation = ARCHEREVENT_DAMAGE;
+			break;
+		// ターゲットがダメージを受ける
+		case ARCHEREVENT_DAMAGE:
+			if ( timing==0 )
+			{
+				targetDamage(MUKI_RIGHT);
+			}
+			// エフェクト生成
+			if ( timing<45 && timing%1==0 )
+			{
+				with( new CIrArcherArrow(scene,this) )
+				{
+					.target = target;
+					.x = target.x + randomRange(0, 240);
+					.y = target.y + randomRange(-100, 100);
+					.z = target.z + randomRange(100, 240);
+				}
+			}
+			if ( timing==0 )
+				targetHit();
+			if ( timing==60 )
+				targetDamaged();
+			if ( timing<90 )
+				break;
+			animation = ARCHEREVENT_END;
+			break;			
+		// 効果を与え、イベントを終了する
+		case ARCHEREVENT_END:
+			targetCondition();
+			animation = ANI_HOUGU_END;
+			break;		
+		default:
+			doAnimation();
+			break;
+		}
+	}
+}
+
+
+class CIrArcherArrowEff extends CIriyaObject
+{
+	var info = %[];
+	
+	function CIrArcherArrowEff( _scene, _parent )
+	{
+		super.CIriyaObject(...);
+		priority = parent.priority+10;
+		origin = ORIGIN_PARENT;
+		allowAnimationWhileUsingHougu = true;
+		info.filename = "ir_eff_archer50";
+		info.mirror = false;
+		info.adapt = false;
+		info.centerX = 70;
+		info.centerY = 120;
+		fadeOut(10);
+		enabled = ENABLE_HOUGUEFF;
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	function onAnimation()
+	{
+		if ( fadeProcessing )
+			return;
+		enabled = false;
+	}
+	
+	function getImageFileInfo()
+	{
+		return info;
+	}
+}
+	
+
+class CIrArcherArrow extends CIriyaObject
+{
+	var target;
+	var typeid;
+	
+	var ANI_ARROW_BEGIN = 0;
+	var ANI_ARROW_MOVING = 1;
+	var ANI_ARROW_STOP = 2;
+	var ANI_ARROW_FADEOUT = 3;
+	
+	function CIrArcherArrow( _scene, _parent )
+	{
+		super.CIriyaObject(...);
+		priority = PRIORITY_HOUGU_ATTACKER;
+		animation = ANI_ARROW_BEGIN;
+		allowAnimationWhileUsingHougu = true;
+		typeid = random32(7);
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	function onAnimation()
+	{
+		switch( animation )
+		{
+		case ANI_ARROW_BEGIN:
+			new CIrArcherArrowEff(scene,this);
+			imageId = 0;
+			motionDestX = x-z;
+			motionDestY = y;
+			motionDestZ = 0;
+			motionSpeed = 22;
+			motionType = MOTIONTYPE_LINER;
+			motionStart();
+			fadeIn(10);
+			animation = ANI_ARROW_MOVING;
+			break;
+		case ANI_ARROW_MOVING:
+			if ( ! motionDone )
+				break;
+			animation = ANI_ARROW_STOP;
+			break;
+		case ANI_ARROW_STOP:
+			fadeOut(5);
+			imageId = 1;
+			animation = ANI_ARROW_FADEOUT;
+			break;
+		case ANI_ARROW_FADEOUT:
+			if ( fadeProcessing )
+				break;
+			enabled = false;
+			break;	
+		}
+	}
+	
+	function getImageFileInfo()
+	{
+		var info = %[];
+		info.filename = "ir_char_archer09%02d".sprintf(50+typeid*2+imageId);
+		info.adapt = true;
+		info.mirror = true;
+		info.centerX = 32;
+		info.centerY = 32;
+		return info;
+	}
+}
+
+
+
+class CIrCasterHouguEvent extends CIrCustomHouguEvent
+{
+	var kojiro;
+
+	function CIrCasterHouguEvent( _scene, _parent )
+	{
+		super.CIrCustomHouguEvent(...);
+		origin = ORIGIN_FIELD;
+		priority = PRIORITY_HOUGU_ATTACKER-10;
+		fadeOut(0);
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	var CASTEREVENT_HOUSE = 10;
+	var CASTEREVENT_KOJIRO = 11;
+	var CASTEREVENT_WAIT = 20;
+	var CASTEREVENT_END = 30;
+	var CASTEREVENT_HIDE = 40;
+	var CASTEREVENT_FOCUS = 50;
+	
+	function onAnimation()
+	{
+		super.onAnimation(...);
+		switch( animation )
+		{
+		case ANI_HOUGU_EVENT:
+			if ( timing==0 )
+				attacker.animation = ANI_HOUGU;
+			if ( timing<30 )
+				break;
+			focusTarget();
+			animation = CASTEREVENT_FOCUS;
+			break;
+	
+		case CASTEREVENT_FOCUS:
+			if ( ! scene.normalCamera.motionDone )
+				break;
+			animation = CASTEREVENT_HOUSE;
+			break;			
+		
+		// 小次郎ハウスが登場
+		case CASTEREVENT_HOUSE:
+			if ( timing < 10 )
+				break;
+			sound( SE_CASTER_HOUGU );
+			// 表示位置を設定
+			var pos = target.getDrawPos(scene.normalCamera);
+			if ( pos.x < SCREEN_SIZE_W/2 )
+			{
+				x = scene.normalCamera.windowToField(SCREEN_SIZE_W-180,0).x;
+				y = target.y;
+				direction = MUKI_LEFT;
+			}
+			else
+			{
+				x = scene.normalCamera.windowToField(180,0).x;
+				y = target.y;
+				direction = MUKI_RIGHT;
+			}
+			// 表示
+			fadeIn(10);
+			animation = CASTEREVENT_KOJIRO;
+			break;
+		// 小次郎が登場
+		case CASTEREVENT_KOJIRO:
+			if ( fadeProcessing )
+				break;
+			with( kojiro = new CIrKojiro(scene,this) )
+			{
+				.x = x;
+				.y = y;
+				.target = target;
+				.images = images;
+				.priority = PRIORITY_HOUGU_ATTACKER;
+				.onFocusTarget = focusTarget;
+				.onTargetDamage = targetDamage;
+				.direction = direction;
+				.onHit = targetHit;
+			}
+			animation = CASTEREVENT_WAIT;
+			break;
+		// 小次郎のアクションが終わるまで待つ
+		case CASTEREVENT_WAIT:
+			if ( CheckValid(kojiro) && kojiro.enabled )
+				break;
+			targetDamaged();
+			fadeOut(10);
+			animation = CASTEREVENT_HIDE;
+			break;
+		// 小次郎ハウスを消す
+		case CASTEREVENT_HIDE:
+			if ( fadeProcessing )
+				break;
+			animation = CASTEREVENT_END;
+			break;
+		// 効果を与え、イベントを終了する
+		case CASTEREVENT_END:
+			if ( timing<30 )
+				break;
+			targetCondition();
+			animation = ANI_HOUGU_END;
+			break;
+		default:
+			doAnimation();
+			break;
+		}
+	}
+	
+	function getImageFileInfo()
+	{
+		var info=%[];
+		info.filename = "ir_char_caster0904";
+		info.centerX = 130;
+		info.centerY = 190;
+		info.mirror = (direction==MUKI_RIGHT) ? false : true;
+		info.adapt = true;
+		return info;
+	}
+}
+
+// 小次郎さん
+class CIrKojiro extends CIriyaObject
+{
+	var target;
+	var onFocusTarget;
+	var onTargetDamage;
+	var onHit;
+	var eff;
+	
+	function CIrKojiro( _scene, _parent )
+	{
+		super.CIriyaObject(...);
+		priority = PRIORITY_HOUGU_ATTACKER;
+		allowAnimationWhileUsingHougu = true;
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	function onAnimation()
+	{
+		switch( animation )
+		{
+		// かまえる
+		case 0:
+			imageId=0;
+			if ( timing < 10 )
+				break;
+			//ターゲットにダメージアニメをさせる
+			onTargetDamage(
+				(this.direction==MUKI_RIGHT) ? MUKI_LEFT : MUKI_RIGHT
+			);
+			// next
+			animation = 1;
+			break;
+		// 攻撃
+		case 1:
+		case 2:
+		case 3:
+			imageId=1;
+			if ( timing==10 )
+			{
+				direction = parent.direction;
+				motionDestX = (direction==MUKI_RIGHT) ? target.x-100 : target.x+100;
+				motionDestY = target.y;
+				motionDestZ = target.z;
+				motionRateX = 0.5;
+				motionRateY = 0.5;
+				motionType = MOTIONTYPE_INVERCE;
+				motionStart();
+				visible = true;
+				animation = 4;
+			}
+			break;
+		// 斬りつけ開始
+		case 4:
+			if ( timing == 0 )
+			{
+				eff = new CIrKojiroEffect(scene,this);
+				eff.images = images;
+				onHit();
+			}
+			imageId=2;
+			if ( timing<10 )
+				break;
+			animation = 5;
+			break;
+		case 5:
+			imageId=3;
+			if ( timing==10)
+				animation = 6;
+			break;
+		// 斬りつけ終了と同時にフェードアウトして消す
+		case 6:
+			fadeOut(10);
+			animation = 7;
+			break; 
+		// フェードアウト終了したら小次郎を削除
+		case 7:
+			if ( fadeProcessing )
+				break;
+			enabled=false;
+			break;
+		}
+	}
+	
+	function getImageFileInfo()
+	{
+		var info = %[];
+		info.filename = "ir_char_caster09%02d".sprintf(imageId);
+		info.adapt = true;
+		info.mirror = (direction==MUKI_RIGHT) ? false : true;
+		info.centerX = 106;
+		info.centerY = 105;
+		return info;
+	}
+}
+
+
+class CIrKojiroEffect extends CIriyaObject
+{
+	function CIrKojiroEffect( _scene, _parent )
+	{
+		super.CIriyaObject(...);
+		animation = 0;
+		origin = ORIGIN_PARENT;
+		allowAnimationWhileUsingHougu = true;
+		priority = parent.priority+100;
+		enabled = ENABLE_HOUGUEFF;
+	}
+	
+	function onAnimation()
+	{
+		direction = parent.direction;
+		var i = timing\5;
+		if ( i <= 5 )
+			imageId = i;
+		else
+			enabled = false;
+	}
+	
+	function getImageFileInfo()
+	{
+		var info = %[];
+		info.filename = "ir_eff_caster%02d".sprintf(50+imageId);
+		info.adapt = true;
+		info.mirror = (direction==MUKI_RIGHT) ? true : false;
+		info.centerX = 250;
+		info.centerY = 180;
+		return info;
+	}
+}
+
+
+
+class CIrSaberHouguEvent extends CIrCustomHouguEvent
+{
+	function CIrSaberHouguEvent( _scene, _parent )
+	{
+		super.CIrCustomHouguEvent(...);
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	var SABEREVENT_WAIT		= 10;
+	var SABEREVENT_FOCUS	= 20;
+	var SABEREVENT_SWORD	= 30;
+	var SABEREVENT_ATTACK	= 40;
+	var SABEREVENT_END		= 50;
+	var SABEREVENT_FADEOUT	= 60;
+	var eff;
+	
+	function onAnimation()
+	{
+		super.onAnimation(...);
+		switch( animation )
+		{
+		case ANI_HOUGU_EVENT:
+			attacker.animation = ANI_HOUGU;
+			animation = SABEREVENT_WAIT;
+			break;
+
+		// サーバント固有の宝具イベント用オブジェクトを生成する
+		case SABEREVENT_WAIT:
+			if (attacker.animation == ANI_HOUGU)
+				break;
+			animation = SABEREVENT_SWORD;
+			break;
+			
+		// エクスカリバー出現
+		case SABEREVENT_SWORD:
+			if ( timing == 0 )
+			{
+				eff = new CIrSaberHouguEffect(scene,attacker);
+				eff.priority = PRIORITY_HOUGU_ATTACKER;
+				eff.appear();
+				sound( SE_SABER_HOUGU );
+			}
+			if (attacker.animation == ANI_HOUGU2)
+				break;
+			animation = SABEREVENT_ATTACK;
+			break;
+		// エクスカリバーを振る
+		case SABEREVENT_ATTACK:
+			if ( timing == 0 )
+			{
+				eff.priority = attacker.priority+100;
+				eff.attack();
+				targetHit();
+			}	
+			if (attacker.animation == ANI_HOUGU3)
+				break;
+			animation = SABEREVENT_FOCUS;
+			break;
+		// ターゲットにカメラを移動する
+		case SABEREVENT_FOCUS:
+			if ( timing==0 )
+				focusTarget();
+			if ( ! camera.motionDone )
+				break;
+			animation = SABEREVENT_FADEOUT;
+			break;
+
+		// ダメージと効果を与え、イベントを終了する
+		case SABEREVENT_FADEOUT:
+			if ( timing < 10 )
+				break;
+			screen = scene.fadeCreate2(0xFFFFFFFF,true);
+			screen.priority = PRIORITY_HOUGU_FLASH;
+			screen.fadeIn(15);
+			targetDamage(
+				(attacker.direction==MUKI_LEFT) ? MUKI_RIGHT : MUKI_LEFT
+			);
+			animation = SABEREVENT_END;
+			break;
+		
+		case SABEREVENT_END:
+			if (timing < 30 )
+				break;
+			attacker.animation = ANI_STAND;
+			eff.enabled = false;
+			targetDamaged();
+			targetCondition();
+			animation = ANI_HOUGU_END;
+			break;
+
+		default:
+			doAnimation();
+			break;
+		}
+	}
+}
+ 
+
+// セイバーエフェクト
+class CIrSaberHouguEffect extends CIriyaObject
+{
+	var ANO_SABEREFF_NONE = -1;
+	var ANI_SABEREFF_READY = 0;
+	var ANI_SABEREFF_APPEAR = 1;
+	var ANI_SABEREFF_ATTACK = 2;
+	var ANI_SABEREFF_STAY = 3;
+	
+	function appear()
+	{
+		animation = ANI_SABEREFF_READY;
+	}
+	
+	function attack()
+	{
+		animation = ANI_SABEREFF_ATTACK;
+	}
+
+	function CIrSaberHouguEffect( _scene, _parent )
+	{
+		super.CIriyaObject(...);
+		origin = ORIGIN_PARENT;
+		direction = parent.direction;
+		allowAnimationWhileUsingHougu = true;
+		animation = ANO_SABEREFF_NONE;
+	}
+
+	function onAnimation()
+	{
+		var i;
+		switch( animation )
+		{
+		case ANI_SABEREFF_READY:
+			i = timing\5;
+			if ( i <= 2 )
+				imageId = i;
+			else
+				animation = ANI_SABEREFF_APPEAR;
+			break;
+		case ANI_SABEREFF_APPEAR:
+			imageId = (timing\5%2) + 2;
+			break;
+			
+		case ANI_SABEREFF_ATTACK:
+			i = timing\5+5;
+			if ( i<=7 )
+				imageId = i;
+			else
+				animation = ANI_SABEREFF_STAY;
+			break;
+		case ANI_SABEREFF_STAY:
+			imageId = (timing\5%2) + 8;
+			break;
+		}
+	}
+	
+	function getImageFileInfo()
+	{
+		var info = %[];
+		info.filename = "ir_eff_saber%02d".sprintf(50+imageId);
+		info.mirror = (direction==MUKI_LEFT)?false:true;
+		info.adapt = false;
+		info.centerX = 180;
+		info.centerY = 200;
+		return info;
+	}
+}
+
+

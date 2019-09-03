@@ -1,0 +1,5906 @@
+/*-----------------------------------------------------------------------------/
+/	Copyright (C) 2004 TYPE-MOON All Rights Reserved.
+/		花札プラグイン
+/-----------------------------------------------------------------------------*/
+@if(__HANAFUDAPLUGIN_DEFINED__==0)
+@set(__HANAFUDAPLUGIN_DEFINED__=1)
+Scripts.execStorage("Hanafuda.tjs");
+Scripts.execStorage("HanafudaLayer.tjs");
+Scripts.execStorage("HFChipLayer.tjs");
+Scripts.execStorage("KoikoiRoutine.tjs");
+Scripts.execStorage("HFIconLayer.tjs");
+Scripts.execStorage("HFMenuLayer.tjs");
+Scripts.execStorage("HFMessageLayer.tjs");
+Scripts.execStorage("HFParticleLayer.tjs");
+Scripts.execStorage("HFSound.tjs");
+
+//	チーム名など
+var hfTeamName	= [
+	"藤ねえ・ブルマイリヤ",
+	"士郎・セイバー",
+	"凛・アーチャー",
+	"桜・ライダー",
+	"イリヤ・バーサーカー",
+	"キャスター・葛木・アサシン",
+	"言峰・ギル・ランサー",
+
+	"セラ・リズ",
+	"慎二",
+	"藤ねえ",
+	"ブルマイリヤ",
+
+	//	以下、チュートリアルチーム?
+	"チュートリアル",
+	"プレイヤー",
+
+	"慎二白",
+
+	//	本編用
+	"士郎(本編)",
+	"慎二(本編)"
+];
+//	チームメンバー
+var hfTeamMember	= [
+	[ "藤ねえ", "ブルマイリヤ" ],
+	[ "士郎", "セイバー" ],
+	[ "凛", "アーチャー" ],
+	[ "桜", "ライダー" ],
+	[ "イリヤ", "バーサーカー" ],
+	[ "葛木", "キャスター", "アサシン" ],
+	[ "言峰", "ギルガメッシュ", "ランサー" ],
+
+	[ "セラ", "リズ" ],
+	[ "慎二" ],
+	[ "藤ねえ" ],
+	[ "ブルマイリヤ" ],
+
+	//	以下、チュートリアルキャラクター?
+	[ "セラ" ],	//	教える
+	[ "リズ" ],	//	教わる
+
+	[ "慎二白" ],
+
+	//	本編用
+	[ "元士郎" ],
+	[ "元慎二" ]
+];
+//	対外的チーム名
+var hfFormalTeamName	= [
+	"トラぶる血夜呼零怒",
+
+	"食いしん王万歳",
+	"弓凛みっくすりみっくす",
+	"チェリー・ブロッサム・セルシアン",
+	"筋肉少女隊",
+	"教師と夢見る若奥様(+1)",
+	"神父と愉快な仲間たち",
+
+	"洋風建築",
+	"僕のワカメ -死んでもいい2005-",
+	"タイガ",
+	"ブルマ",
+
+	"セラ",
+	"リズ",
+
+	"僕のわかめ -死んでもいい2005-",
+
+	"士郎",
+	"慎二"
+];
+var __pt = 50;
+var hfTeamThinking;
+{
+	var fast = 0.3, slow = 0.8, normal = 0.5;	//	勝負をかける速度
+	hfTeamThinking	= [	//	楽観度は意味なしかも
+					//	攻撃楽観度(+20〜-20)、防御楽観度(+20〜-20)、目標点数(7文倍時)、目標点数倍率(通常、勝ち気味、負け気味)、札優先度
+	/*ブルマ*/		[ 0, 0, 7, [ normal, slow, slow ], [] ],
+	/*士郎*/		[ 0, 0, 7, [ normal, slow, normal ], [] ],
+	/*凛*/			[ 0, 0, 7, [ normal, fast, fast ], [] ],
+	/*桜*/			[ 0, 0, 7, [ slow, fast, slow ], [] ],
+	/*イリヤ*/		[ 0, 0, 7, [ slow, slow, slow ], [] ],
+	/*キャスター*/	[ 0, 0, 7, [ normal, slow, fast ], [] ],
+	/*言峰*/		[ 0, 0, 7, [ fast, normal, normal ], [] ],
+	/*セラ・リズ*/	[ 0, 0, 7, [ normal, normal, normal ], [] ],
+	/*慎二*/		[ 0, 0, 7, [ fast, slow, fast ], [] ],
+	/*藤ねえ*/		[ 0, 0, 7, [ slow, slow, normal ], [] ],
+	/*ブルマイリヤ*/	[ 0, 0, 7, [ normal, slow, slow ], [] ],
+	/*チュートリアル1*/	[ 0, 0, 7, [ normal, normal, normal ], [] ],
+	/*チュートリアル2*/	[ 0, 0, 7, [ normal, normal, normal ], [] ],
+	/*慎二白*/		[ 0, 0, 7, [ slow, slow, slow ], [] ],
+	/*士郎*/		[ 0, 0, 7, [ slow, slow, slow ], [] ],
+	/*元慎二*/		[ 0, 0, 7, [ slow, slow, slow ], [] ]
+	];
+}
+
+//	花札の場を用意するレイヤー
+class HanafudaBaseLayer extends Layer
+{
+	var bgimage	= "hf_背景";
+
+	var fudawidth = 62, fudaheight = 100;
+	var smallwidth = 43, smallheight = 69;
+	var largewidth = 81, largeheight = 130;
+	var xlargewidth = 118, xlargeheight = 190;
+
+	var yama	= %[time:500,accel:-2,delay:20];			//	山札の位置など
+	var oyasel	= %[left0:246,top0:255,left1:462,top1:255,time:300,accel:2,revtime:800,revaccel:2];//	親決定用の札位置
+	var oyamon	= %[left0:161,top0:186,left1:591,top1:186];
+
+	var dist	= %[time:300,accel:2,delay:80];
+//	var dist	= %[time:50,accel:0,delay:10];
+	var turn	= %[time:400,accel:2];
+	var tumo	= %[left0:0,top0:0,left1:0,top1:0];
+	var clap	= %[time:600,accel:3];
+	var drop	= %[time:600,accel:2];
+	var cpuwait	= 200;	//	CPUターンでの待ち
+	var fadetime	= 800;
+	var msgfadetime	= 400;
+	var ten_	= %[left0:695,top0:192,left1:150,top1:391,time:400,accel:0];
+//	var spcnt_	= %[left0:469,top0:141,left1:243,top1:447];
+	var teyaku	= %[movetime:400,moveaccel:2];
+	var shoutpos= [
+		[ 400, 300 ],
+		[ 400, 300 ]
+	];
+	var teamname	= hfTeamName;
+	var teams		= hfTeamMember;
+
+	var chat	= true;		//	会話するか
+	var popup	= true;		//	札に関連するポップアップを表示するか
+
+	var CPU = 0, PLAYER = 1;
+	var RANDOM = 0;
+
+	var btndatas	= [
+		[ "yakulist",	"hf_役一覧sボタン",	12, 295, 0 ],
+		[ "fudalist",	"hf_札一覧sボタン",	12, 324, 0 ],
+		[ "config",		"hf_設定sボタン",	12, 353, 0 ]
+	];
+	var treasurebtndata	= [ "treasure",	"hf_宝具ボタン",	236, 444, 0 ];
+	var mppos	= [
+		[ [ 360, 143 ], [ 465, 143 ] ],
+		[ [ 360, 457 ], [ 465, 457 ] ]
+	];
+	var mpslash	= [ [399, 504], [140, 454] ];
+	var mpname	= [ [406, 511], [138, 452] ];
+	var treasureiconpos	= [
+		[ 251, 175 ], [ 251, 402 ]	//	100x20のアイコンの場合
+	];
+	var cutinInfo	= %[	//	矩形情報
+		アーチャー:	%[
+			left:	768,
+			rect:	[
+				[ 257,   0, 181, 132 ],
+				[ 454,  86, 193, 144 ],
+				[   0, 131,  86, 343 ],
+				[ 178, 132, 276, 176 ],
+				[ 487, 230, 182,  60 ],
+				[ 454, 290, 309,  59 ],
+				[ 230, 308, 224,  41 ],
+				[ 137, 349, 559, 125 ],
+				[  14, 474, 494, 106 ]
+			]
+		],
+		アサシン:	%[
+			left:	546,
+			rect:	[
+				[ 877,   0, 144,  38 ],
+				[ 686,  38, 365, 119 ],
+				[ 594, 157, 492, 142 ],
+				[ 626, 299, 441,  88 ],
+				[ 732, 387, 320,  39 ],
+				[   0, 426,1070,  58 ],
+				[ 669, 484, 428,  70 ]
+			]
+		],
+		イリヤ:	%[
+			left:	669,
+			rect:	[
+				[ 206,   0, 371,  61 ],
+				[ 165,  61, 418,  49 ],
+				[ 127, 110, 444,  50 ],
+				[ 157, 160, 375,  46 ],
+				[ 302, 206, 183,  17 ],
+				[  92, 223, 415,  53 ],
+				[  79, 276, 575, 112 ],
+				[  83, 388, 387,  55 ],
+				[   0, 443, 297, 108 ]
+			]
+		],
+		キャスター:	%[
+			left:	570,
+			rect:	[
+				[ 194,   0, 182,  70 ],
+				[  88,  70, 288,  70 ],
+				[   0, 140, 401, 176 ],
+				[  12, 316, 461,  75 ],
+				[ 100, 391, 304,  68 ],
+				[  28, 459, 131, 117 ],
+				[ 219, 459, 172,  54 ],
+				[ 159, 513, 213,  63 ]
+			]
+		],
+		ギルガメッシュ:	%[
+			left:	591,
+			rect:	[
+				[ 184,   0,  95,   9 ],
+				[  34,   9, 273,  64 ],
+				[   3,  73, 304,  67 ],
+				[   0, 140, 526, 135 ],
+				[  43, 275, 418,  75 ],
+				[  87, 350, 263,  44 ],
+				[ 110, 394, 224,  56 ],
+				[  56, 450, 354, 118 ]
+			]
+		],
+		セイバー:	%[
+			left:	736,
+			rect:	[
+				[ 201,   0, 201,  50 ],
+				[ 202,  50, 153,  20 ],
+				[ 143,  70, 518, 145 ],
+				[ 141, 215, 214,  10 ],
+				[   0, 225, 340,  65 ],
+				[  26, 290, 289,  67 ],
+				[ 149, 357, 221,  75 ],
+				[ 133, 432, 329, 156 ]
+			]
+		],
+		バーサーカー:	%[
+			left:	751,
+			rect:	[
+				[ 249,   0, 310,  31 ],
+				[ 174,  31, 625,  43 ],
+				[ 111,  74, 316,  91 ],
+				[ 501,  74, 340, 108 ],
+				[ 477, 182, 324,  87 ],
+				[ 410, 269, 290,  25 ],
+				[ 238, 294, 455, 100 ],
+				[ 239, 394, 376,  56 ],
+				[ 221, 450, 461,  37 ],
+				[  61, 487, 683,  72 ],
+				[   0, 559, 682,  41 ]
+			]
+		],
+		ライダー:	%[
+			left:	714,
+			rect:	[
+				[ 162,   0, 253, 116 ],
+				[ 112, 116, 323,  99 ],
+				[  31, 215, 499, 107 ],
+				[   0, 322, 688,  65 ],
+				[   0, 387, 655,  79 ],
+				[   1, 466, 617,  64 ],
+				[  19, 530, 425,  55 ],
+				[ 484, 530,  44,  55 ],
+				[ 567, 530,  51,  55 ]
+			]
+		],
+		ランサー:	%[
+			left:	760,
+			rect:	[
+				[  57,   0, 110,  46 ],
+				[ 123,  46, 371,  75 ],
+				[  81, 121, 441,  67 ],
+				[   0, 188, 190, 138 ],
+				[ 228, 188, 301, 101 ],
+				[ 219, 289, 427,  95 ],
+				[ 226, 384, 296,  64 ],
+				[ 590, 384, 137,  59 ],
+				[ 652, 443, 146,  78 ],
+				[ 233, 448, 328, 101 ],
+				[ 246, 549, 113,  51 ]
+			],
+			sub:	[
+				%[ storage:"犬0", left:68, top:401 ],
+				%[ storage:"犬1", left:390,top:396 ]
+			]
+		],
+		葛木:	%[
+			left:	660,
+			rect:	[
+				[ 252,   0, 158,  85 ],
+				[  55,  85, 349,  56 ],
+				[  23, 141, 637,  80 ],
+				[   0, 221, 592,  80 ],
+				[ 226, 301, 256,  63 ],
+				[ 245, 364, 194,  78 ],
+				[ 194, 442, 246,  98 ],
+				[ 260, 540, 171,  38 ]
+			]
+		],
+		言峰:	%[
+			left:	660,
+			rect:	[
+				[ 904,   0,  90, 143 ],
+				[ 552,  33, 197,  59 ],
+				[ 404,  92, 455,  51 ],
+				[ 330, 143, 662, 105 ],
+				[ 275, 248, 650,  60 ],
+				[ 186, 308, 659, 102 ],
+				[   0, 410, 859,  91 ],
+				[  29, 501, 419,  99 ],
+				[ 509, 501, 213,  99 ],
+				[ 746, 501, 143,  99 ]
+			]
+		],
+		桜:	%[
+			left:	448,
+			rect:	[
+				[ 103,  11, 156,  54 ],
+				[  22,  65, 290, 109 ],
+				[  57, 174, 285,  78 ],
+				[  84, 252, 279, 117 ],
+				[  82, 369, 238,  80 ],
+				[   0, 449, 322, 144 ]
+			]
+		],
+		士郎:	%[
+			left:	742,
+			rect:	[
+				[ 228,   0, 142,  75 ],
+				[ 209,  75, 164,   8 ],
+				[   0,  83, 379,  49 ],
+				[  89, 132, 318, 154 ],
+				[ 407, 152,  63,  52 ],
+				[ 528,  39, 255, 165 ],
+				[ 407, 204, 262,  76 ],
+				[ 218, 286, 239, 181 ],
+				[ 183, 467, 304,  43 ],
+				[ 131, 510, 172,  63 ],
+				[ 379, 510, 157,  63 ]
+			]
+		],
+		凛:	%[
+			left:	564,
+			rect:	[
+				[  92,   0, 238,  20 ],
+				[  67,  20, 278,   9 ],
+				[   0,  29, 365,  39 ],
+				[   0,  68, 321,  17 ],
+				[   2,  85, 274,  34 ],
+				[   8, 119, 237,  45 ],
+				[  18, 164, 421,  74 ],
+				[  37, 238, 270,  39 ],
+				[  83, 277, 224,  37 ],
+				[  81, 314, 208,  56 ],
+				[ 108, 370, 181, 122 ],
+				[ 153, 492, 112, 108 ]
+			]
+		],
+		ブルマイリヤ:	%[
+			left:	503,
+			rect:	[
+				[ 204,   0,  58,  41 ],
+				[  72,  41, 190, 127 ],
+				[  69, 168, 209,  25 ],
+				[   0, 193, 312,  88 ],
+				[  23, 281, 264,  46 ],
+				[  51, 327, 155, 107 ],
+				[   5, 434, 177,  84 ],
+				[  20, 518, 151,  70 ],
+				[  12, 588,  80,  12 ]
+			]
+		],
+		藤ねえ:	%[
+			left:	613,
+			rect:	[
+				[ 300,   0, 178,  87 ],
+				[ 290,  87, 350,  73 ],
+				[ 330, 160, 315,  78 ],
+				[ 292, 238, 263,  20 ],
+				[ 183, 258, 372,  67 ],
+				[ 155, 325, 381,  65 ],
+				[  59, 390, 531, 106 ],
+				[   0, 496, 587, 104 ]
+			]
+		],
+		セラ:	%[
+			left:	685,
+			rect:	[
+				[  81,   0, 213, 100 ],
+				[ 127, 100, 212,  64 ],
+				[  71, 164, 302,  53 ],
+				[  16, 217, 373,  85 ],
+				[  27, 302, 287,  51 ],
+				[  65, 353, 472, 100 ],
+				[   0, 453, 553, 142 ]
+			]
+		],
+		リズ:	%[
+			left:	581,
+			rect:	[
+				[ 294,   0, 212, 103 ],
+				[ 336, 103, 134,  36 ],
+				[ 229, 139, 297,  46 ],
+				[ 254, 185, 256, 176 ],
+				[   0, 361, 536,  86 ],
+				[ 101, 447, 465,  45 ],
+				[  47, 492, 546, 103 ]
+			]
+		],
+		慎二:	%[
+			left:	683,
+			rect:	[
+				[  83,   0, 162,  58 ],
+				[  67,  58, 185,  26 ],
+				[  85,  84, 161,  29 ],
+				[  80, 113, 503,  24 ],
+				[   3, 137, 546,  54 ],
+				[   2, 191, 389,  40 ],
+				[   2, 231, 261,  71 ],
+				[   6, 302, 325, 152 ],
+				[  39, 454, 260,  63 ],
+				[  33, 517, 225,  83 ]
+			]
+		],
+/*
+		:	%[
+			left:	,
+			rect:	[
+				[ , , ,  ],
+				[ , , ,  ],
+				[ , , ,  ],
+				[ , , ,  ],
+				[ , , ,  ],
+				[ , , ,  ],
+				[ , , ,  ],
+				[ , , ,  ],
+				[ , , ,  ]
+			]
+		],
+*/	];
+	var spnameParams	= %[
+	//									文字数, ピッチ
+		インヴィジブルエア:				[ 4, 0 ],
+		エクスカリバー:					[ 9, 0 ],
+		アヴァロン:						[ 7, 0 ],
+		ゲイボルク:						[ 8, -5 ],
+		ロー・アイアス:					[ 9, 0 ],
+		無限の剣製:						[ 5, 0 ],
+		ブラッドフォート・アンドロメダ:	[ 9, -8 ],
+		ブレーカー・ゴルゴーン:			[ 9, -8 ],
+		ベルレフォーン:					[ 5, 0 ],
+		ヘカティック・グライアー:		[ 10, -5 ],
+		ルールブレイカー:				[ 9, 0 ],
+		ゴッドハンド:					[ 5, 0 ],
+		燕返し:							[ 3, 0 ],
+		ゲートオブバビロン:				[ 4, 0 ],
+		エヌマ・エリシュ:				[ 9, -3 ],
+		メイド・ドラグーン:				[ 6, 0 ],
+		グラス・オリジン:				[ 6, 0 ],
+	];
+	var longwaitTime	= [
+	//	min		max
+		[ 5000, 15000 ],	//	トラぶる血夜呼零怒
+		[ 5000, 15000 ],	//	食いしん王万歳
+		[ 5000, 15000 ],	//	ゆみみっくすりみっくす
+		[ 5000, 15000 ],	//	チェリーブロッサムセルシアン
+		[ 5000, 15000 ],	//	筋肉少女隊
+		[ 5000, 15000 ],	//	教師と夢見る若奥様(+1)
+		[ 5000, 15000 ],	//	神父と愉快な仲間たち
+		[ 5000, 15000 ],	//	チーム名考えるのめどい
+		[ 5000, 15000 ],	//	慎二
+		[ 5000, 15000 ],	//	ししょー
+		[ 5000, 15000 ],	//	弟子一号
+		[ 5000, 15000 ],	//	チュートリアル先生
+		[ 5000, 15000 ],	//	チュートリアル生徒
+	];
+
+	var replaceMacro	= %[
+		oya : function() { return game.oya_no ? "あなた" : "わたし"; } incontextof this,
+		player : function () { return game.currentPlayer ? "あなた" : "わたし"; } incontextof this,
+		tefuda : function() { drawMarker("hf_marker-tefuda", 184, 455); return ""; } incontextof this,
+		bafuda : function() { drawMarker("hf_marker-bafuda", 308, 194); return ""; } incontextof this,
+		yamafuda : function() { drawMarker("hf_marker-yamafuda", 176, 262); return ""; } incontextof this,
+		list : function() { drawMarker("hf_marker-button", 11, 294); return ""; } incontextof this,
+		cpupoint : function() { drawMarker("hf_marker-punderline", 637, 220); return ""; } incontextof this,
+		playerpoint : function() { drawMarker("hf_marker-punderline", 85, 417); return ""; } incontextof this,
+	];
+	var tutorialMessages;
+	var tutorialMessagesStorage	= "tutorial.txt";
+
+	var	enterse	= "hfse002.wav";
+	var	clickse	= "hfse011.wav";
+
+	//	ゲーム中で使用
+	var game;
+	var routine;
+	var cards;
+	var faces;
+	var icon;
+	var yakuChips;
+	var yakuList;
+	var confirm;
+	var ten;
+	var config;
+	var reference;
+	var listmenu;
+	var popuplayer;
+	var buttons;
+	var treasurebutton;
+	var mp;
+	var treasureIconManager;
+	var yakumoji;
+	var others;	//	表示するだけのもの(背景に書き込むもの)
+	var shoubuLayers	= %[];	//	"勝負！"の表示
+
+	//	親決定時のみ使用
+	var selcards;
+	var oyaseltitle, selinfo;
+	var mondisp;
+
+	//	ゲーム進行に使用
+	var execTimer;
+	var current;
+	var repeat;
+
+	var pressOkTo, pressCancelTo;
+
+	var isCPUTurn;
+	var lastmove;
+
+	var team;	//	[0: CPU, 1: プレイヤー]
+	var plugin;
+	var tutorial;	//	チュートリアルモード
+
+	var serifs = [];	//	チーム毎のセリフ
+	var seriffile	= "serif.ksc";
+	var lastserifno	= [ [], [] ];
+
+	var sutefuda= [ %[], %[] ];	//	プレイヤーの捨てた札
+	var waiting	= [ [], [] ];	//	     〃     待ち札(唯一のもののみ)
+
+	var longwaitTimer;		//	札選択待ちタイマー
+
+	var startdate;	//	対戦開始日時
+
+	var	mode;
+
+	function HanafudaBaseLayer(win, par, plugin, team=[1, 0], basepoints=[12, 12], cpuvscpu=false, mode="", bg, lastmp, thinklevel)
+	{
+		this.team	= team;	//	チーム情報
+		this.plugin	= plugin;
+		if((this.mode = mode) == "tutorial")
+		{
+			tutorial = true;	//	チュートリアルモード
+			team = [11, 12];	//	チュートリアル用チーム
+		}
+
+		//	設定読み込み
+		popup	= tf.HanafudaPopup if tf.HanafudaPopup !== void;
+		chat	= tf.HanafudaChat if tf.HanafudaChat !== void;
+
+		//	場
+		super.Layer(...);
+		bgimage	= bg if bg != void;
+		if(typeof bgimage == "Integer")
+		{
+			setPos(0, 0);
+			setSize(par.width, par.height);
+			fillRect(0, 0, width, height, bgimage);
+		}
+		else
+		{
+			loadImages(bgimage);
+			setSizeToImageSize();
+		}
+		absolute= 100000;
+		opacity	= 0;
+		enabled	= true;
+		visible	= true;
+
+		//	ゲーム管理
+		with(game = new Koikoi(hfFormalTeamName[team[0]], hfFormalTeamName[team[1]]))
+		{
+			.loadRules();
+			.回数戦	= false;	//	一定の得点を取ったほうが勝ち(固定ルール)
+
+			//	ストーリーモードかどうか
+//			var disclosure	= true;	//	宝具情報を公開する
+			switch(mode)
+			{
+			case "story":
+				//	ストーリーモードなら、宝具ありで７文以上で倍とこいこいで倍が無くなる
+				.宝具あり		= true;
+				.７文倍掛けあり	= false;
+				.倍返しあり		= false;
+//				disclosure		= false;	//	まだ公開しない
+				break;
+			case "mainpart":
+				.酒あり			= true;		//	通常モードに強制設定
+				.雨四光あり		= true;
+				.雨流れあり		= true;
+				.二役あり		= true;
+			case "tutorial":
+				//	チュートリアル/本編モードなら、宝具・７文以上で倍・こいこいで倍がなくなる
+				.宝具あり		= false;
+				.７文倍掛けあり	= false;
+				.倍返しあり		= false;
+//				disclosure		= false;	//	まだ公開しない
+				break;
+			//	フリーモード、ノーマルモードは特に変更なし
+			}
+			dm(@"mode=${mode}: .宝具あり=${.宝具あり}, .７文倍掛けあり=${.７文倍掛けあり}, .倍返しあり=${.倍返しあり}");
+
+			for(var i=0; i<2; i++)
+			{
+				if(.宝具あり)
+				{
+					//	サーヴァントの登録
+					var tm	= teams[team[i]];
+					for(var j=0; j<tm.count; j++)
+						.addServant(i, tm[j], i == 1);	//	プレイヤーチームの情報は公開する
+
+					//	MPを継承するか？
+					game.setCurrentMP(lastmp) if lastmp != void;
+				}
+
+				//	ルールにより、ポイントの設定を変える
+				var point	= basepoints[i];
+				if(.７文倍掛けあり)
+					point	*= 2;
+				if(.倍返しあり)
+					point	*= 2;
+				.minimumpoint[i] = point;
+			}
+		}
+
+		//	思考ルーチン
+		if(cpuvscpu)
+			routine	= [ new StrengthenKoikoiRoutine(this, game), new StrengthenKoikoiRoutine(this, game) ];
+		else
+			routine	= [ new StrengthenKoikoiRoutine(this, game,, thinklevel) ];
+
+		//	思考ルーチン調整
+		for(var i=0; i<routine.count; i++)
+		{
+			var hft = hfTeamThinking[team[i]];
+			var rt = routine[i];
+			rt.攻撃楽観度	= hft[0];
+			rt.防御楽観度	= hft[1];
+			if(game.７文倍掛けあり)
+				rt.勝負点数	= hft[2];
+			else
+				rt.勝負点数	= hft[3];
+
+			//	札の優先度
+			var pf = hft[4];
+			var bp = rt.base_priority;
+			for(var i=0; i<pf.count; i+= 2)
+				bp[pf[i]]	= pf[i + 1];
+		}
+
+		//	札
+		cards	= [];
+		for(var i=0; i<game.札点数一覧.count; i++)
+			cards[i]	= new HanafudaLayer(win, this, game.allfuda[i]);
+
+		//	顔ウィンドウ
+		faces	= [];
+		for(var i=0; i<team.count; i++)
+		{
+			var tm = teams[team[i]];
+			faces.add(new FaceLayer(win, this, i, tm));
+		}
+
+		//	親/子表示
+		icon	= [];
+		var oyako	= [ "hf_親アイコン", "hf_子アイコン" ];
+		for(var i=0; i<2; i++)
+		{
+			with(icon[i] = new IconLayer(win, this, oyako[i]))
+				.setSize(.imageWidth >> 1, .imageHeight);
+		}
+
+		//	こいこい表示
+		var poss = [
+			[ 725, 184 ],
+			[   5, 386 ]
+		];
+		for(var i=0; i<2; i++)
+		{
+			with(icon[i+2] = new KoikoiIconLayer(win, this, "hf_こいこいアイコン"))
+			{
+				//	位置情報を書き換え
+				var p = poss[i];
+				.setPos(p[0], p[1]);
+			}
+		}
+
+		//	手番表示
+		{
+			var banicons	= [
+				[ "hf_turn-cpu",	120, 298 ],
+				[ "hf_turn-player",	121, 338 ],
+			];
+			for(var i=0; i<2; i++)
+			{
+				var layer;
+				with(layer = new IconLayer(win, this, banicons[i][0]))
+				{
+					.setSize(.imageWidth >> 1, .imageHeight);
+					.setPos(banicons[i][1], banicons[i][2]);
+					.on	= false;
+//					.type	= ltAddAlpha;
+				}
+				icon.add(layer);
+			}
+		}
+
+		//	メニュー
+		config	= new HahafudaConfigMenuLayer(win, this, (mode == "mainpart" ? "mainpart" : "game"));
+		reference	= new HanafudaReferenceLayer(win, this);
+		listmenu	= new HanafudaTreasureMenuLayer(win, this);
+
+		//	勝負後の演出
+		yakumoji	= new YakuMojiManager(win, this, faces);
+
+		//	テンパイ表示チップ
+		yakuChips	= [ new YakuChipManager(this, 0), new YakuChipManager(this, 1) ];
+
+		//	ボタン
+		buttons	= [];
+		for(var i=0; i<btndatas.count; i++)
+		{
+			var bt = btndatas[i];
+			with(buttons[i] = new GameButtonLayer(win, this, bt[1]))
+			{
+				.name	= bt[0];
+				.setPos(bt[2], bt[3]);
+				.absolute	= bt[4];
+				.enterse	= enterse;
+			}
+		}
+
+		if(game.宝具あり)
+		{
+			//	宝具ボタン
+			var tbd = treasurebtndata;
+			with(treasurebutton = new GameButtonLayer(win, this, tbd[1]))
+			{
+				.name	= tbd[0];
+				.setPos(tbd[2], tbd[3]);
+				.absolute	= tbd[4];
+				.enterse	= enterse;
+			}
+
+			//	MP表示
+			var mplabelpos	= [ 319, 143, 457 ];
+			mp	= [ [], [] ];
+			treasureIconManager	= [];
+			for(var i=0; i<team.count; i++)
+			{
+				//	魔力表示
+				var ps = game.getServantParam(i);
+				if(ps != void)
+				{
+					//	"MP"
+					if(ps.count > 0)
+						addOthers("hf_魔力_mp", mplabelpos[0], mplabelpos[1+i]);
+
+					for(var j=0; j<ps.count; j++)
+					{
+						var si	= game.getServantInfo(i, j);
+						with(mp[i][j] = new MPLayer(win, this, si[0], ps[j]))
+							.setPos(mppos[i][j][0], mppos[i][j][1]);
+
+						//	スラッシュ
+						addOthers("hf_魔力_スラッシュ", mpslash[0][j], mpslash[1][i]);
+
+						//	サーヴァント名
+						addOthers("hf_魔力_"+ps[j][0], mpname[0][j], mpname[1][i], "center", "bottom");
+					}
+				}
+
+				//	宝具発動アイコン表示管理
+				var tip = treasureiconpos[i];
+				treasureIconManager[i]	= new TreasureIconManager(win, this, tip[0], tip[1], i);
+			}
+		}
+
+		//	持ち点表示
+		//	役一覧表示
+		with(yakuList = new GetYakuListLayer(win, this))
+			.basetop	= 375;
+
+		//	あがり/こいこい確認ボタン
+		confirm	= new KoikoiConfirmLayer(win, this);
+
+		//	ポップアップ
+		popuplayer	= new RelatedYakuPopupLayer(win, this);
+
+		//	進行管理タイマー
+		execTimer	= new Timer(exec, "");
+
+		//	札選択待ちセリフタイマー
+		if(!tutorial)
+			longwaitTimer	= new Timer(onLongWait, "");
+
+		//	セリフの準備
+		tf.serif_count	= [] if tf.serif_count === void;	//	各セリフの回数
+		serif_count	= tf.serif_count;
+		var	serif	= [];
+		if(Storages.isExistentStorage(seriffile))
+		{
+			serif		= Scripts.evalStorage(seriffile);
+			serif[13]	= serif[8];	//	慎二・白は慎二と同じセリフを使用する
+		}
+		serifs[0]	= %[];	(Dictionary.assignStruct incontextof serifs[0])(serif[team[0]]) if serif[team[0]] != void;
+		serifs[1]	= %[];	(Dictionary.assignStruct incontextof serifs[1])(serif[team[1]]) if serif[team[1]] != void;
+		invalidate serif;
+
+		cutinInfo["慎二白"]	= cutinInfo["慎二"];	//	キャラクター矩形情報も使用する
+		longwaitTime[13]	= longwaitTime[8];		//	待ち時間も同じ
+
+		with(new Date())
+			startdate	= "%04d/%02d/%02d %2d:%02d:%02d".sprintf(.getYear(), .getMonth()+1, .getDate(), .getHours(), .getMinutes(), .getSeconds());
+	}
+
+	function finalize()
+	{
+		for(var i=movingchips.count-1; i>=0; i--)
+			movingchips[i].stopAll() if movingchips[i] isvalid;
+		movingchips.clear();
+
+		//	設定記録
+		tf.HanafudaPopup= popup;
+		tf.HanafudaChat	= chat;
+
+		releaseDictionary(shoubuLayers);
+		releaseArray(others);
+		release(tutorialMessages);
+		releaseArray(treasureIconManager);
+		releaseArray(mp);
+		release(treasurebutton);
+		release(treasure);
+		releaseArray(ten);
+		release(serifs);
+		release(longwaitTimer);
+		release(execTimer);
+		release(popuplayer);
+		release(confirm);
+		release(yakuList);
+		releaseArray(buttons);
+		releaseArray(yakuChips);
+		release(yakumoji);
+		release(listmenu);
+		release(reference);
+		release(config);
+		releaseArray(icon);
+		releaseArray(faces);
+		releaseArray(cards);
+//		game.saveRules();
+		release(game);
+		super.finalize(...);
+	}
+
+	//	表示するだけのレイヤー
+	function addOthers(storage, l, t, lp="left", tp="top")
+	{
+/*		var layer;
+		with(layer = new global.Layer(window, this))
+		{
+			.loadImages(storage);
+			.setSizeToImageSize();
+			switch(lp)
+			{
+			case "left":	.left	= l;				break;
+			case "center":	.left	= l - (.width>>1);	break;
+			case "right":	.left	= l - .width;		break;
+			}
+			switch(tp)
+			{
+			case "top":		.top	= t;				break;
+			case "center":	.top	= t - (.height>>1);	break;
+			case "bottom":	.top	= t - .height;		break;
+			}
+			.opacity	= 255;
+			.hitThreshold	= 256;
+			.visible	= false;	//	とりあえず表示しない
+		}
+*/		var elm;
+		with(elm = %[])
+		{
+			.storage	= storage;
+			.left		= l;
+			.top		= t;
+			.lp			= lp;
+			.tp			= tp;
+		}
+		others	= [] if others == void;
+		others.add(elm);
+	}
+
+	//	表示するだけのものを表示する
+	function dispOthers()
+	{
+		if(others == void)
+			return;
+		var layer	= new global.Layer(window, this);
+		for(var i=0; i<others.count; i++)
+		{
+//			others[i].visible	= true;
+			var elm = others[i];
+			with(layer)
+			{
+				.loadImages(elm.storage);
+				var l, t;
+				switch(elm.lp)
+				{
+				case "left":	l	= elm.left;						break;
+				case "center":	l	= elm.left - (.imageWidth>>1);	break;
+				case "right":	l	= elm.left - .imageWidth;		break;
+				}
+				switch(elm.tp)
+				{
+				case "top":		t	= elm.top;						break;
+				case "center":	t	= elm.top - (.imageHeight>>1);	break;
+				case "bottom":	t	= elm.top - .imageHeight;		break;
+				}
+				operateRect(l, t, layer, 0, 0, .imageWidth, .imageHeight);
+			}
+		}
+		invalidate layer;
+	}
+
+	//-------------------------------------------------------------------------
+	//	次の処理を実行
+	function exec()
+	{
+		execTimer.enabled	= false;	//	とりあえず、次は実行しない
+//		focusable			= false;	//	フォーカスは失う
+		if(window.focusedLayer != lastEnterCard)
+			lastEnterCard.focus() if lastEnterCard	!= void;
+		if(pushicon)
+		{
+			//	pushアイコンは消す
+//			dm("=== hide push icon ===");
+			invalidate pushicon;
+			pushicon	= void;
+		}
+
+		//	実行中の処理を終了させる
+		if(!notFinish)
+		{
+//			dm("finish all");
+			for(var i=movingchips.count-1; i>=0; i--)
+			{
+				if(movingchips[i] isvalid)
+				{
+					with(movingchips[i])
+					{
+//						dm(.name+".finishAll()");
+						.finishAll();
+//						.endAnimation();
+					}
+				}
+			}
+			movingchips.clear();
+		}
+
+		//	現在の処理を継続する
+		var tmpfunc;
+		if(current != void)
+		{
+//			dm("do func: "+current);
+			//	一度実行したら、任意に設定されない限り再度実行されない
+			tmpfunc = current;
+			current	= void;
+			tmpfunc();
+		}
+	}
+
+	//	次へ(時間設定して)
+	var notFinish;
+	var pushicon;
+	function next(func, time=-1, notfinish=false)
+	{
+		current		= func;		//	実行するメソッド
+		notFinish	= notfinish;//	進行中の動きを停止させない
+
+//		dm("call "+func+":"+time+"(ms)");
+		if(time > 0)
+		{
+			execTimer.interval	= time;		//	待ち時間
+			start();
+		}
+		else if(time == 0)
+		{
+			exec();
+		}
+		else
+		{
+//			dispClickWait();
+		}
+
+		//	フォーカスを得る
+//		focusable	= true;
+//		focus();
+	}
+
+	//	実行する
+	function start()
+	{
+		execTimer.enabled	= true;
+	}
+
+	//	実行の停止
+	function stop()
+	{
+		execTimer.enabled	= false;
+	}
+
+	//	実行の再開
+	function resume()
+	{
+		exec();	//	とりあえず実行させる
+	}
+
+	//	クリック待ちを示す表示
+	function dispClickWait(delay=0)
+	{
+//		dm("=== disp push icon === ("+pushicon+"/"+(pushicon==void)+")");
+		if(pushicon == void)
+			pushicon = new PushIconLayer(window, this, delay, exec);
+	}
+
+	//-------------------------------------------------------------------------
+	//	OK(左クリック、Enter、パッド1ボタン等)が押されたとき
+	function pressOk()
+	{
+//		dm("press ok");
+		if(pressOkTo)
+			pressOkTo();	//	設定されているメソッドを呼び出す
+		else
+			exec();			//	スキップ
+	}
+
+	//	CANCEL(右クリック、ESC、パッド2ボタン等)が押されたとき
+	var enabledMenu	= true;
+	function pressCancel()
+	{
+		if(pressCancelTo)
+			pressCancelTo();	//	設定されているメソッドを呼び出す
+		else if(enabledMenu)
+		{
+			if(mode != "mainpart")	//	メインパートからの呼び出し以外なら
+				showMenu();		//	メニューを表示する
+		}
+	}
+
+	//	マウスボタン押下
+	function onMouseDown(x, y, button, shift)
+	{
+//		dm("on mouse down: "+button);
+		if(button == mbLeft)
+			pressOk();
+		else if(button == mbRight)
+			pressCancel();
+//		new ShockwaveLayer(window, this, %[left:x, top:y, width:0, height:0], "hf_shockwave", 192, 2.0, 200, -2);//, clap.time);
+	}
+
+	//	キー押下
+	var myOnKeyDown;
+	function onKeyDown(key, shift)
+	{
+//		dm("on key down: "+key+" / "+shift);
+
+		switch(key)
+		{
+		case VK_RETURN:
+		case VK_SPACE:
+			pressOk();
+			return;
+
+		case VK_ESCAPE:
+		case VK_DELETE:
+		case VK_BACK:
+			pressCancel();
+			return;
+		}
+		if(myOnKeyDown && myOnKeyDown(key, shift))
+			return;
+
+		return super.onKeyDown(key, shift, true);
+	}
+
+	//	ボタン押下
+	function onButtonDown(btn)
+	{
+		playSound(clickse);
+		switch(btn.name)
+		{
+		case "yakulist":
+			showYakuReference();
+			break;
+
+		case "fudalist":
+			showFudaReference();
+			break;
+
+		case "config":
+			showMenu();
+			break;
+
+		case "treasure":
+			showSpecialMenu();
+			break;
+		}
+	}
+
+	//-------------------------------------------------------------------------
+	//	フェード処理
+	var fadeelm;
+	function fade(opa, time=1000, accel=0, delay=0, erase=false, func)
+	{
+		fadeelm = %[];
+		with(fadeelm)
+		{
+			.lastopacity= opacity;
+			.opacity	= opa;
+			.time		= time;
+			.accel		= accel;
+			.erase		= erase;
+			.func		= func;
+			.starttick	= System.getTickCount() + delay;
+		}
+		System.addContinuousHandler(fade_handler);
+	}
+
+	function fade_handler(tick)
+	{
+		with(fadeelm)
+		{
+			var past = tick - .starttick;
+			if(past > .time)
+				fade_finish();
+			else if(past > 0)
+				fade_construct(calcAccel(past / .time, .accel));
+		}
+	}
+
+	function fade_construct(per)
+	{
+		with(fadeelm)
+			opacity	= int((.opacity - .lastopacity) * per + .lastopacity + 0.5);
+	}
+
+	function fade_finish()
+	{
+		fade_construct(1.0);
+		fade_stop();
+	}
+
+	function fade_stop()
+	{
+		if(fadeelm)
+		{
+			System.removeContinuousHandler(fade_handler);
+			if(fadeelm.func)
+				fadeelm.func();
+			var erase = fadeelm.erase;
+			invalidate fadeelm;
+			fadeelm	= void;
+			if(erase)
+				plugin.onLayerClosed();
+		}
+	}
+
+	//	何もしない
+	function nullFunc()
+	{
+	}
+
+	//	フォーカスをすべて外す
+	function offFocus()
+	{
+		window.focusedLayer	= null;
+	}
+
+	//-------------------------------------------------------------------------
+	//	上下独立したセリフバッファを持ち、新しいセリフが来たら、それまでのセリフを
+	//	キャンセルしてすぐに表示する。
+	var on_serif	= [];
+	var voice_delay	= 100;
+	var serif_stock = [];	//	表示予定のセリフ
+	var serif_process = [];	//	いくつセリフを表示したか？
+	var serif_count;	//	セリフ使用回数
+	function voice(player, seriftype, serifno, add=false)	//	add: 現在表示予定のものに続いて表示する
+	{
+		//	発言を表示しない場合は、登録しない
+		var	teamno	= player & 1;
+		if(!chat || serifs[teamno].all == void)
+			return -1;
+
+		//	範囲外を無視
+		if(seriftype < 0 || seriftype >= serifs[teamno].all.count)
+			return -1;
+		var	playerserif	= serifs[teamno];
+
+		//	対象を特定しないセリフをコピー
+		var	serif	= [];
+		serif.assign(playerserif.all[seriftype]);
+
+		//	対戦チーム用のセリフと表示中の相手用のセリフをコピー
+		var	enemy	= (teamno + 1) & 1;
+		var	keys	= [ team[enemy], teams[team[enemy]][faces[enemy].no] ];
+		for(var i=0; i<keys.count; i++)
+		{
+			var	target	= playerserif[keys[i]];
+			if(target != void)
+			{
+				target	= target[seriftype];
+				for(var i=0; i<target.count; i++)
+					serif.add(target[i]);
+			}
+		}
+
+		if(serif.count < 1)
+		{
+//			throw new Exception(teamname[teamno]+"チームには、セリフタイプNo."+seriftype+"が存在しません。");
+			dm(teamname[teamno]+"チームには、セリフタイプNo."+seriftype+"が存在しません。");
+			return -1;
+		}
+
+		//	セリフを選び出す
+		if(serifno === void || serifno < 0 || serifno >= serif.count)
+		{
+			var sn, last = lastserifno[player][seriftype];
+			for(var i=0; i<4; i++)
+			{
+				sn = int(Math.random() * serif.count);
+				if(sn != last)
+					break;	//	違うセリフを選んだら抜ける
+			}
+			//	同じであっても、4回試したら終了
+			serifno	= sn;
+		}
+		lastserifno[player][seriftype]	= serifno;	//	セリフ番号を記録しておく
+		serif_count[seriftype]++;	//	セリフの使用回数(統計を取るため)
+
+		if(add)
+		{//	現在のものに続いて、新しいセリフを表示する
+			var array = [];
+			array.assignStruct(serif_stock[player]);	//	現在のものをコピー
+			for(var i=0; i<serif[serifno].count; i++)
+				array.add(serif[serifno][i]);			//	新しいものを追加していく
+			serif_stock[player]	= array;				//	置き換え
+		}
+		else
+		{//	現在のものを破棄して、新しいセリフを表示する
+			//	セリフの登録と表示開始
+			setSerif(player, serif[serifno]);
+		}
+
+		return 1;
+	}
+
+	//	セリフを新しく設定する
+	function setSerif(player, serifs)
+	{
+		serif_stock[player]		= serifs;
+		serif_process[player]	= 0;
+
+		return nextVoice(player);	//	セリフ表示開始
+	}
+
+	//	指定のプレイヤーの、次のセリフを表示する
+	function nextVoice(player)
+	{
+		on_serif[player]	= false;	//	セリフが表示されていない
+		eraseMarker();			//	表示されているマーカーはすべて消去
+		if(serif_process[player] >= serif_stock[player].count)
+			//	表示するべきセリフがなくなった
+			return;
+
+		var serif	= serif_stock[player][serif_process[player]];
+//		dm(@"voice: \"${serif[2]}\"(${serif[1]})");
+/*		//	ランダムに汗、青筋を付加
+		var sa	= serif[1].split("-");
+		var array = [ "汗", "怒" ];
+		serif[1]	= sa[0] + "-" + array[int(array.count * Math.random())];
+*/
+
+		//	文字列の埋め込み処理
+		var text = serif[2], newtext = "";
+		var reg = new RegExp("%([^%]+)%"), arg;
+		while((arg = reg.exec(text)).count > 0)
+		{
+			newtext	+= text.substr(0, reg.index);
+			newtext	+= replaceMacro[arg[1]]() if replaceMacro[arg[1]] !== void;
+			text	= text.substr(reg.lastIndex);
+		}
+		newtext	+= text;	//	残りをくっつける
+
+		//	セリフ表示
+		var recover	= (serif_process[player] == serif_stock[player].count-1);	//	次に表示するセリフがあるときは、表情を復帰させない
+		if(serif[6] != void && serif[6][6] != void)	//	ストックの中も調べる
+			recover	= false;
+		recover	= serif[5] if serif[5] !== void;
+//		dm("======== recover: "+recover);
+		var time	= faces[player].voice(serif[0], serif[1], newtext, serif[4], serif[3], recover, voice_delay, serif[6]);
+		on_serif[player]	= true;		//	セリフ表示中
+		serif_process[player]++;
+	}
+
+	//	発言を停止する
+	function stopVoice()
+	{
+		for(var i=0; i<serif_process.count; i++)
+		{
+			serif_process[i]	= 255;	//	発言終了
+		}
+	}
+
+	//	指定のプレイヤーの、表情を変更する
+	function face(player, facename, time=1500, recover)
+	{
+		//	発言を表示しない場合は、登録しない
+		if(!chat)
+			return -1;
+
+//		dm("======== "+player+": "+facename+", "+recover);
+		if(!on_serif[player])
+		{
+			//	表示指示の時点でセリフが表示されていないときのみ、顔を変更する。
+//			dm("====================顔表示開始========================");
+			return setSerif(player, [ [-1, facename, "",, time, recover] ]);
+		}
+	}
+
+	//-------------------------------------------------------------------------
+	//	チュートリアル用の発言(クリックされるまで表示)
+	function voiceTutorial(name)
+	{
+		if(tutorialMessages == void)
+		{
+			//	チュートリアルメッセージを読み込む
+			tutorialMessages	= %[];
+			var lines	= [].load(tutorialMessagesStorage);
+			for(var i=0; i<lines.count; i++)
+			{
+				//	チェック
+				var tmp	= lines[i].split("\t",,, true);
+				if(tmp[0] == "意味" || tmp[0] == "")
+					continue;	//	項目名と空行は無視する
+				var key	= tmp[1];
+				tmp.erase(0); tmp.erase(0);	//	意味とキーを取り除く
+
+				//	改行の置換
+				var reg = new RegExp("\\\\n", "g");
+				for(var j=0; j<tmp.count; j++)
+					tmp	[j]	= reg.replace(tmp[j], "\n");
+				invalidate reg;
+
+				//	登録
+				if(tmp.count > 1)
+					tutorialMessages[key]	= tmp;	//	複数のメッセージ
+				else
+					tutorialMessages[key]	= tmp[0];	//	1回表示のみ
+			}
+		}
+		//	対応したメッセージがあり、既出でないとき
+		if(tutorialMessages[name] !== void)
+		{
+			//	セリフを登録
+			var time	= 160;	//	通常は1文字あたり70ms
+			var player	= CPU;
+			var msg	= tutorialMessages[name];
+			var ss = [];
+			if(typeof msg == "String")
+				ss.add([0, "楽", msg,, time]);
+			else if(typeof msg == "Object")
+			{
+				//	セリフが複数の場合、交互に喋っているということで、入れ子構造にする
+				var	st;
+				ss.add(st = [0, "楽", msg[0],, time]);
+				for(var i=1; i<msg.count; i++)
+				{
+					st[6]	= [0, "楽", msg[i],, time];	//	セリフデータの6番目に、次のセリフデータを設定
+					st	= st[6];	//	次へ
+				}
+			}
+			eraseTutorial(name);	//	一度表示したら、2度と表示しない
+
+			//	セリフの表示
+			setSerif(player, ss);
+
+			//	セリフの表示時間を計測
+			var dtime = 0;
+			var	st	= ss[0];
+			while(st[6] != void)
+			{
+				var strs = st[2].split("\n");
+				for(var j=0; j<strs.count; j++)
+					dtime	+= time * strs[j].length;
+				dtime	+= 200 + 200;	//	ふきだしの表示/消去時間を加える
+				st	= st[6];	//	入れ子の、次のセリフ
+			}
+			dm("********"+name+" = "+dtime);
+			return dtime;
+		}
+		return 0;
+	}
+
+	//	チュートリアルメッセージを削除する
+	function eraseTutorial(name)
+	{
+		if(tutorialMessages[name] !== void)
+			delete tutorialMessages[name];
+	}
+
+	//-------------------------------------------------------------------------
+	//	チュートリアルのためのマーカー表示
+	var markers	= [];
+	function drawMarker(storage, l, t)
+	{
+		dm(@"draw marker: ${storage}, ${l}, ${t}");
+		with(markers[markers.count] = new ParticleLayer(window, this))
+		{
+			.name		= "marker: "+storage;
+			.opacity	= 0;
+			.visible	= true;
+			.hitThreshold	= 256;	//	全透過
+			.absolute	= 1;//BalloonAbsolute - 1;
+			.loadImages(storage);
+//			.type		= ltAddAlpha;
+			.setSizeToImageSize();
+			.setPos(l, t);
+			.moveTo(,, 255, 200);
+		}
+	}
+
+	//	すべてのマーカーを消去
+	function eraseMarker()
+	{
+		for(var i=0; i<markers.count; i++)
+		{
+			with(markers[i])
+			{
+				dm("erase marker: "+.name);
+				.moveTo(,, 0, 200,,, .endOfMove);
+			}
+		}
+		markers.clear();
+	}
+
+	//-------------------------------------------------------------------------
+	//	ポップアップ
+	function onBeginPopup(fuda_or_yaku, to_cursorpos)
+	{
+		if(!popup)
+			return;
+		if(!(popuplayer isvalid))
+			return;
+
+		dm("popup");
+
+		//	ポップアップ表示スイッチON
+		if(fuda_or_yaku instanceof "HanafudaLayer")
+			popuplayer.show(fuda_or_yaku, fuda_or_yaku.fuda, to_cursorpos, 0);
+		else
+			popuplayer.show(fuda_or_yaku, fuda_or_yaku.name, to_cursorpos, 0);
+	}
+
+	function onEndPopup()
+	{
+		if(!popup)
+			return;
+		if(!(popuplayer isvalid))
+			return;
+
+		dm("popup hide");
+		popuplayer.hide();
+	}
+
+	property popuped
+	{
+		getter	{ return popuplayer.visible; }
+	}
+
+	//-------------------------------------------------------------------------
+	var lastpopup;
+	//	ゲームを開始する
+	function init(time, accel)
+	{
+/*		var delay = 0;
+		for(var i=0; i<48; i++)
+		{
+			with(cards[i])
+			{
+				.setPos(0, 0);
+				.saveOriginal();
+				.clapTo(400, 300, 3000, 0, delay);
+				delay	+= 3000;
+			}
+		}
+*/
+/*		var yakus	= [
+			[ "三光", 5 ],
+			[ "猪鹿蝶", 5 ],
+			[ "赤短", 5 ],
+			[ "カス", 3 ],
+			[ "七文以上で倍", 10 ]
+		];
+		yakuList.show(yakus, msgfadetime);
+		fade(255, 300);
+		confirm.confirm(koikoi, shoubu, msgfadetime,,,, 175);	//	手札が残っていれば、確認する
+		return;
+*/
+		//	ボタンを無効にする
+		pressOkTo		= void;	//	クリック待ち→スキップ
+		pressCancelTo	= nullFunc;
+		var tm = time === void ? fadetime : time;	//	フェード時間
+
+		//	メインパート以外では、札を選んで親を決める
+		if(mode != "mainpart")
+		{
+			//	2枚選び出す
+			var num = [];
+			var fc = -1000;
+			for(var i=0; i<2; i++)
+			{
+				var c;
+				do
+				{
+					c = int(Math.random() * cards.count);
+				}
+				while(c \ 4 == fc \ 4);	//	直前に選んだ札と違う月の札がでるまで
+				num[i]	= fc	= c;
+			}
+
+			//	決定用の札を作成・配置
+			focusable	= true;		//	札にフォーカスが行かないように、最初にフォーカスを受ける
+			selcards	= [];
+			for(var i=0; i<2; i++)
+			{
+				var fuda = new Hanafuda(num[i] \ 4 + 1, num[i] % 4, 0);
+				with(selcards[i] = new HanafudaLayer(window, this, fuda))
+				{
+					//	選ぶ位置へ移動
+					.entersize	= .xlarge;	//	enterしたときXLサイズで表示
+					.leavesize	= .large;	//	leaveしたときLサイズで表示
+					._changeImage(.large, true);
+					.setPos(oyasel["left"+i], oyasel["top"+i]);
+
+					//	札がクリックされたら親決定へ
+					.acceptable	= true;
+					.setLButtonDown(decideAnticipation_select, num);	//	選ばれた2枚の札
+					.onKeyDown	= function(key, shift)
+					{
+						switch(key)
+						{
+						case VK_RETURN:
+						case VK_SPACE:
+						case VK_Z:
+							exec();		//	決定・実行
+							return;
+						}
+						global.ChipLayer.onKeyDown(key, shift, true);
+					} incontextof selcards[i];
+				}
+			}
+			window.focusedLayer	= null;	//	フォーカスを拾わない
+			focusable	= false;	//	札だけにフォーカスが行くようにする
+
+			//	「親決め」「札を選んでください」を表示
+			with(oyaseltitle = new ChipLayer(window, this))
+			{
+				.setPos(309, 61);
+				.loadImages("hf_親決め");
+				.setSizeToImageSize();
+				.absolute	= PopupAbsolute;
+				.opacity	= 255;
+				.visible	= true;
+				.hitThreshold	= 256;
+			}
+			with(selinfo = new ChipLayer(window, this))
+			{
+				.setPos(261, 462);
+				.loadImages("hf_札を選んで");
+				.setSizeToImageSize();
+				.absolute	= PopupAbsolute;
+				.opacity	= 255;
+				.visible	= true;
+				.hitThreshold	= 256;
+			}
+		}
+		else
+		{
+			//	リプレイデータの読み込み
+			game.loadHistory("shinjioh-replay.ksc");
+
+			//	ゲームを初期化
+			game.init(0);
+
+			//	開始
+			next(decideAnticipation_decide, tm);	//	フェード時間分待って、場を準備
+		}
+
+		//	一時的にポップアップ禁止
+		lastpopup	= popup;
+		popup	= false;
+
+		//	フェードイン開始
+		fade(255, tm);
+
+		if(tutorial)
+			voiceTutorial("before_oya");
+
+		//	プレイ履歴を利用するか？
+@if(DEBUG==1)
+		if(saveHanafudaReplay)
+			pressCancelTo	= loadReplay;
+@endif
+		//	キー入力待ち
+	}
+
+	function uninit(time, accel)
+	{
+		fade(0, time === void ? fadetime : time,,, true);
+	}
+
+	function loadReplay()
+	{
+		game.loadHistory();
+	}
+
+	//-------------------------------------------------------------------------
+	//	プレイヤーが親決定の札選択完了
+	function decideAnticipation_select(card, num)
+	{
+		//	両方をオープンし、それぞれの月の表示を行う
+		mondisp	= [];
+		for(var i=0; i<2; i++)
+		{
+			with(selcards[i])
+			{
+				.reverseTo(oyasel.revtime, oyasel.revaccel);
+//				.entersize	= .large;
+//				.leavesize	= .normal;
+			}
+			with(mondisp[i] = new ChipLayer(window, this))
+			{
+				.setPos(oyamon["left"+i], oyamon["top"+i]);
+				.loadImages("hf_"+selcards[i].month+"月");
+				.setSizeToImageSize();
+				.opacity	= 0;
+				.visible	= true;
+				.moveTo(,, 255, oyasel.revtime, oyasel.revaccel);
+				.hitThreshold	= 256;
+			}
+		}
+
+		//	ゲームを初期化
+		//	選んだカードの方が月が小さければ、プレイヤーが親(プレイヤーは1でCPUは0)
+		//	acceptable = focusable を false にする順番にも気を使う
+/*		var	seed;
+		if(mode == "mainpart")
+		{
+			seed	= 
+%[
+ "left" => int 1,
+ "next" => int 0,
+ "state" => string "8000000051961d406289075564a4b1b78ef60ab9745542825598a2c5794edc759bbf7c7cac427d5fff3d08d6400f8d1f929a67d13489db9b735980a9cd20a28c9cb5b7c9966db33c03b7c3e723f0be96cac2abcbe6909693683d8187d91543b33add4c72cf2e02e8cbc41e206abf405533ede81cd132db785f26aa4461ab7678cd232ae5ebb7892792d891cd8e23cc5138462512bd00da20c5361485606eb360f170ce669e8a538fcf6ae635c275f25c9e19881ed1f5a74daab7bfcfc353394d0462679011e197a9c5333417626a718b98ce80fd177d6fe02a575c85f98207005b7b79eea3246e87ae94f8d9201c8f5078c0fe615c90890aa860acebe912a71f211582243a7422a0654fd6ced9d94b8bfb3635b7b5dfbf074f22e2647918236cbccb5c1e2b9cc9ea88500b5333627f7c024a54d6eb6796b6e0f5212950ad9f10e9061421398b50b054f4c9a5b42dddb664f24627d1de7b1139345e7874690f4eb8353af15f4d03f40ebfd9decaa22904430dcea301855258d563d88cfc0d6eb18156b6c33645f153892816377e362d1a0aa4501d860b14953a53fd2c958694e2a276c327bba5eb9f55f5c7303f16bc4d42c7060ae972dcce404d13931305e89d1b07b8e87b5d09f49e51ab93c864eab99e4667740248712cc51be33bb7506857cec60c4d594099045872d0dd4b0bd95f85eb16e167bb94fa0373c9b47d77fc8c19d60ddd11d224ce1db31763859a84148680a68585c37b80d8c0f87c806c60b29ba0033efc658490531de09548b10cdf96abb0e7c867c04ece42780168cb080735f4ec34f74dc89f156681b5ae9aea39d4ee9870cffae392842add60e8a7635780d46b6e7e60545b87c182d8f6a7c4cb3fba420f997f90658a83da54d33b3d23df44ec0e9fa1660c339191515a052f60a432e0d42c761d17bde59b4aa0bd93aed06a0868a62e39ccfcc5b056cd37e7ddbe49def941b6eb6abf271c366453da9e42b9fc8e666403f3891f705fcf7af0dca1ecd4b922046639d4ae587ffd3b523b3a009eb905308dc0c24e6dfd6639109567560b4a03151da595265e167212414c617a6934a8a2d495b69a7e69c036bece0e13ad7b3379a14f7a04c841f80999d5ba5db65ddaa5dad3a9519cb35fdcdcebcb0c38da17ce8c0b1b620fb0a6a30be33b501d5d3ccb411825ce7b791caf01357901f423738ff7df71e03ba24be917944ad94dafd103c43a276484755a84ced56bff92df20bafdc9d2e15132dd86895a46d700a4b478ee372654755cf19f770199e70318f5e9b30cecf4f4880ac8ae44de7afc71b797308b4561bed72eefc984a15a017d047c70faa24ed76114a6ac9df36764c775bd56e95b22f613e40afcabb3524e98c1c8731c4ff509bfae96afa9affa16fd866512c442f91439956634730704b4fa9e346d95892b9de5729161ef9c6dc3b18be852d901267cc5fbd3dcc210a6cf03bb32a791ae3cf757bbd2c614899a6b00205ddc1485ddcd96b3654b4ec410948b5093a1083edb9ee69601f6d3111649ff1ef56559434c16631bcf1ca361457db33dd24c1ffcebba31318abc9e318e32dcf54e09075ef8b02a39781df9895c57bdd5d603b3bd457d6fd41fb4483d23c635575665b150573b9df748c15a36a580a66d55173d16c43588dd5b452935c41dcf2c398e1b728c82f8fc62314d2a00961554676e1f8b7bd269604c8cbdbe8f72772ea2a0e107f3fbf0b649ee3c767c4161291e300384f553ffc1e906cd1db930b32d8ac653a9272648052c0e5d37e9c61ed557629cabde4c2050ed32ce9602163ba2d728fab4d8657792322effaaa86c0e0f7836ab70a97194b4bd257430a07339734af33a24e0d569eb3dcaf2810ec8808141dbdaf2c9c6c3b5ee08ed416bed497c97b10770fe1599ce4493573bedc1a70ced3dce0e65f0161dc525181eab167394069b32ad04a9e66142e2144189c379d9663cef949e1aa3132d5eb40c6ac1981513583f38c1a3d3be7c1214b79709930753744f5bf26b44c945df892377278c6b6bea9acc6fe451c88b760073395e03446c58b6d07d22af4a90e5bbe948871a6b5279ad8dc9275ebe59da8c4527251983eb0b027834cc8344fcbeb79f9901dbe49ecfababe252defa42877dc82da438f6f1c201d5bf1f288e24f317940a2d19f516348cf016ab212e38956bf3abddd5e3946aae0b87dd501d06e5df0dd1295d385d781de321c5174b9239232a273a8f971d91cd9138374911e04fac704319713d82b64508b678e67f231404c26b72c3a85577b19e3fd199075e0effe5f9378d66e12460ab945246c3734322dfe815806d49e22f0cc45e3c1bb52220ebb0c785e76ef1210fd3d0d7b72372078532006f53436c6e0520c5bc3d2af129197ee51c630a05f278ad6759f1a6b594ae4b425cd7098fe6eba5a56daf4a1ca7ba19c9ee096aacd1a4939f214ea05916148e7e44ce152321f597f2688e55a2429debdbd5c4041dad7a91ffd0bfe073abfc76bad60d01f5fd375b1744221f571bfa43c50be079898918c621d96b2d61d907b7e0382cec1f32394901a24b00094be8e98459ca348047e835bf88d26dcaeb12247c8e33156fe963e8f6cd1e2044f6d2743603a31c6de6bc27f4367cd9206510f99e752ccde3e22dccc20bd4bef8fe0e8082810dda585508a4ac74c05c3f0ea0358350be3a2dff0256e3b2e092f6f8e9fa4334205156e433c5aa7b49c8e40aedbae323f894b79ccd22c6e679f63ea1c02822a1b3b4173e29d6f0813ee4c6a55d7266487b74f2c7a92972383ec6051a9bc772f83096fb224a1a9e9a9b399da6d576e22a571f67fbe0c24e272ecf47ed84c010d51c34932f58645bce2633d698032af00e58a8fbb1487db410c0e555805fcc699f1b7290c616ebf2ff3fb00dc0633e3d0c778f5a61b6e28e11b94f197983a0682e13ec3d917f1bb27a0626e223d049ac00fc73476b3d7d48d013a51bb0463212867a843fc3b05906c2f4bf67936ab7da13aaf87aacefff4d0711853cfb7eb97033f6e7b57a3fa0f8aa350576082f70af1f987aa4e484a64ebb020de4fb14bcca84da95216060e7aba8bb1f2a30b1f2a355593b75a7f8290acfa90743b04fa247c8a4aa2789a4cfe204d501025f237dae85ba3eb05d711cb24b3904f3deae4aec5364397bb4fec5bebce48d7768cf20ef1a0fa9c695ad7d33c6a6fd8418d32ad34c5d36005dfafadc00c9b987bae5b2a5eaa99929d9c21c6ed787ccb3e3bae99eccf2b8deee13ed822aba56e17b0c61fd3dfd6fd1ecab9718ebdf9d55cc5a4ef60ebaab6664bafe2e2d786437b426982a46496c2957ca84fd4288f48de1869ec4a6afe5ee4c69d04be782e09fa06806452574ebaa1af6aa533bcf28293a1a8ba2fe0bd2899dbdc945cddbd26e324463e503f70990fde41d749b0a51d67da0be765fbec1bdc2f32f9b8b77237f02a172dd5909fa21815ea97f391f736f3b0f5c832c878d0d77be1b88219743512e5a4cf59ccf0599c2aacb697a1f0e63f1"
+]
+;
+			card.acceptable = selcards[0].acceptable = selcards[1].acceptable = false;
+			game.init(0, seed);
+		}
+		else
+*/		if(selcards[0] == card)
+		{
+			card.acceptable	= selcards[1].acceptable	= false;
+			game.init(selcards[0].month < selcards[1].month ? 1 : 0);
+		}
+		else
+		{
+			card.acceptable	= selcards[0].acceptable	= false;
+			game.init(selcards[1].month < selcards[0].month ? 1 : 0);
+		}
+
+		if(tutorial)
+			voiceTutorial("after_oya");
+
+		//	オープンが終了したら、決定のメッセージを表示してクリック待ち
+		next(decideAnticipation_decide, 3000);
+		dispClickWait();
+		pressCancelTo	= nullFunc;
+	}
+
+	//	オープン終了
+	function decideAnticipation_decide()
+	{
+		//	親表示を、親の方へ移動する
+		icon[0].no	= game.oya_no;
+		icon[1].no	= (game.oya_no + 1) & 1;
+
+		//	表裏にする
+		icon[0].on	= true;
+		icon[1].on	= false;
+
+		//	ターン表示を出現させる
+		if(mode != "mainpart")
+		{
+			with(icon[4]) .moveTo(,, 255, .movetime, .moveaccel);
+			with(icon[5]) .moveTo(,, 255, .movetime, .moveaccel);
+		}
+
+		if(game.宝具あり)
+		{
+			//	MP表示を出現させる
+			for(var i=0; i<mp.count; i++)
+			{
+				for(var j=0; j<mp[i].count; j++)
+					with(mp[i][j])
+						.moveTo(,, 255, .movetime, .moveaccel);
+			}
+		}
+
+		ten	= [];
+		for(var i=0; i<2; i++)
+		{
+			//	文数表示を開始
+			with(ten[i] = new TenDispLayer(window, this))
+			{
+				.setPos(ten_["left"+i], ten_["top"+i]);
+				.number		= game.minimumpoint[i] - game.playerpoint[i];
+				.opacity	= 0;
+				.visible	= true;
+				.moveTo(,, 255, ten_.time, ten_.accel);
+			}
+		}
+
+		if(oyaseltitle != void)
+		{
+			//	月表示、親決めタイトルなどを消去
+			with(oyaseltitle)
+				.moveTo(, .top + 32, 0,, 4);
+			with(selinfo)
+				.moveTo(, .top + 32, 0,, 4);
+			with(mondisp[0])
+				.moveTo(.left - 48,, 0,, 4);
+			with(mondisp[1])
+				.moveTo(.left + 48,, 0,, 4);
+
+			//	選択に使用した札も消去
+			with(selcards[0])
+				.moveTo(, .top + 32, 0,, 4);
+			with(selcards[1])
+				.moveTo(, .top + 32, 0,, 4);
+		}
+
+		popup	= lastpopup;
+
+		//	セリフ表示
+		if(!tutorial)
+		{
+			voice(PLAYER,	0/*ゲーム開始のセリフ*/);
+			voice(CPU,		0);
+		}
+
+		//	ボタンを表示
+		if(mode != "mainpart")
+		{
+			for(var i=0; i<buttons.count; i++)
+				buttons[i].visible	= true;
+			if(treasurebutton != void)
+			{
+				with(treasurebutton)
+					.enabled = false, .visible = true;
+			}
+		}
+
+		//	表示物を表示
+		dispOthers();
+
+		offFocus();
+
+		//	山札作成
+		next(makeYamafuda, yama.time);
+	}
+
+	//-------------------------------------------------------------------------
+	//	回戦準備
+	//	山札を作成
+	function makeYamafuda()
+	{
+		dm("makeYamafuda");
+		pressCancelTo	= void;	//	設定メニュー
+
+		//	直前に表示した"勝負！"レイヤーがあれば、消去する
+		eraseShoubuCutin();
+
+		//	消去したアイテムを破棄
+		release(oyaseltitle);
+		release(selinfo);
+		releaseArray(mondisp);
+		releaseArray(selcards);
+		oyaseltitle = selinfo = mondisp = selcards = void;
+
+		//	確認メッセージを消去
+		confirm.hide(msgfadetime);
+
+		//	札のポップアップが表示されていたら、ポップアップを隠す
+		onEndPopup();
+
+		//	山札を繰る
+		game.shuffleYamafuda();
+
+		//	山札をまとめる
+		lastAbsolute	= 0;	//	絶対値をリセット
+		var ym = game.yamafuda;
+		var delay = 0;
+		for(var i=ym.count - 1; i>=0; i--)
+		{
+			var pos = getYamafudaPos(i);
+			with(cards[ym[i].no])
+			{
+				.moveToYamafuda(pos[0], pos[1], yama.time, yama.accel, delay);
+				.reverse	= true;
+				.opacity	= 255;	//	半透明になっている札を元に戻す
+				.put();
+			}
+			delay += yama.delay;
+		}
+
+		//	その他もリセット
+		(Dictionary.clear incontextof sutefuda[0])();
+		(Dictionary.clear incontextof sutefuda[1])();
+		waiting[0].clear();
+		waiting[1].clear();
+
+		//	BGM開始
+		hfSound.bgm1	= true;
+
+		offFocus();
+
+		//	札の配布へ
+		next(distributeFuda, delay + yama.time);
+	}
+
+	//	札を配布する
+	function distributeFuda()
+	{
+		dm("distributeFuda");
+
+		//	フェースウィンドウの前後位置を元に戻す
+		for(var i=0; i<faces.count; i++)
+			faces[i].absolute	= FaceAbsolute;
+		yakuList.absolute	= YakuListAbsolute;	//	役リストも
+
+		//	配る
+		game.startRound();
+		resetBafudaPos();	//	場札情報を記録
+
+		//	子、親、場に4枚ずつを2回配る
+		var ko_te, oya_te, kono, oyano, baf;
+		with(game)
+		{
+			kono	= .ko_no, oyano = .oya_no;
+			ko_te = .tefuda[kono], oya_te = .tefuda[oyano];
+			baf = .bafuda;
+		}
+		var delay = 0;
+		for(var i=0; i<2; i++)
+		{
+			for(var j=0; j<4; j++)
+			{
+				var cnt = i * 4 + j;
+				var pos = getTefudaPos(kono, cnt);
+				with(cards[ko_te[cnt].no])
+				{//	子の手札
+					if(kono)
+						.distributeAndTurn(pos[0], pos[1], dist.time, dist.accel, delay, turn.time, turn.accel,, .endofDistTefuda, .playDistSound);
+					else
+						.distributeTo(pos[0], pos[1],, dist.time, dist.accel, delay, .endofDistTefuda, .playDistSound);
+				}
+				pos = getTefudaPos(oyano, cnt);
+				with(cards[oya_te[cnt].no])
+				{//	親の手札
+					var d = delay + dist.delay * 4;
+					if(oyano)
+						.distributeAndTurn(pos[0], pos[1], dist.time, dist.accel, d, turn.time, turn.accel,, .endofDistTefuda, .playDistSound);
+					else
+						.distributeTo(pos[0], pos[1],, dist.time, dist.accel, d, .endofDistTefuda, .playDistSound);
+				}
+				pos = getBafudaPos(baf[cnt].no, cnt);
+				with(cards[baf[cnt].no])
+				{//	場札
+					var d = delay + dist.delay * 8;
+					.distributeAndTurn(pos[0], pos[1], dist.time, dist.accel, d, turn.time, turn.accel,, .endofDistBafuda, .playDistSound);
+				}
+				delay	+= dist.delay;
+			}
+			delay	+= dist.delay * 8;
+		}
+
+		//	手札役のチェックへ
+		next(checkTefudaYaku, delay + dist.time + turn.time);
+	}
+
+	//	手札役成立のチェック
+	var roundTimeOut;
+	function checkTefudaYaku()
+	{
+		dm("checkTefudaYaku");
+		var time;
+		if(!tutorial)
+		{
+			if(game.checkTefudaYaku())	//	チュートリアルモードでは手札役を判定しない
+			{
+				//	手札役成立の表示。クリックしたら、勝敗の決定表示へ
+				var msg;
+				time = 1000;
+				with(game)
+				{
+					if(game.curYaku[0].count > 0)
+					{
+						//	手札役の表示処理
+						time	+= openTefudaYaku(0);
+
+						if(game.curYaku[1].count > 0)
+						{
+							//	セリフ「ラッキー♪」
+							voice(0, 1);
+							//	セリフ「ラッキー♪」
+							voice(1, 1);
+
+							//	手札役の表示処理
+							time	+= openTefudaYaku(1);
+
+							//	引き分け処理へ
+							roundTimeOut	= false;
+							next(standoffRound, time);
+							return;
+						}
+						else
+						{
+							//	セリフ「ラッキー♪」
+							voice(CPU, 1);
+						}
+					}
+					else
+					{
+						//	手札役の表示処理
+						time	+= openTefudaYaku(1);
+
+						//	セリフ「ラッキー♪」
+						voice(PLAYER, 1);
+					}
+				}
+				hfSound.勝負	= true;	//	ドドン
+				next(decideWin, time);	//	ラウンド終了へ
+			}
+			else
+				checkBafuda();
+		}
+		else
+		{
+			time	+= voiceTutorial("roundstart");
+			next(checkBafuda, time);	//	場札のチェックへ
+//			dispClickWait();	//	クリック待ち表示
+		}
+	}
+
+	//	場札のチェック
+	function checkBafuda()
+	{
+		dm("checkBafuda");
+
+		//	場に同じ月が3枚あれば、
+		var same = game.checkBafuda();
+		var msgtime = 1000;
+		var time = (msgfadetime<<1) + msgtime;	//	ターンを開始するまでの時間
+		if(same.count > 0)
+		{
+			//	札をまとめる
+			dm("3枚同じ月があるので、まとめる");
+			var ba = game.bafuda;
+			for(var i=0; i<same.count; i++)
+			{
+				var samemon = same[i];
+				var num = [];
+				for(var j=0; j<samemon.count; j++)
+					num.add(ba[samemon[j]].no);
+				num.sort();
+
+				dm("ソート完了、並べなおし");
+				var top = cards[num[0]];
+				for(var j=1; j<num.count; j++)
+				{
+					if(j>0)
+					{
+						var pos	= getStackPos(top, j);	//	札に重ねたときの位置を返す
+						with(cards[num[j]])
+						{
+							.moveTo(pos[0], pos[1],, dist.time, dist.accel);
+							.absolute	-= num.count - j - 1;
+						}
+						bafudaNoToPosNo[num[j]]	= bafudaNoToPosNo[num[0]];	//	先頭と同じ場所にする
+					}
+					else
+						cards[num[j]].absolute	-= num.count - j - 1;
+				}
+			}
+
+			if(!tutorial)
+			{
+				//	セリフ(親)「3枚あるからまとめとくぜ」
+				voice(game.oya_no, 2);
+			}
+			else
+				time	+= voiceTutorial("samemon3");
+
+			time	+= 600;
+		}
+
+		//	ラウンド開始のメッセージ
+		with(confirm)
+		{
+			.message("第"+(game.round + 1)+"ラウンド開始", msgfadetime);
+			.reserveClose(msgtime);	//	表示2秒後に閉じる
+		}
+
+		next(useFirstTreasure, time);	//	各プレイヤーの行動開始
+	}
+
+	//	常時使用宝具のチェックとエフェクト
+	function useFirstTreasure()
+	{
+		var time	= 0;
+
+		if(game.宝具あり && game.round == 0)
+		{
+			//	常時使用宝具あり？(ゴッドハンド)
+			var list = [];
+			for(var i=0; i<2; i++)
+			{
+				list[i]	= game.getValidTreasure(i);
+				if(list[i].count > 0)
+				{
+					//	ゴッドハンド使用の表示
+					effectSpecial(i, [0, 0], startTurn);
+					return;
+				}
+			}
+		}
+
+		//	エフェクト表示がなければ、次へ進む
+		next(startTurn, time);
+	}
+
+	//-------------------------------------------------------------------------
+	//	宝具エフェクトの表示
+	var speffectelm = %[];
+	function effectSpecial(pno, sp, nextturn)
+	{
+		//	エフェクト表示に必要なパラメータを記憶
+		(Dictionary.clear incontextof speffectelm)();
+		with(speffectelm)
+		{
+			.sp			= sp;
+			.nextturn	= nextturn;
+			.player		= pno;
+			.acc		= [];
+			//	ボタンとかクリックできなくする
+			.layer		= new global.Layer(window, this);
+			.layer.setMode();
+		}
+
+		//	宝具使用のセリフ「たのむ！」
+		var voicetime	= 600;
+		if(voice(pno, sp[0] == 0 ? 22 : 23) < 0)
+			voicetime	= 0;	//	セリフを表示しなかった
+
+		next(effectSpecial1, voicetime);
+	}
+
+	function createBlackBorder(elm)
+	{
+		for(var i=0; i<2; i++)
+		{
+			with(elm["bar"+i] = new ParticleLayer(window, this))
+			{
+//				.setSize(width, height >> 2);
+				.setSize(width, 186);
+				.setPos(0, i ? (height - .height) : 0);
+				.fillRect(0, 0, .width, .height, 0xFF000000);
+				.type		= ltOpaque;
+				.absolute		= CutinAbsolute - 1000;
+				.hitThreshold	= 256;
+//				.opacity	= 192;
+//				.visible	= true;
+			}
+		}
+	}
+
+	function effectSpecial1()
+	{
+		//	黒枠
+		createBlackBorder(speffectelm);
+		for(var i=0; i<2; i++)
+			with(speffectelm["bar"+i])
+				.opacity = 192, .visible = true;
+
+		//	白フラッシュ
+		var time = 200;
+		var delay = 100;
+		with(new ParticleLayer(window, this))
+		{
+			.setSize(width, height);
+			.setPos(0, 0);
+			.fillRect(0, 0, .width, .height, 0xFFFFFFFF);	//	白
+			.absolute		= CutinAbsolute - 500;
+			.hitThreshold	= 256;
+			.opacity		= 255;
+			.moveTo(,, 0, time, 0, delay, .endOfMove);
+			.visible		= true;
+		}
+		hfSound.宝具音	= true;
+
+		next(effectSpecial2, time + delay);
+	}
+
+	function effectSpecial2()
+	{
+		var	sv		= game.getServantParam(speffectelm.player, speffectelm.sp[0]);
+		var svname	= sv[0];	//	サーヴァント名
+		sv			= game.getServantInfo(speffectelm.player, speffectelm.sp[0]);
+		var spname	= sv[3][speffectelm.sp[1]][0];	//	宝具名
+
+		var info	= cutinInfo[svname];
+		var spcnt	= spnameParams[spname][0];
+		var pitch	= spnameParams[spname][1];
+		var wait	= 600;
+
+		//	サーヴァントイン
+		var image	= "hf_カットイン-";
+		var time	= 300;
+		var charatime	= 600;
+		with(speffectelm.cutin = new CutInLayer2(window, this, "hf_カットイン-"+svname, info != void ? info.rect : void, !speffectelm.player))
+		{
+			var slide = 32;
+			if(speffectelm.player)
+			{
+				.setPos(info.left - .allWidth - slide, height - .allHeight);
+				.moveTo(info.left - .allWidth,, 255, time, -2);
+			}
+			else
+			{
+				.setPos(width - info.left + slide, height - .allHeight);
+				.moveTo(width - info.left,, 255, time, -2);
+			}
+		}
+		if(info.sub)
+		{
+			speffectelm.sub	= [];
+			for(var i=0; i<info.sub.count; i++)
+			{
+				var data	= info.sub[i];
+				with(speffectelm.sub[i] = new CutInLayer2(window, this, "hf_カットイン-"+data.storage, void, !speffectelm.player))
+				{
+					.setPos(data.left, data.top);
+					.jump(64, time + charatime + wait, 2.5, 4);
+				}
+			}
+		}
+
+		//	文字イン
+		shareimages.load(window, this, speffectelm.charaname = spname, "hf_宝具名-"+spname);
+		var layer	= shareimages.get(spname);
+		var w = layer.imageWidth \ spcnt, h = layer.imageHeight;
+		var l = (width - layer.imageWidth - (pitch * spcnt))>>1, t = (height - layer.imageHeight)>>1;
+		var delay = 0;
+		var interval= charatime \ spcnt;
+		var chara;
+		speffectelm.charas	= [];
+		for(var i=0; i<spcnt; i++)
+		{
+			with(chara = new TreasureNameLayer(window, this, spname, w, h, i))
+			{
+				.setSize(w, h << 1);
+				.setPos(l, t - ((.height - h)>>1));
+				.magnifyToWithOpacity(w, h, 255, time, 0, delay);
+				.absolute++;
+			}
+			l	+= w + pitch;
+			delay	+= interval;
+			speffectelm.charas.add(chara);
+		}
+		time	+= delay - interval;
+
+		//	ウェイト
+		time	+= wait;
+
+		next(effectSpecial3, time);
+	}
+
+	function effectSpecial3()
+	{
+		//	サーヴァントアウト
+		var slide	= 150;
+		var time	= 300;
+		with(speffectelm.cutin)
+			.moveTo(.left + (speffectelm.player ? slide : -slide),, 0, time, 2,, .endOfMove);
+		if(speffectelm.sub)
+		{
+			for(var i=0; i<speffectelm.sub.count; i++)
+				with(speffectelm.sub[i])
+					.moveTo(, -.height, 0, time, -4,, .endOfMove);
+		}
+
+		//	文字アウト
+		var charas = speffectelm.charas;
+		for(var i=0; i<charas.count; i++)
+		{
+			with(charas[i])
+				.moveTo(, .top + 200, 0, time, 3,, .endOfMove);
+		}
+		shareimages.release(speffectelm.charaname);
+
+		//	黒枠アウト
+		if(speffectelm["bar0"])
+		{
+			for(var i=0; i<2; i++)
+			{
+				with(speffectelm["bar"+i])
+					.moveTo(, i ? height : -.height,, time, 2,, .endOfMove);
+			}
+		}
+
+		//	タイマーのリセット
+		resetLongWait();
+
+		time	+= 300;
+		next(speffectelm.nextturn, time);
+	}
+
+	//-------------------------------------------------------------------------
+	//	各ターン
+	//	ターン開始
+	function startTurn()
+	{
+		//	リプレイなら、無視して履歴から取り出す
+		if(game.replay)
+		{
+			var tmp	= game.popHistory();
+			dm("pos: "+tmp[0]+", "+tmp[1]+", "+tmp[2]);
+			if(tmp[0] == "play")
+			{//	札を切る
+				playFuda([ tmp[1], tmp[2] ]);
+			}
+			else if(tmp[0] == "treasure")
+			{//	宝具を使う
+				effectSpecial(game.currentPlayer, [ tmp[1], tmp[2] ], afterUseSpecialForPut);
+			}
+		}
+		else
+		{
+			//	誰のターンから開始？
+			var nextturn;
+			if(routine.count<2)
+				nextturn	= game.currentPlayer ? HUMAN_startTurn : CPU_startTurn;
+			else
+				nextturn	= CPU_startTurn;	//	どちらもCPUの場合
+
+			removeSpecialMode();
+
+			nextturn();
+		}
+	}
+
+	//	宝具使用後のターン継続
+	function continueTurn()
+	{
+		if(game.replay)
+		{
+			var tmp	= game.popHistory();
+			dm("pos: "+tmp[0]+", "+tmp[1]+", "+tmp[2]);
+			if(tmp[0] == "play")
+			{//	札を切る
+				playFuda([ tmp[1], tmp[2] ]);
+			}
+			else if(tmp[0] == "treasure")
+			{//	宝具を使う
+				effectSpecial(game.currentPlayer, [ tmp[1], tmp[2] ], afterUseSpecialForPut);
+			}
+		}
+		else
+		{
+			if(isCPUTurn)
+				next(CPU_playFuda, 0);	//	手札の判断へ(CPU)
+			removeSpecialMode();
+		}
+	}
+
+	//	宝具カットイン前のクリック不可を解除する
+	function removeSpecialMode()
+	{
+		if(speffectelm != void && speffectelm.layer != void)
+		{
+			speffectelm.layer.removeMode();	//	ボタンとかクリックできるように戻す
+			invalidate speffectelm.layer;
+			speffectelm.layer	= void;
+		}
+	}
+
+	//	ツモった札の処理
+	function choiceNext()
+	{
+		if(game.replay)
+		{
+			var tmp	= game.popHistory();
+			dm("pos: "+tmp[0]+", "+tmp[1]+", "+tmp[2]);
+			if(tmp[0] == "play")
+			{//	山札をツモる
+				putTumofuda([tmp[1], tmp[2] == -1 ? void : tmp[2]]);
+			}
+		}
+		else
+		{
+			var nextturn	= isCPUTurn ? CPU_putTumofuda : HUMAN_putTumofuda;
+			nextturn();
+		}
+	}
+
+	//	(CPU)開始
+	function CPU_startTurn()
+	{
+		confirm.hide(msgfadetime);
+
+		//	CPU側をON, プレイヤー側をOFFにする
+		icon[4].on	= true;
+		icon[5].on	= false;
+
+		//	ターン
+		isCPUTurn	= true;
+
+		//	グレースケールなら、元に戻す(ブレーカー・ゴルゴーンを相手が使った)
+		faces[game.currentPlayer].grayscale	= false;
+
+		//	宝具使用の判断
+		var sp;
+		if(sp = routine[game.currentPlayer].useSpecialForPut())
+		{
+			useSpecialForPut(sp);
+			return;
+		}
+
+		//	宝具使用アイコンの更新
+		if(game.宝具あり)
+		{
+			for(var i=0; i<treasureIconManager.count; i++)
+				treasureIconManager[i].update(game.getValidTreasure(i), game);
+		}
+
+		//	手札の判断
+		CPU_playFuda();
+	}
+
+	//	宝具の使用(手札決定時)
+	function useSpecialForPut(sp)
+	{
+		dm("use special: "+sp[0]+"/"+sp[1]);
+
+		//	タイマーのリセット
+		resetLongWait();
+
+		//	宝具のエフェクト
+		effectSpecial(game.currentPlayer, sp, afterUseSpecialForPut);
+	}
+
+	//	宝具カットイン後の処理
+	function afterUseSpecialForPut()
+	{
+		var delay	= 0;
+		var pl	= game.currentPlayer;
+		var sp	= speffectelm.sp;
+
+		//	宝具使用
+		var chgs = game.useTreasure(sp[0], sp[1]);
+
+		//	宝具の効果発現
+		var ccnt = [];
+		var movedYakufuda, alignOpponentYakufuda;
+		var turntime= 100, waittime = 100, waitnext = 500;
+		var rag		= 0, ragstep = 200;
+		var optime	= 0, tm = 0;
+		for(var i=0; i<chgs.count; i++)
+		{
+			var chg = chgs[i];
+//			dm(chg[0]+": "+chg[1]);
+			switch(chg[0])
+			{
+			case "moveYakufuda":
+				//	取った札の移動
+				if(movedYakufuda == void)
+				{
+					movedYakufuda = %[];
+					calcYakufudaPos();
+				}
+				var no = chg[1];
+				var yf	= game.currentYakufuda;
+				for(var i=0; i<yf.count; i++)
+				{
+//					dm(@"yakufuda[${i}].no = ${yf[i].no} : ${no}(${cards[no].left}, ${cards[no].top})");
+					if(yf[i].no == no)
+					{
+						with(cards[no])
+						{
+							var pos = getYakufudaPos(pl, yf[i]);	//	札指定(Not番号指定)
+							//	一度中央へ拡大移動してから、役札になる
+							.delaySound(hfSound.宝具札移動, delay+rag);	//	札移動音再生
+							.mmTo((width - xlargewidth)>>1, (height - xlargeheight)>>1, xlargewidth, xlargeheight, dist.time, dist.accel, delay+rag, ._changeXLarge);
+							.reverseTo(0,,,, xlargewidth, xlargeheight) if .reverse;	//	表にする
+							.delaySound(hfSound.宝具札移動, 0);	//	札移動音再生
+							.moveToYakufuda(pos[0], pos[1], dist.time, dist.accel, waittime);
+							tm	= dist.time + dist.time + waittime + rag;
+						}
+						break;
+					}
+				}
+				movedYakufuda[no]	= true;
+				alignOpponentYakufuda	= true;
+				rag	+= ragstep;
+				break;
+
+			case "turn":
+				var te = cards[chg[2]], yama = cards[chg[3]];
+				if(isCPUTurn)
+				{//	単純に入れ替え
+					var exchgtime	= 400;
+					var l = te.left, t = te.top;
+					te.absolute <-> yama.absolute;
+					te.moveTo(yama.left, yama.top,, exchgtime,, delay);
+					yama.moveTo(l, t,, exchgtime,, delay);
+					te.becomeYamafuda();
+//					dm("--------------------- exchange ---------------------");
+					optime	= exchgtime;
+				}
+				else
+				{//	交換する札を裏返し→札を入れ替え→交換した札を表へ
+					var turntime = 200;
+					var border;
+					with(te)
+					{
+						border	= .border;
+						.allReset();
+						._changeImage(.normal,,, true);
+						.reverseTo(turntime,, delay);		//	裏返して
+						.moveTo(yama.left, yama.top,, 0,,, .resetAbsolute);	//	山札位置へ
+						.becomeYamafuda();					//	山札になる
+//						.resetAbsolute();	//	前後位置(absolute)を変更する
+						//	選択出来ないようにする
+					}
+					with(yama)
+					{
+						.moveTo(te.left, te.top,, 0,, turntime+delay);	//	裏返しを待ち、手札位置へ
+						.reverseTo(turntime,,, .resetAbsolute);			//	表にする
+						.becomeTefuda();								//	手札になる
+//						.resetAbsolute();	//	前後位置(absolute)を変更する
+						//	選択出来るようにする
+						.enabledLink	= true;
+						.setLButtonDown(HUMAN_choiceTefuda);
+						.acceptable		= true;
+						dm(@".border = ${.border} / border = ${border}");
+						if(!(.border = border))
+						{
+							var ba = game.bafuda;
+							for(var i=0; i<ba.count; i++)
+							{
+								if(ba[i].month == .month)
+								{
+									dm(i+": "+ba[i].month+" == "+.month);
+									//	同じ月があれば、枠線を表示する
+//									.border	= true;
+//									cards[ba[i].no].border	= true;
+									._changeImage(,, true, true);
+									cards[ba[i].no]._changeImage(,, true, true);
+								}
+							}
+						}
+					}
+				}
+				break;
+			case "invalid":
+				//	無効化された役がテンパイ・成立していたら、アイコンを消す
+//				yakuChips[chg[1]].eraseChip(chg[2]);
+//				ccnt[chg[1]]++;
+				break;
+
+			case "exchange yamafuda":
+				//	山札をこっそり入れ替える
+				var a = cards[chg[1]], b = cards[chg[2]];
+				a.left <-> b.left;
+				a.top <-> b.top;
+				a.absolute <-> b.absolute;
+				break;
+
+			case "turn yamafuda":
+				//	山の一番上の札を表にする
+				with(cards[game.yamafuda[0].no])
+					.reverseTo(turn.time, turn.accel);
+				break;
+			}
+			optime	= tm if tm > optime;
+		}
+
+		//	役札の位置調整
+		if(movedYakufuda != void)
+		{
+			var yf = game.currentYakufuda;
+			for(var i=0; i<yf.count; i++)
+			{
+				with(cards[yf[i].no])
+				{
+					if(!movedYakufuda[yf[i].no])	//	移動させていないもののみ
+					{
+						var pos = getYakufudaPos(pl, yf[i]);	//	札指定(Not番号指定)
+						.moveTo(pos[0], pos[1],, dist.time, dist.accel, delay);		//	役内で
+					}
+					.put();
+				}
+			}
+		}
+		if(alignOpponentYakufuda)
+		{
+			var yf = game.opponentYakufuda;
+			var oppo = game.currentOpponent;
+			calcYakufudaPos(oppo);
+			for(var i=0; i<yf.count; i++)
+			{
+				var pos = getYakufudaPos(oppo, yf[i]);	//	札指定(Not番号指定)
+				with(cards[yf[i].no])
+				{
+					.moveTo(pos[0], pos[1],, dist.time, dist.accel, delay);		//	役内で
+					.put();
+				}
+			}
+		}
+
+		//	役チップの更新
+		updateYakuChips(delay);
+
+		//	宝具アイコン表示の更新
+		dm("update treasure icon: "+pl);
+		treasureIconManager[pl].update(game.getValidTreasure(pl), game);
+
+		//	MPの再描画
+		dm("update mp: "+pl);
+		for(var j=0; j<mp[pl].count; j++)
+			mp[pl][j].changeCurrentMP();
+
+		//	ブレーカー・ゴルゴーンを使用したとき
+		var sv = game.getServantInfo(pl, sp[0]);
+		if(sv[3][sp[1]][0] == game.breaker_gorgon)
+		{
+			faces[game.currentOpponent].grayscale	= true;	//	相手の顔をモノクロにする
+			hfSound.石化	= true;	//	石化音再生
+		}
+
+		//	宝具を使われた側のセリフ「なんじゃそりゃー！」
+		voice(game.currentOpponent, 19);
+
+		//	ターンの継続
+		next(continueTurn, delay + optime, waitnext);
+	}
+
+	//	札の判断
+	function CPU_playFuda()
+	{
+		playFuda(routine[game.currentPlayer].playTefuda());
+	}
+
+	//	(プレイヤー)開始
+	var human_choiced	= [];
+	function HUMAN_startTurn()
+	{
+		confirm.hide(msgfadetime);
+
+		//	グレースケールなら、元に戻す(ブレーカー・ゴルゴーンを相手が使った)
+		faces[game.currentPlayer].grayscale	= false;
+
+		//	プレイヤー側をON, CPU側をOFFにする
+		icon[4].on	= false;
+		icon[5].on	= true;
+
+		//	ターン
+		isCPUTurn	= false;
+
+		human_choiced.clear();	//	手札・場札ともに選んでない状態
+
+		//	宝具使用をONにする
+		showSpecialButton();	//	宝具ボタンを表示
+
+		//	宝具使用アイコンの更新
+		if(game.宝具あり)
+		{
+			for(var i=0; i<treasureIconManager.count; i++)
+				treasureIconManager[i].update(game.getValidTreasure(i), game);
+		}
+
+		//	札のグループ化
+		var te = game.currentTefuda;
+		var ba = game.bafuda;
+		var mon = [];
+		for(var i=0; i<te.count; i++)
+		{
+			mon[te[i].month]	= [] if mon[te[i].month]==void;
+			mon[te[i].month][0]++;//.add(cards[te[i].no]);	//	この月の手札の枚数
+		}
+		for(var i=0; i<ba.count; i++)
+		{
+			mon[ba[i].month]	= [] if mon[ba[i].month]==void;
+			mon[ba[i].month][1]++;//.add(cards[ba[i].no]);	//	この月の場札の枚数
+		}
+
+		//	ボタンへフォーカス不可能
+		enabledButtons	= false;
+
+		//	札の状態を変更する
+		var focused	= false;
+		var aicount = 0;
+		var acc	= [];
+		for(var i=0; i<te.count; i++)
+		{
+			with(cards[te[i].no])
+			{
+				//	すべて選択可能
+				.enabledLink= true;
+				.setLButtonDown(HUMAN_choiceTefuda);
+
+				//	合札ありなら
+				if(mon[te[i].month][1] > 0)
+				{
+					//	それなりの表示と準備
+					.border		= true;
+					acc.add(cards[te[i].no]);
+					aicount++;
+				}
+			}
+		}
+		for(var i=0; i<te.count; i++)
+			acc.add(cards[te[i].no]);
+		for(var i=0; i<ba.count; i++)
+		{
+			if(mon[ba[i].month][0] > 0)
+			{
+				with(cards[ba[i].no])
+				{
+					.enabledLink= true;
+					acc.add(cards[ba[i].no]);
+					.border		= true;
+					.setLButtonDown(HUMAN_choiceBafuda);
+				}
+			}
+		}
+		enterCard(acc);
+
+		//	ボタンへフォーカス可能
+		enabledButtons	= true;
+
+		//	手札選択開始
+		if(tutorial)
+		{
+			if(aicount)
+				voiceTutorial("plte");
+			else
+				voiceTutorial("plte_none");
+		}
+
+		//	札選択待ちセリフのタイマー開始(チーム毎に時間が異なる)
+		if(!tutorial)
+		{
+			var times	= longwaitTime[team[0]];
+			if(times != void)
+			{
+				var time	= int((times[1] - times[0]) * Math.random()) + times[0];
+				with(longwaitTimer)
+					.interval	= time, .enabled	= true;
+			}
+		}
+
+		//	入力待ち状態
+	}
+
+	//	いつまでも札を選択しない
+	function onLongWait()
+	{
+		//	相手が文句を言う
+		voice(game.currentOpponent, 24);
+
+		//	次に文句言う時間を変更
+		var times	= longwaitTime[team[0]];
+		if(times != void && longwaitTimer)
+			longwaitTimer.interval	= int((times[1] - times[0]) * Math.random()) + times[0];
+	}
+
+	function enabledLongWait(flag)
+	{
+		if(!tutorial && longwaitTimer)
+			longwaitTimer.enabled	= flag;
+	}
+
+	function resetLongWait()
+	{
+		if(!tutorial && longwaitTimer)
+		{
+			with(longwaitTimer)
+			{
+				if(.enabled)
+				{
+					.enabled	= false;
+					.enabled	= true;
+				}
+			}
+		}
+	}
+
+	//	カードを選択可能にする。
+	//	(最初に選択状態にするべきカードがあれば、そのカードを有効にする)
+	var lastEnterCard;
+	function enterCard(acc)
+	{
+		if(acc.count > 0)
+		{//	enterされていればそれを、されていなければ先頭へフォーカスする
+			lastEnterCard	= void;
+			for(var i=0; i<acc.count; i++)
+				acc[i].acceptable	= true;
+			lastEnterCard	= acc[0];
+		}
+		invalidate acc;
+	}
+
+	//	手札を選んだ
+	function HUMAN_choiceTefuda(card)
+	{
+		dm("choice tefuda: "+card.no);
+		//	手札、場札の状態を一度リセット
+		resetTefudaAndBafuda(card);
+
+		enabledLongWait(false);	//	選択待ちタイマー停止
+
+		//	手札上の番号を取得
+		human_choiced[0] = getNoFromFudas(game.currentTefuda, card.no);
+
+		//	場の合札をリストアップ
+		var ba = game.bafuda;
+		var ai = getAifudaFromFudas(ba, card.month);
+
+		//	合札のポイントをチェック
+		var samepoint	= false;
+		if(ai.count > 0)
+		{
+			samepoint	= true;
+			var point	= ba[ai[0][1]].point;
+			for(var i=1; i<ai.count; i++)
+			{
+				if(point != ba[ai[i][1]].point)
+				{
+					samepoint	= false;
+					break;
+				}
+			}
+		}
+
+		//	合札を選択する必要がないか既に選択済みなら終わり
+		if(ai.count != 2 || samepoint || human_choiced[1] !== void)
+		{
+			if(human_choiced[1] === void && ai.count > 0)
+				human_choiced[1] = ai[0][1];
+
+			dm("choice: "+human_choiced[0]+", "+human_choiced[1]);
+			hideSpecialButton();		//	宝具使用ボタンを隠す
+			pressCancelTo	= void;		//	右クリックをメニューに変更
+			playFuda(human_choiced);	//	手札を切る
+			return;
+		}
+
+		//	選んだ札の状態を変更
+		with(card)
+		{
+			.acceptable	= false;	//	選択不可にする
+		}
+
+//		enabledButtons	= false;
+
+		//	場札の状態を変更する(合札のみ選択可能)
+		var acc	= [];
+		for(var i=0; i<ba.count; i++)
+		{
+			if(ba[i].month == card.month)
+			{
+				with(cards[ba[i].no])
+				{
+					.enabledLink= true;
+					acc.add(cards[ba[i].no]);
+					.border		= true;
+					.setLButtonDown(HUMAN_choiceBafuda);
+				}
+			}
+		}
+		window.focusedLayer	= void;
+		enterCard(acc);
+
+//		enabledButtons	= true;
+
+		//	場札2枚のうち1枚を選ぶ
+		if(tutorial)
+		{
+			voiceTutorial("plte2");
+//			eraseTutorial("plte1");
+		}
+
+		//	右クリックをメニューからキャンセルに変更
+		pressCancelTo	= HUMAN_cancelChoice;
+
+		enabledLongWait(true);	//	選択待ちタイマー再開
+	}
+
+	//	場札を選んだ
+	function HUMAN_choiceBafuda(card)
+	{
+		dm("choice bafuda: "+card.no);
+		//	手札、場札の状態を一度リセット
+		resetTefudaAndBafuda(card);
+
+		enabledLongWait(false);	//	選択待ちタイマー停止
+
+		//	場札上の番号を取得
+		human_choiced[1] = getNoFromFudas(game.bafuda, card.no);
+
+		//	手札を選び済みなら、手札を出す
+		if(human_choiced[0] !== void)
+		{
+			dm("choice: "+human_choiced[0]+", "+human_choiced[1]);
+			hideSpecialButton();		//	宝具使用ボタンを隠す
+			pressCancelTo	= void;		//	右クリックをメニューに変更
+			playFuda(human_choiced);	//	手札を切る
+			return;
+		}
+
+		//	手札の合札をリストアップ
+		var te	= game.currentTefuda;
+		var ai = getAifudaFromFudas(te, card.month);
+
+		//	合札のポイントをチェック
+		var point	= te[ai[0][1]].point;
+		var samepoint	= true;
+		for(var i=1; i<ai.count; i++)
+		{
+			if(point != te[ai[i][1]].point)
+			{
+				samepoint	= false;
+				break;
+			}
+		}
+
+		//	合札のポイントが同じなら、選ぶ必要なし
+		if(samepoint)
+		{
+			human_choiced[0] = ai[0][1];
+			dm("choice: "+human_choiced[0]+", "+human_choiced[1]);
+			hideSpecialButton();		//	宝具使用ボタンを隠す
+			pressCancelTo	= void;		//	右クリックをメニューに変更
+			playFuda(human_choiced);	//	手札を切る
+			return;
+		}
+			//	合札が0枚とは考えられない(そんな場札は選べないハズ)
+
+		//	選んだ札の状態を変更
+		card.acceptable	= false;	//	選択不可にする
+
+//		enabledButtons	= false;
+
+		//	手札の状態を変更する(合札のみ選択可能)
+		var acc = [];
+		for(var i=0; i<te.count; i++)
+		{
+			if(te[i].month == card.month)
+			{
+				with(cards[te[i].no])
+				{
+					.enabledLink= true;
+					acc.add(cards[te[i].no]);
+					.border		= true;
+					.setLButtonDown(HUMAN_choiceTefuda);
+				}
+			}
+		}
+		window.focusedLayer	= void;
+		enterCard(acc);
+
+//		enabledButtons	= true;	//	ボタンへフォーカス可能
+
+		if(tutorial)
+			voiceTutorial("plte5");
+
+		//	右クリックをメニューからキャンセルに変更
+		pressCancelTo	= HUMAN_cancelChoice;
+
+		enabledLongWait(true);	//	選択待ちタイマー再開
+	}
+
+	//	選んだ札をキャンセルする
+	function HUMAN_cancelChoice()
+	{
+		//	手札、場札の状態を一度リセット
+		resetTefudaAndBafuda();
+
+		//	ターンの最初から
+		HUMAN_startTurn();
+
+		pressCancelTo	= void;
+	}
+
+	//	良い札を手に入れたか？
+	function getHigherFuda(a, b)
+	{
+		return	isHigherFuda(a) | isHigherFuda(b);
+	}
+
+	//	良い札か？(札の番号)
+	function isHigherFuda(a)
+	{
+		//	コウ札、酒ありのときの「菊に杯」、お互いの待ち札
+		return a !== void && ((game.札点数一覧[a] == 20 && a != game.雨番号) || (game.酒あり && a == game.杯札番号) || isWaiting(a));
+	}
+
+	//	待ち札か？(どちら？, 札の番号)
+	function isWaiting(p, a)
+	{
+		if(a === void)
+			return false;
+		else if(p === void)
+			return waiting[0][a] || waiting[1][a];
+		else
+			return waiting[p & 1][a];
+	}
+
+	//	点数の高い役の待ち札を手に入れたか？
+	function getExYakufuda(a, b)
+	{
+		var pl = game.currentPlayer;
+		var satisfactory = 3;
+		return (waiting[pl][a] + (b != void ? waiting[pl][b] : 0) >= satisfactory);
+	}
+
+	//	手札を切る
+	var isPlay2Get;	//	手札を切って、札が取れたか？
+	function playFuda(play)
+	{
+		//	あわせようとしている札が重なっている札のいずれかなら、手前になっている札の場所へ置く
+		var ba = game.bafuda;
+		var te = game.currentTefuda, pl = game.currentPlayer;
+		var mon = te[play[0]].month;
+		var cnt = 0, first = 999, bano;
+		for(var i=0; i<ba.count; i++)
+		{
+			if(ba[i].month == mon)
+			{
+				cnt++;
+				if(ba[i].no < first)
+				{
+					first	= ba[i].no;
+					bano	= i;
+				}
+			}
+		}
+		if(cnt == 3)
+			play[1]	= bano;
+
+		//	札に対応する場札があるのに無い様に移動していたら、補正する
+		if(play[1] === void || ba[play[1]] === void || mon != ba[play[1]].month)
+		{
+			for(var i=0; i<ba.count; i++)
+			{
+				//	同じ月の場札を探す
+				if(ba[i].month == mon)
+				{
+					play[1] = i;
+					break;	//	見つかったので、それに変更する
+				}
+			}
+		}
+
+		//	札の移動を記憶
+		dm("play fuda("+game.currentPlayer+"): "+play[0]+", "+play[1]);
+		var sute = te[play[0]].no;
+		sutefuda[game.currentPlayer][sute]	= true;
+		var target = play[1] !== void ? ba[play[1]].no : void;
+
+		//	gameでの札の処理を行う前に、置く場所と札の種類を記憶しておく
+		var pos	= getBafudaPos(sute, play[1]);
+		var bpos= getBafudaPos(sute, void);		//	場に捨てるときの場所
+		var bno	= play[1] !== void ? ba[play[1]].no : void;
+
+		//	札の処理
+		var move = lastmove = game.playFuda(play[0], play[1]);
+
+		//	札を場へ移動
+		var time;
+		if(move[0][1] == 0)
+			time = moveToBa(sute, bpos, void, isWaiting(, sute));
+		else
+			time = moveToBa(sute, pos, bno, isWaiting(, sute));
+
+		//	手札を整理しなおす
+		for(var i=0; i<te.count; i++)
+		{
+			var pos = getTefudaPos(pl, i);
+			with(cards[te[i].no])
+			{
+				if(.left != pos[0])
+					.moveTo(pos[0], pos[1],,  dist.time, dist.accel);
+			}
+		}
+
+		//	CPUの動作にウェイトを入れる
+		time	+= cpuwait;// if isCPUTurn;
+
+		//	札を取れたかで分岐
+		var oppo = game.currentOpponent;
+		if(isPlay2Get = isGetFuda(move))
+		{
+			if(!tutorial)
+			{
+				//	コウ札を取ったとき/酒ありで杯札を取ったとき
+				if(getHigherFuda(sute, target))
+				{
+					//	セリフ「キター！」
+					voice(pl, 27);
+				}
+				else
+				//	点数の高い役の待ち札をとったとき
+				if(getExYakufuda(sute, target))
+				{
+					//	セリフ「よしゃー」
+					voice(pl, 10);
+				}
+				else
+				{
+					//	セリフ「いただきー！」
+					face(pl, "喜");
+				}
+
+				dm((sute\4+1)+"月"+(sute%4)+"番目 / "+(target\4+1)+"月"+(target%4)+"番目");
+				//	役が出来る札"で"取られたら
+				if(isWaiting(oppo, sute))
+				{
+					//	セリフ「あーっ！(泣」
+					voice(oppo, 15);
+				}
+				//	役が出来る札を取られたら
+				else if(target !== void && isWaiting(oppo, target))
+				{
+					//	セリフ「あーっ！(泣」
+					voice(oppo, 11);
+				}
+				//	自分が捨てた(短冊以上の)札を取られたら、
+				else if(target !== void && sutefuda[oppo][target] && game.札点数一覧[target]>=5)
+				{
+					//	セリフ「こらー！取るなー！」
+					voice(oppo, 12);
+				}
+			}
+			else if(!isCPUTurn)
+			{
+				var tm = voiceTutorial("plte3");
+				time	+= tm;
+//				dispClickWait() if tm;	//	クリック待ち表示
+			}
+
+			//	合札があれば、役札の移動へ
+			isPickNext	= true;	//	その次は山札をツモる
+			next(moveToYakufuda, time);
+			dm("move to yakufuda: "+notFinish);
+		}
+		else
+		{
+			if(!tutorial)
+			{
+				//	セリフ「ちっ、何もないか」
+//				voice(game.currentPlayer, );
+//				face(game.currentPlayer, "怒");
+
+				//	役が出来る札を捨てたら、
+				if(target !== void && isWaiting(oppo, target))
+				{
+					//	「ぐっ」
+					face(pl, "哀");
+
+					//	セリフ「ふっふっふっ」
+					voice(oppo, 13);
+				}
+			}
+			else if(!isCPUTurn)
+			{
+				var tm	= voiceTutorial("plte4");
+				time	+= tm;
+				eraseTutorial("plte3");
+//				dispClickWait() if tm;	//	クリック待ち表示
+			}
+
+			//	山札をツモる
+			next(pickYamafuda, time);
+		}
+		window.focusedLayer	= void;	//	どこにもフォーカスしない
+	}
+
+	function updateYakuChips(delay=0)
+	{
+		//	役、テンパイの表示を管理する
+		var tenpaicnt;
+		var updated;
+		for(var i=0; i<2; i++)
+		{
+			var yakus = game.getLastOneYaku(i, 1, 1, -1, true);	//	出来役とテンパイ役の一覧を取得
+			var chips = yakuChips[i];
+			tenpaicnt = 0;
+			chips.init();
+			waiting[i].clear();
+			for(var j=0; j<yakus.count; j++)
+			{
+				var yaku	= yakus[j];
+				dm(yaku[0]+": last = "+yaku[2]);
+				if(yaku[0] != "カス")
+				{
+					var res = chips.updateChip(yaku[0], yaku[1], yaku[2]);
+					updated	|= res if yaku[2] <= 0;
+				}
+
+				//	その役が成立するために必要な札が一枚のみの役を登録
+				if(yaku[1].count == 1)
+				{
+					waiting[i][yaku[1][0]]	= game.役一覧[yaku[0]][2];	//	役の点数
+					dm("waiting("+(i?"player":"cpu")+"): "+(yaku[1][0]\4+1)+"月"+(yaku[1][0]%4)+"番目("+yaku[0]+")");
+				}
+
+				//	テンパイ状態の、役の数
+				tenpaicnt++ if yaku[2] == 1;
+			}
+			//	役札中のカスをカウント
+			var ya = game.yakufuda[i];
+			var cnt = 0;
+			for(var i=0; i<ya.count; i++)
+			{
+				cnt++ if ya[i].point == 1;
+				if(game.二役あり && (ya[i].no == game.杯札番号 || ya[i].no == game.桐大判番号))
+					cnt++;
+			}
+			if(cnt > 0)
+			{
+				var res	= chips.updateChip("カス", [], cnt);
+				updated	|= res if cnt >= 10;
+			}
+			chips.alignment(delay);		//	並べなおす
+		}
+//	役チップの方で音を鳴らす
+//		if(updated)
+//			hfSound.アイコン表示 = true;	//	更新されたら効果音
+		return tenpaicnt;
+	}
+
+	//	札を役札へ
+	var isPickNext;
+	function moveToYakufuda()
+	{
+		//	取った札の移動と役札の整理
+		calcYakufudaPos();
+		var get = [];
+		for(var i=0; i<lastmove.count; i++)
+			get[lastmove[i][2].no] = true;
+		var yf = game.currentYakufuda, pl = game.currentPlayer;
+		for(var i=0; i<yf.count; i++)
+		{
+			var pos = getYakufudaPos(pl, yf[i]);	//	札指定(Not番号指定)
+			with(cards[yf[i].no])
+			{
+				if(get[yf[i].no])
+				{
+					.moveToYakufuda(pos[0], pos[1], dist.time, dist.accel);	//	場から役へ
+					//	宝具あり・CPUの番でインヴィジブルエアが発動中なら、
+					if(game.宝具あり && game.isValidTreasure(game.invisible_air, pl))
+					{
+						if(isCPUTurn)
+							//	CPU: 移動後裏返しにする。
+							.reverseTo(,,,, smallwidth, smallheight);
+						else
+							//	PLAYER: 移動後半透明にする。
+							.opacityTo(160, 200);
+					}
+				}
+				else
+					.moveTo(pos[0], pos[1],, dist.time, dist.accel);	//	役内で
+//				.zpos	= pos[2];
+				.put();
+			}
+		}
+		var time	= dist.time;
+
+		//	役のチップを更新
+		var tenpaicnt	= updateYakuChips();
+
+		//	CPUの動作にウェイトを入れる
+		time	+= cpuwait;
+
+		if(tutorial && !isCPUTurn)
+		{
+			var tm;
+			if(tenpaicnt)
+				tm	= voiceTutorial("tenpai");
+			else
+				tm	= voiceTutorial(isPickNext ? "plte3" : "plyama3");
+			time	+= tm;
+//			dispClickWait() if tm;	//	クリック待ち表示
+		}
+
+		if(game.宝具あり)
+		{
+			//	MPの再描画
+			var i = game.currentPlayer;
+			for(var j=0; j<mp[i].count; j++)
+				mp[i][j].changeCurrentMP(time);
+		}
+
+		//	次へ
+		next(isPickNext ? pickYamafuda : checkYaku, time, true);
+	}
+
+	//	山札をツモる
+	function pickYamafuda()
+	{
+		//	山札の一番上を表にする
+		var time = 0;
+		with(cards[game.turnup.no])
+		{
+			//	札が裏返しになっているときのみ
+			if(.reverse)
+				.reverseTo(time = turn.time, turn.accel,, .becomeTefuda);	//	表になったあと、手札に
+			else
+			{
+				.becomeTefuda();	//	手札になる
+//				dispClickWait();
+			}
+		}
+
+		//	CPUの動作にウェイトを入れる
+		time	+= cpuwait if isCPUTurn;
+
+		if(tutorial && !isCPUTurn)
+		{
+			var tm	= voiceTutorial("plyama");
+			time	+= tm;
+//			dispClickWait() if tm;	//	クリック待ち表示
+		}
+
+		//	ツモった札の処理へ
+		next(choiceNext, time);
+	}
+
+	//	(CPU)ツモった札の判断
+	function CPU_putTumofuda()
+	{
+		//	札の判断
+		putTumofuda(routine[game.currentPlayer].playPick());
+	}
+
+	//	(プレイヤー)ツモった札の判断
+	function HUMAN_putTumofuda()
+	{
+		//	合札を探す
+		var ba = game.bafuda;
+		var ai = getAifudaFromFudas(ba, game.turnup.month);
+
+		//	合札のポイントをチェック
+		var samepoint	= true;
+		if(ai.count > 0)
+		{
+			var point	= ba[ai[0][1]].point;
+			for(var i=1; i<ai.count; i++)
+			{
+				if(point != ba[ai[i][1]].point)
+				{
+					samepoint	= false;
+					break;
+				}
+			}
+		}
+
+		//	合札が複数枚あり、すべて同じ文数でないなら
+		human_choiced.clear();
+		if(ai.count == 2 && !samepoint)
+		{
+			//	札の状態を変更する
+			enabledButtons	= false;	//	ボタンへフォーカス不可能
+			var acc	= [];
+			for(var i=0; i<ai.count; i++)
+			{
+				with(cards[ai[i][0]])
+				{
+					acc.add(cards[ai[i][0]]);
+					.border		= true;
+					.setLButtonDown(HUMAN_choiceBafudaAdjustTumofuda);
+				}
+			}
+			enterCard(acc);
+
+			enabledButtons	= true;	//	ボタンへフォーカス可能
+
+			if(tutorial)
+			{
+				voiceTutorial("plyama2");
+				eraseTutorial("plyama1");
+			}
+		}
+		else
+		{
+			//	選択する必要はなく、取るか捨てる
+			var time = 0;
+			if(ai.count == 1)
+				human_choiced[1] = ai[0][1];
+			else
+			{
+				var nums = [];
+				for(var i=0; i<ai.count; i++)
+					nums.add(ai[i][1]);
+				nums.sort();
+				human_choiced[1] = nums[0];
+			}
+			time	+= cpuwait;
+
+			//	札を置く
+			next(HUMAN_putTumofuda2, time);
+		}
+	}
+
+	function HUMAN_putTumofuda2()
+	{
+		//	呼び出しの代行
+//		hideSpecialButton();		//	宝具使用ボタンを隠す
+		putTumofuda(human_choiced);
+		pressOkTo	= void;
+	}
+
+	//	ツモった札と合わせる場札
+	function HUMAN_choiceBafudaAdjustTumofuda(card)
+	{
+		//	選んだ札と組み合わせる
+		var ba = game.bafuda;
+		human_choiced[1]	= getNoFromFudas(ba, card.no);
+
+		{//	状態を戻す
+			//	フォーカスが乱れるのを防ぐため、一度本体がフォーカスを得る
+			var f = focusable;
+			focusable	= true;
+			focus();
+
+			//	場札の状態を元に戻す
+			for(var i=0; i<ba.count; i++)
+				cards[ba[i].no].allReset();
+
+			//	フォーカスの可否を元に戻す
+			focusable	= f;
+		}
+
+		//	札を出す
+//		hideSpecialButton();	//	宝具使用ボタンを隠す
+		putTumofuda(human_choiced);
+	}
+
+	//	ツモった札を出す
+	function putTumofuda(play)
+	{
+		//	札を場へ移動
+		var ba = game.bafuda;
+		if(play[1] === void)
+		{
+			for(var i=0; i<ba.count; i++)
+			{
+				if(game.turnup.month == ba[i].month)
+				{
+					play[1]	= i;
+					break;
+				}
+			}
+		}
+		var target = play[1] !== void ? ba[play[1]].no : void;
+		var sute = game.turnup.no;
+		sutefuda[game.currentPlayer][sute] = true;	//	捨て札の記録
+
+		//	gameでの札の処理を行う前に、置く場所と札の種類を記憶しておく
+		var pos	= getBafudaPos(sute, play[1]);
+		var bpos= getBafudaPos(sute, void);		//	場に捨てるときの場所
+		var bno	= play[1] !== void ? ba[play[1]].no : void;
+
+		//	札の処理
+		var move = lastmove = game.playFuda(void, play[1]);
+
+		//	札の移動
+		var time;
+		if(move[0][1] == 0)
+			time = moveToBa(sute, bpos, void, isWaiting(, sute));
+		else
+			time = moveToBa(sute, pos, bno, isWaiting(, sute));
+
+		//	CPUの動作にウェイトを入れる
+		time	+= cpuwait;// if isCPUTurn;
+
+		//	札が取れたら、
+		var pl = game.currentPlayer;
+		var oppo = game.currentOpponent;
+		if(isGetFuda(move))
+		{
+			if(!tutorial)
+			{
+				//	酒ありで雨流れありで、杯札があるときに雨札をとったとき
+				var ya = game.yakufuda[pl], hai = false;
+				var sakerel	= %[game.杯札番号 => 2, num(3, 0) => 1, num(8, 0) => 1];
+				for(var i=0; i<ya.count; i++)
+				{
+					if(sakerel[ya[i].no])
+					{
+						hai	= sakerel[ya[i].no];	//	「菊に盃」「桜に幕」「ススキに月」を持っている
+						break;
+					}
+				}
+				if(game.酒あり && game.雨流れあり && hai > 0 && (sute == game.雨番号 || target == game.雨番号))
+				{
+					if(hai == 2)
+					{//	盃を持っているとき
+						face(oppo, "喜");
+
+						//	セリフ「ちくしょー！(哀」
+						voice(pl, 14);
+					}
+					else
+					{//	桜、月を持っているとき
+						var list	= game.getPointList();
+						if(list[game.杯札番号] != 0)	//	まだ盃を誰も取っていないなら
+							face(pl, "哀");	//	「ちぇっ」
+					}
+				}
+				//	コウ札を取ったとき/酒ありで杯札を取ったとき
+				else if(getHigherFuda(sute, target))
+				{
+					//	セリフ「キター！」
+					voice(pl, 27);
+				}
+				//	点数の高い役の待ち札をとったとき
+				else if(getExYakufuda(sute, target))
+				{
+					//	セリフ「よしゃー」
+					voice(pl, 10);
+				}
+				//	手札でもツモ札でも取れたとき
+				else if(isPlay2Get)
+				{
+					//	セリフ「もいっちょいただきー！！」
+					voice(pl, 3);
+				}
+				else
+				{
+					face(pl, "喜");
+				}
+
+				dm((sute\4+1)+"月"+(sute%4)+"番目 / "+(target\4+1)+"月"+(target%4)+"番目");
+				//	役が出来る札を相手がツモって、場に合札があったら
+				if(isWaiting(oppo, sute))
+				{
+					//	セリフ「あーっ！(泣」
+					voice(oppo, 18);
+				}
+				//	役が出来る札を取られたら
+				else if(target !== void && isWaiting(oppo, target))
+				{
+					//	セリフ「あーっ！(泣」
+					voice(oppo, 11);
+				}
+				//	自分が捨てた(短冊以上の)札を取られたら、
+				else if(target !== void && sutefuda[oppo][target] && game.札点数一覧[target]>=5)
+				{
+					//	セリフ「こらー！取るなー！」
+					voice(oppo, 12);
+				}
+			}
+			else if(!isCPUTurn)
+			{
+				var tm	= voiceTutorial("plyama3");
+				time	+= tm;
+//				dispClickWait() if tm;	//	クリック待ち表示
+			}
+
+			//	役札の移動へ
+			isPickNext	= false;	//	その次は役の判定
+			next(moveToYakufuda, time);
+		}
+		else
+		{
+			if(!tutorial)
+			{
+				//	役が出来る札を捨てたら、
+				if(sute !== void && isWaiting(oppo, sute))
+				{
+					//	「ぐっ」
+					face(pl, "哀");
+
+					//	セリフ「ふっふっふっ」
+					voice(oppo, 13);
+				}
+				//	手札でもツモ札でも取れなかったとき
+				else if(!isPlay2Get)
+				{
+					//	セリフ「ちっ、これもだめか」
+					voice(pl, 4);
+				}
+			}
+			else if(!isCPUTurn)
+			{
+				var tm	= voiceTutorial("plyama4");
+				time	+= tm;
+				eraseTutorial("plyama3");
+//				dispClickWait() if tm;	//	クリック待ち表示
+			}
+
+			//	役の判定へ
+			next(checkYaku, time, true);
+		}
+		window.focusedLayer	= void;	//	どこにもフォーカスしない
+	}
+
+	//	役のチェック
+	function checkYaku()
+	{
+		lastkoikoicount	= game.currentKoikoiCount;	//	現在のこいこい回数
+
+		if(game.checkAgari())
+		{
+			//	MPの再描画
+			if(game.宝具あり)
+			{
+				var i = game.currentPlayer;
+				for(var j=0; j<mp[i].count; j++)
+					mp[i][j].changeCurrentMP();
+			}
+
+			//	リプレイモードなら、
+			if(game.replay)
+			{
+				var	tmp	= game.popHistory();
+				if(tmp == "shoubu")
+				{
+					next(shoubu, 500);
+					return;
+				}
+				else if(tmp == "koikoi")
+				{
+					next(koikoi, 500);
+					return;
+				}
+			}
+
+			//	あがれる
+			if(isCPUTurn)
+			{
+				var time	= 0;
+				if(tutorial)
+				{
+					var tm	= voiceTutorial("cpuyaku");
+					time	+= tm;
+//					dispClickWait() if tm;	//	クリック待ち表示
+				}
+
+				//	勝負するかどうか
+				var	shoubu	= routine[game.currentPlayer].playShoubu();
+				with(game)
+				{
+					if(	shoubu == 3 &&		//	点数が超えているだけで、勝負を掛けると判定されたとき
+						isCPUTurn &&		//	CPUの番で
+						serifs[0].all != void &&	//	セリフがあって
+						serifs[0].all[28] != void && serifs[0].all[28].count > 0)	//	「こいこい回避」のセリフが存在するチームであれば、
+					{//	勝負するか迷う
+						//	自分の持ち点が多ければ、なかなか勝負しない
+						var	rate0	= 0.3 * (.getRestPoint(.currentPlayer) / .minimumpoint[.currentPlayer]);
+						//	役の点数が低ければ、なかなか勝負しない
+						var	rate1	= 0.3 * Math.pow(1 / game.currentPoint, 2);
+						//	相手の残り点数次第
+						var	rate2	= 0.2 * Math.pow(1 / .getRestPoint(.currentOpponent), 2);
+						var	rate	= rate0 + rate1 + rate2;
+						var	chk	= .rg.random();
+						dm("=== 勝負回避確率: %5.2f + %5.2f + %5.2f = %5.2f / ポイント: %5.2f ===".sprintf(rate0*100, rate1*100, rate2*100, rate*100, chk*100));
+						if(rate > chk)
+						{
+							dm("=== 勝負しない！ ===");
+							shoubu	= false;	//	勝負しない
+						}
+					}
+				}
+
+				next(shoubu ? decideShoubu : koikoi, time);
+			}
+			else
+			{
+				//	役一覧の表示
+				yakuList.show(game.curYaku[1], msgfadetime);//,,, "lefttop");
+
+				if(tutorial)
+				{
+					voiceTutorial("plyaku");
+				}
+
+				//	確認
+				var time	= 800;
+
+				if(game.tefuda[PLAYER].count > 0)
+					next(confirmWait, time);
+				else
+					next(decideShoubu, time);	//	残っていなければ、自動的に「勝負」
+				dispClickWait();
+			}
+		}
+		else
+			//	あがれない
+			goToNextTurn();
+	}
+
+	function confirmWait()
+	{
+		enabledButtons	= false;	//	ボタンへフォーカス不可能
+		enabledMenu		= false;	//	設定メニュー表示不可
+
+		confirm.confirmShoubu(koikoi, decideShoubu, msgfadetime,,,, 175);	//	手札が残っていれば、確認する
+
+		//	入力待ち
+	}
+
+	//	勝負をかけることが決定された
+	var counterTreasure;
+	function decideShoubu()
+	{
+		//	カウンター宝具が使用可能であるか？
+		var treasures	= game.availableTreasure(game.currentOpponent);
+//		var deft		= game.outofmenu_treasure;
+		var deft		= game.defensive_treasure;
+		var use;
+		for(var i=0; i<treasures.count; i++)
+		{
+			if(treasures[i][0] && deft[treasures[i][4]])
+			{
+				use	= treasures[i];
+				break;
+			}
+		}
+		if(use == void)
+		{
+			shoubu();	//	カウンター宝具が無いので、勝負をかける
+			return;
+		}
+
+		//	役一覧の表示
+		if(!yakuList.showed)
+			yakuList.show(game.curYaku[0], msgfadetime,,, "rightbottom");
+
+		//	カウンター宝具を使用するか？
+		counterTreasure	= [ use[1], use[2] ];	//	使うカウンター宝具
+		if(isCPUTurn)
+		{
+			//	プレイヤーに問い合わせる
+			var treasure	= game.servant[use[3]][3][use[2]];
+			var servant		= game.playerServant[game.currentOpponent][use[1]];
+			confirm.confirm("相手が「勝負」の構え。\n『"+use[4]+"』を使用しますか？\n  "+treasure[5]+"\n  [消費MP/現在MP: "+treasure[3]+"/"+servant[1]+"]", useCounterTreasure, shoubu);
+			enabledButtons	= false;	//	ボタンへフォーカス不可能
+			enabledMenu		= false;	//	設定メニュー表示不可
+		}
+		else
+		{
+			//	CPUの判断
+			var	op	= game.currentOpponent;
+			if(routine[op].useSpecialForShoubu(op, use[4], game.totalPoint, game.getRestPoint(op)))
+				next(useCounterTreasure, 300);	//	使えるなら、使う
+			else
+				shoubu();	//	使わず、勝負を受け入れる
+		}
+	}
+
+	//	カウンター宝具を使用する
+	function useCounterTreasure()
+	{
+		//	使用の問い合わせメニューが開いていれば閉じる
+		confirm.hide(msgfadetime>>1);
+
+		//	宝具カットイン開始
+		effectSpecial(game.currentOpponent, counterTreasure, afterUseCounterTreasure);
+	}
+
+	//	カウンター宝具のカットイン後処理
+	function afterUseCounterTreasure()
+	{
+		//	宝具使用
+		var pl	= game.currentOpponent;
+		var sp	= speffectelm.sp;
+		game.useTreasure(sp[0], sp[1], pl);
+
+		//	宝具アイコン表示の更新
+		dm("update treasure icon: "+pl);
+		treasureIconManager[pl].update(game.getValidTreasure(pl), game);
+
+		//	MPの再描画
+		dm("update mp: "+pl);
+		for(var j=0; j<mp[pl].count; j++)
+			mp[pl][j].changeCurrentMP();
+
+		//	クリックできるように戻す
+		removeSpecialMode();
+
+		//	使った宝具が洗脳不思議銃なら、強制的にこいこい
+		var sname	= game.playerServant[pl][sp[0]][0];
+		dm("game.servant["+sname+"][3]["+sp[1]+"][0] = "+game.servant[sname][3][sp[1]][0]+"("+game.maid_dragoon+")");
+		if(game.servant[sname][3][sp[1]][0] == game.maid_dragoon)
+			koikoi(true);	//	強制こいこい
+		else
+			shoubu();	//	勝負へ
+	}
+
+	//	勝負
+	function shoubu()
+	{
+		game.shoubu();
+
+		stopVoice();	//	セリフ表示を終了
+
+		enabledButtons	= true;	//	ボタンへフォーカス可能
+		enabledMenu		= true;	//	設定メニュー表示可
+
+		//	ウィンドウを隠す
+		var time = msgfadetime;
+		confirm.hide(time);
+
+		//	最終的なポイントの計算
+		game.calcTotalYakuPoint();
+
+		//	セリフ「やーめたっ！」
+		//	※ カットインのみ？
+
+		if(!tutorial)
+		{
+			//	勝負の表示(カットイン?)
+			var intime	= 600, cutintime = 300, cutindelay = 600;
+			var wait = 1000;	//	役名が飛んでいくまでの時間
+			var pl = game.currentPlayer;
+			var cname, info, cno;
+			cno	= faces[pl].no;				//	現在顔ウィンドウに表示されているキャラが
+			cname	= teams[team[pl]][cno];	//	カットインとして登場する
+			info	= cutinInfo[cname];
+			with(shoubuLayers["char"] = new ShoutLayer(window, this))
+			{
+				.shout2("hf_カットイン-勝負", hfSound.勝負, shoutpos[pl][0], shoutpos[pl][1], intime, -2);
+				.absolute--;
+			}
+			var storage	= "hf_カットイン-"+cname;
+			if(isExistentImage(storage))
+			{
+				with(shoubuLayers["cutin"] = new CutInLayer2(window, this, storage, info != void ? info.rect : void, !pl))
+				{
+					var slide = 32;
+					if(pl)
+					{
+						.setPos(info.left - .allWidth - slide, height - .allHeight);
+						.moveTo(info.left - .allWidth,, 255, cutintime, -2, cutindelay);
+					}
+					else
+					{
+						.setPos(width - info.left + slide, height - .allHeight);
+						.moveTo(width - info.left,, 255, cutintime, -2, cutindelay);
+					}
+					.delaySound(hfSound.ファンファーレ, cutindelay);
+				}
+
+				//	カットイン前に相手のフェースウィンドウを最前に移動させる
+				faces[game.currentOpponent].absolute	= shoubuLayers["cutin"].absolute + 1000;	//	cutin < face
+				time	+= cutindelay + cutintime + wait;
+			}
+		}
+		else if(isCPUTurn)
+		{
+			var tm	= voiceTutorial("cpuagari");
+			time	+= tm;
+//			dispClickWait() if tm;	//	クリック待ち表示
+		}
+
+		//	顔が灰色なら元に戻す
+		faces[game.currentOpponent].grayscale	= false;
+
+		//	BGM停止
+		hfSound.stopbgm();
+
+		offFocus();
+
+		//	勝敗決定へ
+		next(decideWin, time);
+	}
+
+	//	勝負カットインを消去する
+	function eraseShoubuCutin()
+	{
+		if(shoubuLayers["char"] != void)
+		{
+			with(shoubuLayers.char) .moveTo(,, 0, 300, 2,, .endOfMove);
+			shoubuLayers.char	= void;
+		}
+		if(shoubuLayers["cutin"] != void)
+		{
+			with(shoubuLayers.cutin) .moveTo(,, 0, 300, 2,, .endOfMove);
+			shoubuLayers.cutin	= void;
+		}
+	}
+
+	//	こいこい("forced=true"なら、不本意な「こいこい」)
+	var lastkoikoicount;	//	短期のこいこい回数記録
+	function koikoi(forced=false)
+	{
+		game.koikoi();
+
+		enabledButtons	= true;	//	ボタンへフォーカス可能
+		enabledMenu		= true;	//	設定メニュー表示可
+
+		//	ウィンドウを隠す
+		var time = msgfadetime;
+		yakuList.hide(time);
+		confirm.hide(time);
+
+		var ictime = 0;
+		var pl = game.currentPlayer;
+		if(!tutorial)
+		{
+			//	こいこいの表示(カットイン?)
+			var intime	= 300, staytime = 600;
+			with(new ShoutLayer(window, this))
+				.shout2("hf_カットイン-こいこい", hfSound.こいこい, shoutpos[pl][0], shoutpos[pl][1], intime, 2, staytime, .endOfMove);
+			ictime	= intime + staytime;
+			time	+= ictime;
+		}
+		else if(isCPUTurn)
+		{
+			ictime	= voiceTutorial("cpukoikoi");
+			time	+= ictime;
+//			dispClickWait() if tm;	//	クリック待ち表示
+		}
+
+		//	こいこいアイコンを表示
+		dm("こいこい: game.currentPlayer = "+game.currentPlayer);
+		icon[pl + 2].disp(ictime);
+
+		//	相手側主導のこいこいなので、相手側のセリフは無し(もしくは「ふふふ…」とか？)
+		if(forced)
+			lastkoikoicount	= 255;
+
+		//	BGM変更
+		hfSound.bgm2	= true;
+
+		//	次へ
+		next(goToNextTurn, time);
+	}
+
+	//	ターン交代
+	function goToNextTurn()
+	{
+//		dm("go to next turn");
+		//	ターン交代
+		var time = cpuwait;
+		var result = game.nextTurn();
+
+		//	点数・MPが変化していないかチェック
+		//	変化していれば、変化のアニメーションを行う
+		if(game.宝具あり)
+		{
+			//	点数の変更
+			for(var i=0; i<ten.count; i++)
+			{
+				var pt;
+				if(ten[i].number != (pt = game.getRestPoint(i)))
+					ten[i].minus(ten[i].number - pt, 300);
+			}
+
+			//	MPの再描画
+			for(var i=0; i<mp.count; i++)
+			{
+				for(var j=0; j<mp[i].count; j++)
+					mp[i][j].changeCurrentMP();
+			}
+
+			//	宝具アイコン表示の更新
+			for(var i=0; i<treasureIconManager.count; i++)
+				treasureIconManager[i].update(game.getValidTreasure(i), game);
+		}
+
+		if(result)
+		{
+			//	相手のターンへ
+			if(tutorial)
+			{
+				if(!isCPUTurn)
+				{
+					var	tm	= voiceTutorial("plend");
+					time	+= tm;
+//					dispClickWait() if tm;	//	クリック待ち表示
+				}
+			}
+			else
+			{
+				if(isCPUTurn && game.getRestPoint(game.currentPlayer) == 1)
+				{
+					//	プレイヤーの持ち点が1文の時にあがっていたら「もっとやろうよ！」
+					if(lastkoikoicount != 255 && lastkoikoicount != game.opponentKoikoiCount)
+					{
+						voice(game.currentOpponent, 28);
+						voice(game.currentPlayer, 21);	//	「なめんなーっ！」
+					}
+				}
+				else
+				{
+					//	相手が初めて"こいこい"したときのセリフ「なめんなーっ！」
+					if(lastkoikoicount == 0 && game.opponentKoikoiCount == 1)
+						voice(game.currentPlayer, 21);	//	こいこい回数が0→1と変化したとき
+				}
+			}
+
+			next(startTurn, time);
+		}
+		else
+		{
+			if(game.state == 4)
+			{
+				//	引き分け
+				roundTimeOut	= true;
+				next(standoffRound, time);
+			}
+			else
+			{
+				//	自然減少で勝利
+				next(quitGame, time);	//	ゲーム終了
+			}
+		}
+	}
+
+	//-------------------------------------------------------------------------
+	//	引き分け
+	function standoffRound()
+	{
+		var disptime = 1000;
+		var nextscene, time = (msgfadetime<<1) + disptime;;
+		if(!tutorial)
+		{
+			playSound("se197.wav");	//	銅鑼の音
+
+			if(roundTimeOut)
+			{//	あがらずに手札がなくなったとき
+				nextscene	= standoffRound2;	//	引き分けの会話へ
+			}
+			else
+			{//	どちらにも手役が出来ていたとき
+				//	セリフ「ラッキー♪」
+				voice(0, 1);
+				//	セリフ「ラッキー♪」
+				voice(1, 1);
+				//	セリフ「え？！」
+				voice(0, 8,, true);
+				//	セリフ「え？！」
+				voice(1, 8,, true);
+				//	セリフ「こんなことってあるんだ…」
+				voice(0, 9,, true);
+
+				turnoutIcons();
+
+				nextscene	= makeYamafuda;	//	次のラウンドへ
+			}
+			game.nextRound();
+		}
+		else
+		{
+			var t	= voiceTutorial("hikiwake");
+			time	= t if t > time;
+			nextscene	= endofTutorial;	//	チュートリアルは1ラウンドで終了
+		}
+
+		//	「引き分け」の表示
+		with(confirm)
+		{
+			.message("引き分けです。", msgfadetime);
+			.reserveClose(disptime);
+		}
+
+		//	BGM停止
+		hfSound.stopbgm();
+
+		//	クリックされたら次へ
+		next(nextscene, time);
+		dispClickWait();
+	}
+
+	function standoffRound2()
+	{
+		//	あがらずに手札がなくなったとき
+		for(var i=0; i<2; i++)		//	CPU側から
+		{
+			if(game.curYaku[i] != void && game.curYaku[i].count > 0)
+			{
+				//	七文以上持っていたのにあがらなかった
+				if(game.７文倍掛けあり && game.curPoint[i] >= 7)
+					//	セリフ「くっそーっ！」
+					voice(i, 7);
+				else
+					//	セリフ「うーん、あがりそこねた」
+					voice(i, 6);
+			}
+			else
+				//	セリフ「次は叩きのめしてやるわ」
+				voice(i, 5);
+		}
+
+		turnoutIcons();
+
+		//	次のラウンドへ
+		next(makeYamafuda, 2000);
+		dispClickWait();
+	}
+
+	//	勝敗決定
+	function decideWin()
+	{
+//		dm("decideWin");
+		var time = 0;
+/*		//	成立した役を表示(表示されてない場合のみ)
+		if(!yakuList.showed)
+		{
+			var winner	= game.state & 1;
+			with(yakuList)
+			{
+				if(!tutorial)
+				{
+					.show(game.curYaku[winner],,,, "rightbottom");
+					.absolute	= shoubuLayers["cutin"].absolute + 10000 if shoubuLayers["cutin"] != void;
+				}
+				else
+					.show(game.curYaku[winner]);
+			}
+			time	= 2000;
+		}
+*/
+		//	役一覧を更新する(カウンター宝具の影響を受けて)
+		var winner	= game.state & 1;
+		with(yakuList)
+		{
+			.showed	= false;
+			if(!tutorial)
+			{
+				.show(game.curYaku[winner],,,, isCPUTurn ? "rightbottom" : "rightcenter");
+				.absolute	= shoubuLayers["cutin"].absolute + 10000 if shoubuLayers["cutin"] != void;
+			}
+			else
+				.show(game.curYaku[winner]);
+		}
+		time	= 2000;
+
+		if(tutorial)
+			time	+= voiceTutorial("kachimake");
+
+		//	BGM停止
+		hfSound.stopbgm();
+
+		offFocus();
+
+		//	点数計算へ
+		next(liquidatePoint, time);	//	入力待ち
+//		dispClickWait();
+		FudasHitThreshold	= 256;	//	札をイベント透過にする
+
+		//	負け側を怒らせる
+		face((winner + 1) & 1, "怒",, false);
+	}
+
+	//	持ち点への効果
+	function liquidatePoint()
+	{
+		var winner = game.state & 1, loser = (winner + 1) & 1;
+
+		//	メッセージ消去
+		confirm.hide(msgfadetime);
+
+		var delay, time = 600;
+		if(game.totalPoint > 0)
+		{
+			//	役名が負けたほうへ飛んでいく
+			delay = yakumoji.shot((winner + 1) & 1, game.curYaku[winner], time);
+
+			//	顔が揺れる
+			faces[loser].shake(10, delay - time,, time);	//	初弾が着弾したらゆれ始め
+
+			//	点数の変更(ブシュッと斬る・ザクッと刺すなどのエフェクトが欲しいかも)
+			time = ten[loser].minus(game.totalPoint, delay - time,, time);
+
+			//	勝った方は喜び
+			face(winner, "喜", delay, false);
+
+			//	負け側は悲しむ
+			var	loserface	= hfTeamMember[team[loser]][0].indexOf("慎二") == 0 ? "哀2" : "哀";	//	慎二、慎二白の時だけ"哀2" (元慎二は変わらず)
+			face(loser, loserface, delay + 500, false);
+		}
+		else
+		{
+			//	役名が飛んでいくが、ガードされる
+			delay	= yakumoji.shot((winner + 1) & 1, game.curYaku[winner], time, true);
+
+			//	負け側は喜び
+			face(loser, "喜", delay + 500, false);
+
+			//	勝ち側は怒る
+			face(winner, "怒", delay + 500, false);
+		}
+
+		//	会話へ
+		next(conversationResult, delay + 500);
+	}
+
+	//	会話
+	function conversationResult()
+	{
+		dm("conversationResult();");
+		//	役一覧などを消去
+		var time = msgfadetime;
+		yakuList.hide(time);
+		FudasHitThreshold	= 0;	//	札をイベント非透過にする
+
+		if(!tutorial)
+		{
+			if(!game.nextRound())
+			{
+				//	負けた方がルールブレイカー発動可能か？
+				var winner	= (game.state & 1);
+				var loser	= (winner + 1) & 1;
+				var treasures= game.availableTreasure(loser);
+				for(var i=0; i<treasures.count; i++)
+				{
+					if(treasures[i][0] && treasures[i][4] == game.rule_breaker)
+					{
+						//	勝負カットインを消去
+						eraseShoubuCutin();
+
+						//	ルールブレイカー使用
+						effectSpecial(loser, [treasures[i][1], treasures[i][2]], checkReversal);
+						game.useTreasure(treasures[i][1], treasures[i][2], loser);
+						return;
+					}
+				}
+
+				//	顔を喜哀で固定
+				face(winner, "喜",, false);
+				face(loser, "哀",, false);
+
+				//	ゲーム終了 / 入力待ち
+				next(quitGame, time);
+			}
+			else
+			{
+				//	セリフ「やったね」
+				var winner	= game.state & 1;
+				voice(winner, 16);
+
+				//	セリフ「次は負けねーぞ！」
+				voice((winner + 1) & 1, 17);
+
+				turnoutIcons();
+
+				//	次の勝負へ
+				next(makeYamafuda, time);
+			}
+		}
+		else
+		{
+			next(endofTutorial, 0);
+		}
+	}
+
+	var reversalelm = %[];
+	function checkReversal()
+	{
+		//	逆転できるか決める
+		var storage;
+		var rand	= game.rg.random();
+		var point = int(rand * 3);	//	0〜2の値を取り、0のときに逆転
+		dm(@"rand = ${rand} / point = ${point}");
+		var count;
+		var time	= 800;
+//		var delay	= 800;
+		var wait	= 400;
+		if(point == 0)
+		{//	「逆転」
+			game.state	= (game.state & (!1)) | (((game.state & 1)+1)&1);
+			count	= 10;
+		}
+		else
+		{//	「失敗」
+			count	= 11;
+		}
+		with(reversalelm["turncard"] = new global.TurningCardLayer(window, this))
+			time	= .turn(count);
+		createBlackBorder(reversalelm);	//	黒枠
+		for(var i=0; i<2; i++)
+			with(reversalelm["bar"+i])
+				.opacity = 0, .visible = true, .moveTo(,, 192, 200);
+
+		//	ゲームを終了する
+		next(resultReversal, time + wait);
+	}
+
+	//	結果を受けてのセリフ
+	function resultReversal()
+	{
+		dm("resultReversal");
+		var winner	= game.state & 1;
+		var loser	= (winner + 1) & 1;
+		if(reversalelm.turncard.reversal)
+		{
+			//	逆転成功
+			voice(0, 25);	//	キャスターチームなら喜び、対戦相手は悲しみ
+			voice(1, 25);
+		}
+		else
+		{
+			//	逆転失敗
+			voice(0, 26);	//	キャスターチームなら悔しい、対戦相手は安堵
+			voice(1, 26);
+		}
+
+		removeSpecialMode();	//	入力不可状態を解除
+
+		next(resultReversal2);
+		dispClickWait();
+		FudasHitThreshold	= 256;	//	札をイベント透過にする
+	}
+
+	//	終了する
+	function resultReversal2()
+	{
+		dm("resultReversal2");
+		var time	= 400;
+		with(reversalelm.turncard)
+			.opacityTo(0, time,,, .endOfMove);	//	逆転カードを消去
+		for(var i=0; i<2; i++)
+			with(reversalelm["bar"+i])
+				.moveTo(, i ? height : -.height,, time, ,, .endOfMove);
+		(Dictionary.clear incontextof reversalelm)();
+		quitGame();
+	}
+
+	function turnoutIcons()
+	{
+		dm("turnoutIcons();");
+	
+		//	親/子アイコン移動
+		icon[0].no	= game.oya_no;
+		icon[1].no	= (game.oya_no + 1) & 1;
+
+		//	こいこいアイコン消去
+		icon[2].no	= 0;
+		icon[3].no	= 0;
+
+		//	OFFにする
+		icon[4].on	= false;
+		icon[5].on	= false;
+
+		//	役チップの排除
+		for(var i=0; i<2; i++)
+			yakuChips[i].eraseAll();
+
+		//	宝具アイコン表示の更新
+		if(game.宝具あり)
+		{
+			for(var i=0; i<treasureIconManager.count; i++)
+				treasureIconManager[i].update(game.getValidTreasure(i), game);
+		}
+	}
+
+	//	ゲーム終了
+	function quitGame()
+	{
+		if(plugin != void)
+		{
+			//	勝敗情報を保存
+			plugin.winner	= game.state & 1;
+			global.winner	= hfTeamName[team[plugin.winner]];
+
+			//	最終時点でのMP
+			plugin.lastmp	= game.宝具あり ? game.getCurrentMP() : [];
+
+			//	勝敗記録を取る
+			var rec = [];
+			var enddate;
+			with(new Date())
+				enddate	= "%04d/%02d/%02d %2d:%02d:%02d".sprintf(.getYear(), .getMonth()+1, .getDate(), .getHours(), .getMinutes(), .getSeconds());
+			rec.add(startdate);
+			rec.add(enddate);	//	終了日時
+			for(var i=0; i<game.rules.count; i++)
+				rec.add(game[game.rules[i]]);	//	ルール
+			rec.add([].assign(team));	//	チーム(0:CPU/1:プレイヤー)
+			rec.add([].assign(game.playerpoint));	//	得点
+			rec.add([].assign(game.minimumpoint));	//	勝利条件
+			rec.add([].assign(plugin.lastmp));		//	終了時のMP
+			rec.add(plugin.winner);		//	勝利チーム
+			tf.hanafuda_record	= [] if tf.hanafuda_record === void;
+			tf.hanafuda_record.add(rec);	//	記録
+
+			//	花札レイヤーを閉じる
+			plugin.hide();
+		}
+	}
+
+	//	チュートリアル終了
+	function endofTutorial()
+	{
+		dispClickWait(voiceTutorial("finish"));
+		FudasHitThreshold	= 256;	//	札をイベント透過にする
+		next(quitGame);	//	クリックして終了
+	}
+
+	//-------------------------------------------------------------------------
+	//	ユーティリティ
+	//	指定番号の、場札の位置
+//	var bafuda_pos	= [ 10, [ 313, 200, 62, 100, 5 ], 12, [ 251, 200, 62, 100, 1 ] ];	//	[ cnt, [left, top, leftmove, topmove], ... ]
+	var bafuda_pos	= [
+		[ 375, 200 ],	//	2
+		[ 437, 200 ],	//	3
+		[ 375, 300 ],	//	6
+		[ 437, 300 ],	//	7
+		[ 313, 200 ],	//	1
+		[ 499, 200 ],	//	4
+		[ 313, 300 ],	//	5
+		[ 499, 300 ],	//	8
+		[ 251, 200 ],
+		[ 561, 200 ],
+		[ 251, 300 ],
+		[ 561, 300 ],
+		[ 189, 200 ],
+		[ 623, 200 ],
+		[ 623, 300 ]
+	];
+	var bafudaNoToPosNo	= [];	//	場札の札番号から、配置場所番号を取得
+	function getBafudaPos(fno, no)
+	{
+		//	場札情報の更新
+		//		場札じゃなくなった札を排除
+		var ba = game.bafuda, bn = bafudaNoToPosNo, bp = bafuda_pos;
+		for(var i=0; i<bn.count; i++)
+		{
+			if(bn[i] !== void)
+			{
+				var j;
+				for(j=0; j<ba.count; j++)
+				{
+					if(i === ba[j].no)
+						break;	//	まだ場札のまま
+				}
+				//	場札の中に見つからなかったら、削除
+				if(j == ba.count)
+					bn[i] = void;
+/*				else
+					dm(@"bafuda pos[${i}](${i\4+1},${i%4}) = ${bn[i]}");
+*/			}
+		}
+
+		var pno;
+		if(no === void)
+		{//	空きスペースを探す
+			var pos = [];
+			for(var i=0; i<bn.count; i++)
+			{
+				if(bn[i] !== void)
+				{
+//					dm("使用中: "+bn[i]);
+					pos[bn[i]]	= i;	//	この場所は使用中
+				}
+			}
+			for(var i=0; i<bp.count; i++)
+			{
+				if(pos[i] === void)
+				{
+					pno	= i;	//	使用されていない場所が見つかったので、そこにする
+//					dm(@"bafuda pos[${i}] = bingo!");
+					break;
+				}
+//				dm(@"bafuda pos[${i}] = ${pos[i]}");
+			}
+		}
+		else
+			pno	= bn[ba[no].no];	//	場札順 → 札番号 → 配置場所
+
+		//	座標の計算
+		dm("場札No.\""+no+"\" → \""+pno+"\"");
+		return bp[bn[fno] = pno];
+	}
+
+	//	場札の配置場所情報をリセットする
+	function resetBafudaPos()
+	{
+		bafudaNoToPosNo.clear();
+		var ba = game.bafuda, bn = bafudaNoToPosNo;
+		var pi = [ 4, 0, 1, 5, 6, 2, 3, 7 ];
+		for(var i=0; i<ba.count; i++)
+		{
+			bn[ba[i].no]	= pi[i];	//	札番号 → 場札配置番号
+		}
+	}
+
+	//	指定番号の、手札の位置
+	var tefuda_pos = [ [ 549, 14, -62 ], [ 189, 486, 62 ] ];	//	[ [ left, top, leftmove ], ... ]
+	function getTefudaPos(player, no)
+	{
+		var tp = tefuda_pos[player & 1];
+		return [tp[0] + tp[2] * no, tp[1]];
+	}
+
+	//	指定番号の、山札の位置
+	var yamafuda_pos = [ 188, 300, -2, -2, 6 ];	//	[ left, top, leftmove, topmove, step ]
+	function getYamafudaPos(no)
+	{
+		var yp = yamafuda_pos;
+		no	= cards.count - no;
+		no	\= yp[4];
+		return [yp[0] + yp[2] * no, yp[1] + yp[3] * no];
+	}
+
+	//	役札の位置を計算する
+	var yakufuda_pos	= [
+		[   0,   0 ],	//	CPU
+		[ 585, 324 ]	//	プレイヤー
+	];
+	var max_yakufuda_count = [3, 4, 5];		//	無限の剣製で札を多く取ると、序盤で手札と役札が重なる
+	var currentYakufudaPos = [ [], [] ];
+	function calcYakufudaPos(player=game.currentPlayer)
+	{
+//		dm("calcYakufudaPos("+player+")");
+		//	各種札の枚数を調べる
+		var yaku = game.yakufuda[player];
+		var cnt = [], c = 0;
+		var pt = game.点数一覧;
+		for(var i=0; i<yaku.count; i++)
+		{
+//			dm("yaku[i].point = "+yaku[i].point);
+			while(yaku[i].point != pt[c])
+				c++;
+			cnt[c]++;
+		}
+
+		var yp = yakufuda_pos[player];
+		var cyp = currentYakufudaPos[player];
+		cyp.clear();
+		var myc = max_yakufuda_count[game.turn \ 2];
+		var dmyc= max_yakufuda_count[max_yakufuda_count.count-1];
+		myc	= dmyc if myc === void;
+		var t = yp[1];
+		for(var i=0; i<4; i++)
+		{
+			var l = yp[0], step;
+			if(cnt[i] > myc)
+			{//	入りきれない
+				step	= (myc - 1) * smallwidth / (cnt[i] - 1);
+				if(player)
+					l	+= (dmyc - myc) * smallwidth;
+			}
+			else
+			{//	重ならなくて良い
+				step	= smallwidth;
+				if(player)
+					l	+= (dmyc - cnt[i]) * smallwidth;
+			}
+			for(var j=0; j<cnt[i]; j++)
+			{
+//				dm(cyp.count+": "+l+", "+t);
+				cyp.add([l, t, cyp.count]);
+				l	+= step;
+			}
+			t	+= smallheight;	//	次の行
+		}
+	}
+
+	//	指定番号の、役札の位置
+	function getYakufudaPos(player, no_or_fuda)
+	{
+		if(typeof no_or_fuda == "Object")
+		{
+			var y = game.yakufuda[player];
+			for(var i=0; i<y.count; i++)
+			{
+				if(y[i] == no_or_fuda)
+				{
+					no_or_fuda	= i;
+					break;
+				}
+			}
+			if(typeof no_or_fuda != "Integer")
+				return [0, 0];
+		}
+//		dm("No."+no_or_fuda+" = "+currentYakufudaPos[player][no_or_fuda][0]+", "+currentYakufudaPos[player][no_or_fuda][1]);
+		return currentYakufudaPos[player][no_or_fuda];
+	}
+
+	//	場へ札を出す
+//	function moveToBa(fuda_no, ba_no, heavy=false)
+	function moveToBa(fuda_no, pos, bafudano, heavy=false)
+	{
+//		dm("move to ba: bafuda["+ba_no+"] = "+fuda_no+" ("+game.bafuda.count+")");
+//		var pos = getBafudaPos(fuda_no, ba_no);
+		var time;
+//		if(ba_no !== void)
+		if(pos !== void && bafudano !== void)
+		{//	手札を場札に合わせる
+//			var bafudano	= game.bafuda[ba_no].no;
+			heavy	|= isHigherFuda(bafudano);
+			with(cards[fuda_no])
+			{
+				.becomeFront();	//	ちょっとだけ上に移動させる
+				.finishAll();	//	現在の動作を完了させる
+				.sinkLink();	//	関連札アニメーションを停止させる
+				time	= .clapTo(pos[0], pos[1], heavy, clap.time, clap.accel);
+			}
+			with(cards[bafudano])
+			{
+				.becomeBafuda();	//	選ばれている可能性があるので、場の高さに戻す
+				.sizeTo(.normal);	//	              〃              元の大きさに戻す
+				if(heavy)
+				{
+					//	叩き付けの衝撃波を発生させる
+					new ShockwaveLayer(window, this, cards[bafudano], "hf_shockwave", 255, 2.0, 200, -1.5, clap.time);
+				}
+			}
+		}
+		else
+		{//	手札を捨てる
+			with(cards[fuda_no])
+			{
+				.becomeBafuda();	//	場札になる
+				time	= .dropTo(pos[0], pos[1], drop.time, drop.accel);
+			}
+		}
+		return time;
+	}
+
+	//	移動状況から、札が取れたかを判断
+	function isGetFuda(move)
+	{
+		var get = false;
+		for(var i=0; i<move.count; i++)
+		{
+			if(move[i][1] == 2)
+			{
+				get	= true;
+				break;
+			}
+		}
+		return get;
+	}
+
+	//	手札、場札の状態をリセット
+	function resetTefudaAndBafuda(card)
+	{
+		//	フォーカスが乱れるのを防ぐため、一度本体がフォーカスを得る
+		var f = focusable;
+		focusable	= true;
+		focus();
+
+		var te = game.currentTefuda;
+		var ba = game.bafuda;
+		for(var i=0; i<te.count; i++)
+			cards[te[i].no].allReset();// if cards[te[i].no] != card;
+		for(var i=0; i<ba.count; i++)
+			cards[ba[i].no].allReset();// if cards[ba[i].no] != card;
+
+		//	フォーカスの可否を元に戻す
+		focusable	= f;
+	}
+
+	//	指定の札リストから指定の番号の札を探し、その順番を返す
+	function getNoFromFudas(fudas, no)
+	{
+		for(var i=0; i<fudas.count; i++)
+		{
+			if(fudas[i].no == no)
+				return i;	//	指定番号の札
+		}
+		return void;
+	}
+
+	//	指定の札リストから同月の札を探し、その一覧を返す
+	function getAifudaFromFudas(fudas, month)
+	{
+		var ai = [];
+		for(var i=0; i<fudas.count; i++)
+		{
+			if(fudas[i].month == month)
+				ai.add([fudas[i].no, i]);
+		}
+		return ai;
+	}
+
+	//	指定と同月の札のリストを取得
+	function getSameMonth(month)
+	{
+		var te = game.currentTefuda, ba = game.bafuda;
+		var mon = [];
+		for(var i=0; i<te.count; i++)
+			mon.add([cards[te[i].no], true]) if te[i].month == month;
+		for(var i=0; i<ba.count; i++)
+			mon.add([cards[ba[i].no], false]) if ba[i].month == month;
+		return mon;
+	}
+
+	//	指定と違う月の札のリストを取得
+	function getDifferentMonth(month)
+	{
+		var te = game.currentTefuda, ba = game.bafuda;
+		var mon = [];
+		for(var i=0; i<te.count; i++)
+			mon.add([cards[te[i].no], true]) if te[i].month != month;
+		for(var i=0; i<ba.count; i++)
+			mon.add([cards[ba[i].no], false]) if ba[i].month != month;
+		return mon;
+	}
+
+	//	札を重ねたときの位置を返す
+	function getStackPos(layer, no)
+	{
+		var posdis = 2;
+		var line = 250;
+		with(layer)
+		{
+			var dis = .top + (.top > line ? posdis : -posdis) * no;
+			return [ .left, dis ];
+		}
+	}
+
+	//	札のZ座標をリセット
+	function resetCardAbsolute()
+	{
+		for(var i=0; i<cards.count; i++)
+			cards[i].resetAbsolute();
+	}
+
+	//	指定の札から指定の方向へ、最も近いアイテムを返す
+	function searchItem(item, dir)
+	{
+		var addmissible_error = 5;
+		var l, t;
+		with(item)
+			l = .left + (.width >> 1), t = .top + (.height >> 1);
+		var diff = 0x7fffffff;
+		var target;
+		var items	= [];
+		items.assign(cards);
+		for(var i=0; i<buttons.count; i++)
+			items.add(buttons[i]);
+		items.add(treasurebutton) if treasurebutton != void && treasurebutton.visible;
+		for(var i=0; i<items.count; i++)
+		{
+			//	元の札か選択不可能な札は無視する
+			if(items[i] == item || !items[i].focusable)
+				continue;
+
+			var d, rd;
+			var cl, ct;
+			with(items[i])
+				cl = .left + (.width >> 1), ct = .top + (.height >> 1);
+			switch(dir)
+			{
+			case 0:	//	左
+				d	= l - cl;			//	距離
+				rd	= Math.abs(ct - t);	//	直角方向の差
+				d	= width + d if d <= 0;			//	検索方向に見つからなかったときのための保険
+				break;
+
+			case 1:	//	上
+				d	= t - ct;
+				rd	= Math.abs(cl - l);
+				d	= height + d if d <= 0;
+				break;
+
+			case 2:	//	右
+				d	= cl - l;
+				rd	= Math.abs(ct - t);
+				d	= width + d if d <= 0;
+				break;
+
+			case 3:	//	下
+				d	= ct - t;
+				rd	= Math.abs(cl - l);
+				d	= height + d if d <= 0;
+				break;
+			}
+			if(d > rd && diff > d + rd)	//	直前の候補より近いなら、そちらへ
+			{
+				diff	= d + rd;
+				target	= items[i];
+			}
+		}
+		return target;
+	}
+
+	//	手札役を開く
+	function openTefudaYaku(player)
+	{
+		var yaku = game.curYaku[player][0];
+		var te	= game.tefuda[player];
+		if(yaku[0] == "くっつき")
+		{//	くっつき(喰付)
+			//	手札の同月を並べる
+			var pos = %[];
+			for(var i=0; i<te.count; i++)
+			{
+				var mon = te[i].month;
+				pos[mon]	= [] if !pos[mon];
+				pos[mon].add(te[i].no);
+			}
+			var same = [];
+			same.assign(pos);
+			var no = 0;
+			for(var i=0; i<same.count; i+=2)
+			{
+				var keys = same[i+1];
+				for(var j=0; j<keys.count; j++)
+				{
+					var pos = getTefudaPos(player, no);
+					with(cards[keys[j]])
+					{
+						.moveTo(pos[0], pos[1],, teyaku.movetime, teyaku.moveaccel);
+						.reverse	= false;
+					}
+					no++;
+				}
+			}
+		}
+		else
+		{//	手四
+			for(var i=0; i<te.count; i++)
+			{
+				if(te[i].month == yaku[2])
+				{
+					if(player == CPU)
+					{//	CPU側なら、表にする
+						cards[te[i].no].reverseTo(teyaku.movetime, teyaku.moveaccel);
+					}
+					else
+					{//	同月4枚の札を一段上に上げる
+						with(cards[te[i].no])
+							.moveTo(, .top - 16,, teyaku.movetime, teyaku.moveaccel);
+					}
+				}
+			}
+		}
+		return teyaku.movetime;
+	}
+
+	var lastTreasureButtonEnabled;
+	property enabledButtons
+	{
+		setter(f)
+		{
+			if(buttons[0].enabled === f)
+				return;
+			for(var i=0; i<buttons.count; i++)
+				buttons[i].enabled	= f;
+			if(treasurebutton != void)
+			{
+				if(f)
+				{
+					dm("enabled buttons: true / treasurebutton.enabled = "+treasurebutton.enabled+" / "+lastTreasureButtonEnabled);
+					treasurebutton.enabled	= lastTreasureButtonEnabled if lastTreasureButtonEnabled!==void;	//	元の状態に戻す
+					lastTreasureButtonEnabled	= void;
+				}
+				else if(lastTreasureButtonEnabled === void)
+				{
+					dm("enabled buttons: false / treasurebutton.enabled = "+treasurebutton.enabled+" / "+lastTreasureButtonEnabled);
+					lastTreasureButtonEnabled	= treasurebutton.enabled;	//	状態を保存して
+					treasurebutton.enabled	= false;						//	無効にする
+				}
+			}
+		}
+	}
+
+	//-------------------------------------------------------------------------
+	//	メニューの表示など
+	//	右クリックメニューの表示
+	function showMenu()
+	{
+		stop();				//	実行を一時停止する
+		enabledAll = false;	//	フォーカスを得るアイテムをすべて得られないようにして
+		config.show();		//	新しいアイテムを取得
+	}
+	function hideMenu()
+	{
+		var time	= config.hide();
+//		exec();	//	実行再開
+		next(current, time);
+		enabledAll = true;
+	}
+
+	//	宝具リストボタンを表示する
+	function showSpecialButton()
+	{
+		if(game.宝具あり)
+		{
+			available	= game.availableTreasure();	//	使用可能な宝具の一覧
+			if(available.count == 0)
+				return;	//	使える宝具がないなら、ボタンを表示しない
+			treasurebutton.enabled	= true;
+		}
+	}
+
+	//	宝具リストボタンを隠す
+	function hideSpecialButton()
+	{
+		if(game.宝具あり)
+			treasurebutton.enabled	= false;
+	}
+
+	//	宝具メニューの表示
+	var treasure;
+	var available;
+	function showSpecialMenu()
+	{
+		available	= game.availableTreasureInMenu();	//	メニューで使用可能な宝具の一覧
+		if(available.count == 0)
+			return;
+		hideSpecialButton();	//	宝具ボタンを無効にする
+		enabledAll		= false;
+		treasure	= new TreasureMenuLayer(window, this) if treasure == void;
+		pressCancelTo	= hideSpecialMenu;		//	右クリック=キャンセル
+		treasure.show(available,,,, cursorX, cursorY, game);
+	}
+
+	//	宝具メニューの解除
+	function hideSpecialMenu(name, sno, tno)
+	{
+		var time	= treasure.hide();
+		enabledAll		= true;
+		pressCancelTo	= void;
+
+		if(sno !== void)
+		{
+			useSpecialForPut([sno, tno]);
+//			hideSpecialButton();	//	宝具は1ターンに1回のみ
+			dm("enabled = "+treasurebutton.enabled);
+		}
+		else
+			showSpecialButton();	//	宝具を選択しなかったので、ボタンを有効に戻す
+	}
+
+	//	札一覧の表示
+	function showFudaReference()
+	{
+		stop();				//	実行を一時停止する
+		enabledAll = false;
+		config.enabled	= false if config.showed;
+		reference.showFuda();
+	}
+
+	//	役一覧の表示
+	function showYakuReference()
+	{
+		stop();				//	実行を一時停止する
+		enabledAll = false;
+		config.enabled	= false if config.showed;
+		reference.showYaku();
+	}
+
+	//	札一覧・役一覧の消去
+	function hideReference()
+	{
+		var time	= reference.hide();
+		if(!config.showed)
+		{
+			next(current, time);
+			enabledAll = true;
+		}
+		else
+			config.enabled	= true;
+	}
+
+	//	宝具詳細の表示
+	function showTreasureList()
+	{
+		stop();
+		enabledAll	= false;
+		config.enabled	= false if config.showed;
+		listmenu.show();
+	}
+
+	//	宝具詳細の消去
+	function hideTreasureList()
+	{
+		var time	= listmenu.hide();
+		if(!config.showed)
+		{
+			next(current, time);
+			enabledAll	= true;
+		}
+		else
+			config.enabled	= true;
+	}
+
+	//	有効/無効 = フォーカスを与えているかどうか
+	var lastfocusable;
+	var lastfocus;
+	property enabledAll
+	{
+		setter(e)
+		{
+			if(e == enabledAll)	return;
+
+			//	フォーカスが暴れないように、フォーカスを得る
+//			var lf = focusable;
+			focusable	= true;
+			focus();
+			if(e)
+			{
+				if(lastfocus != null && lastfocus != void)
+					lastfocus.acceptable= true;
+				window.focusedLayer	= lastfocus;
+
+				var i;
+				for(i=0; i<cards.count; i++)
+					cards[i].acceptable	= lastfocusable[i];
+				focusable	= lastfocusable[i];
+				enabledButtons	= true;
+				lastfocusable	= void;
+			}
+			else
+			{
+				lastfocusable	= [];
+				lastfocus	= window.focusedLayer;
+
+				var i;
+				enabledButtons	= false;
+				for(i=0; i<cards.count; i++)
+				{
+					lastfocusable[i] = cards[i].acceptable;
+					if(cards[i] != lastfocus)
+						cards[i].acceptable	= false;
+				}
+				lastfocusable[i]= focusable;
+				focusable	= false;	//	これ自体もフォーカス不可にする
+				if(lastfocus != null && lastfocus != void)
+					lastfocus.acceptable	= false;	//	現在フォーカスを持っている札を、最後にフォーカス不可にする
+			}
+			focusable	= e;	//	元に戻す
+		}
+		getter	{ return lastfocusable == void; }
+	}
+
+	property FudasHitThreshold
+	{
+		setter(t)
+		{
+			for(var i=0; i<cards.count; i++)
+				cards[i].hitThreshold	= t;
+		}
+		getter	{ return cards[0].hitThreshold; }
+	}
+
+	function gotitle()
+	{
+		plugin.gotitle();
+	}
+}
+
+class GameButtonLayer extends PushButtonLayer
+{
+	function GameButtonLayer()
+	{
+		super.PushButtonLayer(...);
+	}
+
+	function onKeyDown(key, shift)
+	{
+		var dir, it;
+		switch(key)
+		{
+		case VK_LEFT:
+			dir	= 0;
+			break;
+
+		case VK_RIGHT:
+			dir	= 2;
+			break;
+
+		case VK_UP:
+			dir	= 1;
+			break;
+
+		case VK_DOWN:
+			dir	= 3;
+			break;
+		}
+		if(dir !== void)
+		{
+			if(it = parent.searchItem(this, dir))
+			{
+				it.focus();
+				return;
+			}
+		}
+		return super.onKeyDown(key, shift, true);
+	}
+}
+
+//	クリック待ちアイコン
+class PushIconLayer extends ParticleLayer
+{
+	var timer;
+	var patterncount	= 4;
+	var exec;
+
+	function PushIconLayer(win, par, delay=0, exec)
+	{
+		super.ParticleLayer(...);
+		this.exec	= exec;
+
+		loadImages("hf_push");
+		setSize(imageWidth \ patterncount, imageHeight);
+		setPos(550, 540);
+		absolute	= 1000000;
+		opacity		= 255;
+		hitThreshold= 256;
+
+		if(delay > 0)
+			visible		= false;
+		else
+		{
+			visible		= true;
+			delay		= 100;
+		}
+
+		with(timer = new Timer(onTimer, ""))
+			.interval = delay, .enabled = true;
+
+		focusable	= true;
+		focus();
+	}
+
+	function finalize()
+	{
+		release(timer);
+		super.finalize(...);
+	}
+
+	function onTimer()
+	{
+		if(visible)
+		{
+			if(imageWidth + imageLeft - width > 0)
+				imageLeft	-= width;
+			else
+				imageLeft	= 0;
+		}
+		else
+		{
+			timer.interval	= 100;
+			visible	= true;
+		}
+	}
+
+	function onKeyDown()
+	{
+		exec();
+	}
+}
+
+//	花札プラグイン
+class HanafudaPlugin extends KAGPlugin
+{
+	var window;
+	var hanafuda;
+
+	var showed;
+
+	var winner;
+
+	var win = %[], lose = %[], title = %[];
+	var team= [];
+	var lastmp;
+
+	function HanafudaPlugin(win)
+	{
+		super.KAGPlugin();
+		window	= win;
+	}
+
+	function finalize()
+	{
+		release(hanafuda);
+		super.finalize(...);
+	}
+
+	function show(time, accel, points, cpuvscpu, mode, bg, continuing=false, thinklevel)
+	{
+		if(showed)
+			return;
+		showed	= true;
+
+		hanafuda	= new HanafudaBaseLayer(window, window.fore.base, this, team, points, cpuvscpu, mode, bg, continuing ? lastmp : void, thinklevel);
+		hanafuda.init(time, accel);
+	}
+
+	function hide()
+	{
+		if(!showed)
+			return;
+		showed	= false;
+
+		if(typeof global.kag != "undefined")
+		{
+			if(winner)	//	0: CPU / 1: Player
+			{
+				kag.process(win.storage, win.label);
+			}
+			else
+			{
+				kag.process(lose.storage, lose.label);
+			}
+		}
+	}
+
+	function gotitle()
+	{
+		if(!showed)
+			return;
+		showed	= false;
+
+		if(typeof global.kag != "undefined")
+		{
+			kag.process(title.storage, title.label);
+		}
+	}
+
+	function close()
+	{
+		if(hanafuda)
+		{
+			invalidate hanafuda;
+			hanafuda	= void;
+		}
+	}
+
+	function onRestore(f, clear, elm)
+	{
+		// すべての、栞を読み出すときに呼ばれる
+		hide();	//	状態が復元されるので閉じる
+	}
+
+	//	終了確認ダイアログが表示されたら、処理を一時停止させる
+	function onCloseQuery(f)
+	{
+		if(hanafuda != void)
+			hanafuda.stop();
+	}
+
+	function onCancelClose(f)
+	{
+		if(hanafuda != void)
+			hanafuda.resume();
+	}
+
+	//	花札の札画像をキャッシュする
+	var cached	= false;
+	function cacheHanafudaImages()
+	{
+		if(!cached)
+		{
+			//	札をまとめてある画像を読み込む
+			var tick	= System.getTickCount();
+			var fudastorages	= [
+				[ "xlarge",	fudaLLStorage ],
+				[ "small",	fudaSStorage ],
+				[ "xsmall",	fudaSSStorage ]
+			];
+			createShareImages();
+			with(shareimages)
+			{
+				for(var i=0; i<fudastorages.count; i++)
+				{
+					.load(kag, kag.fore.base, fudastorages[i][0], fudastorages[i][1]);
+					with(.get(fudastorages[i][0]))
+					{
+						.width	= .width \ 4;
+						.height	= .height \ 12;
+					}
+				}
+			}
+			cached	= true;
+			dm(@"fuda image cache time: ${System.getTickCount()-tick}(ms)");
+		}
+	}
+
+	function releaseHanafudaImages()
+	{
+		if(cached)
+		{
+			releaseShareImages();
+			cached	= false;
+		}
+	}
+}
+if(typeof global.kag != "undefined")
+{
+	//	プラグインを登録
+	kag.addPlugin(global.hanafuda_object = new HanafudaPlugin(kag));
+
+	//	呼び出しタグを追加
+	var kt = kag.tagHandlers;
+	//	花札開始(player, cpu, win[storage, target], lose[storage, target])
+	kt.hanafudagame_start	= function(elm)
+	{
+		with(hanafuda_object)
+		{
+			.team[0]		= elm.cpu !== void ? +elm.cpu : 1;
+			.team[1]		= elm.player !== void ? +elm.player : 0;
+			.win.storage	= elm.win_storage;
+			.win.label		= elm.win_target;
+			.lose.storage	= elm.lose_storage;
+			.lose.label		= elm.lose_target;
+			.title.storage	= elm.title_storage;
+			.title.label	= elm.title_target;
+			var cpupoint	= elm.cpupoint != void ? +elm.cpupoint : 12;
+			var playerpoint	= elm.playerpoint != void ? +elm.playerpoint : 12;
+//			var bg			= elm.bg !== void ? elm.bg : ((kag.fore.base.storage.indexOf("hf_")==0 && kag.fore.base.storage.indexOf("hf_ps") != 0) ? ("hf_ps"+kag.fore.base.storage.substr(3)) : void);
+			var continuing	= elm.continuing !== void ? +elm.continuing : false;
+			var thinklevel	= elm.thinklevel !== void ? +elm.thinklevel : 0;
+			dm(@"cpupoint = ${cpupoint} / playerpoint = ${playerpoint} (${elm.cpupoint}, ${elm.playerpoint})");
+			dm(@"cpuvscpu = ${+elm.cpuvscpu} / mode = ${elm.mode}");
+//			.show(elm.time, elm.accel, [cpupoint, playerpoint], +elm.cpuvscpu, elm.mode, bg, continuing, thinklevel);
+			.show(elm.time, elm.accel, [cpupoint, playerpoint], +elm.cpuvscpu, elm.mode, elm.bg, continuing, thinklevel);
+
+			//	札画像の仮読み込みを行う
+			.cacheHanafudaImages();
+		}
+		return 0;
+	} incontextof kag;
+	//	花札を閉じる()
+	kt.hanafudagame_close	= function(elm)
+	{
+		hanafuda_object.close();
+		return 0;
+	} incontextof kag;
+
+	//	札画像の仮読み込みを行う
+	kt.hanafudagame_cache	= function(elm)
+	{
+		hanafuda_object.cacheHanafudaImages();
+		return 0;
+	} incontextof kag;
+
+	kt.hanafudagame_releasecache	= function(elm)
+	{
+		hanafuda_object.releaseHanafudaImages();
+		return 0;
+	} incontextof kag;
+
+	//	MPをリセットする
+	kt.hanafudagame_resetmp	= function(elm)
+	{
+		release(hanafuda_object.lastmp);
+		hanafuda_object.lastmp	= void;
+		return 0;
+	} incontextof kag;
+
+	//-------------------------------------------------------------------------
+	//	花札ストーリー部分の設定
+	.textFont	= %[size:29,rubysize:12,rubyoffset:-2,color:0x000000,edge:false];
+	.textStyle	= %[linespacing:13,pitch:0];
+	.textSettings["hanafuda"]	= [
+		2,	//	2枚分
+		"hanafuda_pg",	//	専用のpg(ページ切り替え)タグ
+		,
+		//	上部ウィンドウ
+		%[left:190,top:18+20,marginl:13,margint:12,marginr:16,marginb:22,frame:"tw_花札"],
+		.textFont,
+		.textStyle,
+		//	下部ウィンドウ
+		%[left:190,top:428-20,marginl:13,margint:12,marginr:16,marginb:22,frame:"tw_花札"],
+		.textFont,
+		.textStyle
+	];
+	.hanafudaFace2no	= %[u:0, l:1, upper:0, lower:1 ];
+	.hanafudaFacePos	= [
+		[ 7,   7+20 ],
+		[ 7, 417-20 ]
+	];
+
+	//	花札会話モードにする()
+	kt.hanafuda_conversation	= function(elm)
+	{
+		tagHandlers.settextmode(%[textmode:"hanafuda"]);
+		.f.notextonoff	= true;	//	立ち絵切り替え時にもメッセージレイヤーは表示したままにする
+		//	メッセージレイヤーの位置を設定
+		var tsf	= textSettings["hanafuda"];
+		for(var i=0; i<2; i++)
+		{
+			var pos	= tsf[(i+1)*3];
+			fore.messages[i].setPos(pos.left, pos.top);
+			back.messages[i].setPos(pos.left, pos.top);
+		}
+		//	使用する前景レイヤーの基準位置を設定
+		for(var i=0; i<2; i++)
+		{
+			var pos = hanafudaFacePos[i];
+			with(fore.layers[i])
+			{
+				.setPos(pos[0], pos[1]);
+				.opacity	= 255;
+//				dm("kag.fore.layers["+i+"].opacity = "+.opacity);
+			}
+			with(back.layers[i])
+			{
+				.setPos(pos[0], pos[1]);
+				.opacity	= 255;
+//				dm("kag.back.layers["+i+"].opacity = "+.opacity);
+			}
+		}
+		tagHandlers.settextonoff(%[time:300,mode:"fast"]);
+		return 0;
+	} incontextof kag;
+	//	花札会話モードを解除()
+	kt.hanafuda_conversation_end	= function(elm)
+	{
+		tagHandlers.settextmode(%[textmode:"minigame"]);
+		current.visible	= false;
+		return 0;
+	} incontextof kag;
+	//	上部メッセージウィンドウに文字を表示()
+	kt.hfupper	= function(elm)
+	{
+		tagHandlers.hfu(elm);
+		fore.messages[1].opacity	= int(128 * sf.messageFrameOpacity / 255);	//	他方のメッセージレイヤーを暗くする(比で50%)
+		return tagHandlers.er(%[]);	//	表示されている文字列を消去
+	} incontextof kag;
+	//	消去しないで上部を指定
+	kt.hfu	= function(elm)
+	{
+		setCurrentMessageLayer(%[page:"fore",layer:"message0"]);
+//		fore.messages[0].opacity	= 255;
+		return 0;
+	} incontextof kag;
+	//	下部メッセージウィンドウに文字を表示()
+	kt.hflower	= function(elm)
+	{
+		tagHandlers.hfl(elm);
+		fore.messages[0].opacity	= int(128 * sf.messageFrameOpacity / 255);	//	他方のメッセージレイヤーを暗くする(比で50%)
+		return tagHandlers.er(%[]);	//	表示されている文字列を消去
+	} incontextof kag;
+	//	消去しないで下部を指定
+	kt.hfl	= function(elm)
+	{
+		setCurrentMessageLayer(%[page:"fore",layer:"message1"]);
+//		fore.messages[1].opacity	= 255;
+		return 0;
+	} incontextof kag;
+	//	背景の表示開始
+	kt.hfbg	= function(elm)
+	{
+		with(tagHandlers)
+		{
+			var page	= elm.page !== void ? elm.page : "back";
+			.cl_notrans(%[page:page,layer:"all"]);	//	立ち絵をすべて消去
+			var storage = elm.storage !== void ? elm.storage : global.bgimage;
+			var res = .imageex(%[page:page,layer:"base",storage:elm.storage]);
+			elm.textoff	= false;	//	表示中のテキストレイヤーを先に消去しない
+			back.messages[0].visible	= false;	//	裏は消去しておく
+			back.messages[1].visible	= false;
+			if(elm.time !== void)
+				res	= .transex(elm);
+
+			if(+elm.border)
+			{
+				elm.tagname	= "hfbginit";
+				elm.time	= 600;
+				conductor.pendings.insert(0, elm);
+			}
+
+			return res;
+		}
+	} incontextof kag;
+	//	各シーンの開始時用(襖が閉まっているときのためのもの)
+	kt.hfinit	= function(elm)
+	{
+		elm.page	= "fore";
+		return tagHandlers.hfbg(elm);
+	} incontextof kag;
+	//	背景の黒枠表示(time)
+	kt.hfbginit	= function(elm)
+	{
+		//	backlay
+		updateBeforeCh = 1;
+		backupLayer(%[], true);
+
+		//	背景に黒枠を描画
+		var layer	= new global.Layer(this, back.base);
+		with(back.base)
+		{
+			layer.loadImages("hf_黒枠");
+			var w = layer.imageWidth, h = layer.imageHeight;
+			var ct = .type, cf = .face;
+			.type	= ltOpaque;
+			.face	= dfOpaque;
+			.operateRect(0, .height - h, layer, 0, 0, w, h, omAuto, 255);
+			layer.flipUD();
+			.operateRect(0, 0, layer, 0, 0, w, h, omAuto, 255);
+			.face	= cf;
+			.type	= ct;
+		}
+		release(layer);
+
+		//	トランジション
+		elm.time	= 600 if elm.time === void;
+		tagHandlers.trans(%[rule:"上下から中央へ(黒枠用)",time:elm.time,vague:16]);
+		return tagHandlers.wt(%[canskip:true]);
+	} incontextof kag;
+	//	顔ウィンドウの表示/切り替え(chara,face,storage,pos,layer,left,top)
+	kt.hffacechg2	= function(elm)
+	{
+		with(elm)
+		{
+			tagHandlers.stopmove(%[]);
+			tagHandlers._hfpos2lno(elm);
+
+			//	表示位置
+			if(.left === void)
+			{//	座標の指定がなく
+				if(.chara != global.lastChara[.layer])
+				{//	キャラクターが変わるときは
+					//	基本の座標へ移動させる
+					.left	= global.hanafudaFacePos[.layer][0];
+				}
+				else
+				{//	キャラクターが変わらないなら
+					//	元の座標のまま
+					.left	= fore.layers[.layer].left;
+				}
+			}
+			if(.top === void)
+			{
+				if(.chara != global.lastChara[.layer])
+					.top	= global.hanafudaFacePos[.layer][1];
+				else
+					.top	= fore.layers[.layer].top;
+			}
+
+			//	顔変え
+			global.lastChara	= [] if typeof global.lastChara == "undefined";
+			.chara		= global.lastChara[.layer] if .chara == void;
+			.storage	= "hf_"+.chara+"-"+.face if .storage == "";
+			if(!Storages.isExistentStorage(.storage+".png") && !Storages.isExistentStorage(.storage+".tlg"))
+				return 0;
+			.textoff	= false;	//	テキストは消去しない
+			.layer		= string .layer;
+			.page		= "back";
+			.visible	= true;
+			.pos		= void;
+//			.time		= 400 if .time === void;
+			backupLayer(%[layer:"message0"], true);	//	メッセージ保存
+			backupLayer(%[layer:"message1"], true);
+			back.messages[+.layer].visible	= true;	//	顔ウィンドウを変更しようとする側のメッセージレイヤーを表示状態にする
+			global.lastChara[.layer] = .chara;
+
+//			return tagHandlers.fg(elm);		//	立ち絵表示/切り替え
+
+			//	読み込み及びトランジション
+			//		画面効果の影響を避けるため、fgを使用しない
+			var doTrans	= .trans!=false || .rule != "" || .time != 0 || .vague != 0;
+			if(doTrans)
+				tagHandlers.backlay(%[]);	//	全ての画像を退避
+
+			.index	= (+.layer + 1) * 1000 if .index === void;
+			tagHandlers.image(elm);
+			if(.mono != void)
+			{
+				.color	= 0xBB00BBFF if .color === void;
+				with(back.layers[+.layer])
+				{
+					var lastface	= .face;
+					.face	= dfOpaque;
+					.holdAlpha	= true;
+					.fillRect(0, 0, .width, .height, (+mp.color)&0xFFFFFF);
+					.opacity= (+mp.color) >> 24;
+					.face	= lastface;
+				}
+			}
+
+			if(doTrans)
+			{
+				.layer	= "base";
+				.rule	= "クロスフェード" if .rule === void;
+				.time	= defaultFGTransTime if .time === void;
+				.vague	= defaultVaguePoint if .vague === void;
+				return tagHandlers.transex(elm);
+			}
+			return 0;
+		}
+	} incontextof kag;
+	//	キャラクターの変化をチェックして、処理を行う
+	kt.hffacechg = function(elm)
+	{
+		tagHandlers._hfpos2lno(elm);
+		with(elm)
+		{
+			//	キャラクターが変化する場合、
+			global.lastChara	= [] if typeof global.lastChara == "undefined";
+			if(.chara != void && global.lastChara[.layer] != .chara)
+			{
+				//	一度テキストレイヤーを消去する
+				.tagname	= "hffacechg2";
+				conductor.pendings.insert(0, elm);
+				return tagHandlers.textoff(%[layer:string .layer]);
+			}
+
+			//	実際の処理へ
+			return tagHandlers.hffacechg2(elm);
+		}
+	} incontextof kag;
+	//	ページ切り替え待ちありの顔ウィンドウ表示切替
+/*	kt.hfface = function(elm)
+	{
+		elm.tagname			= "hffacechg";
+		conductor.pendings.insert(0, elm);
+		return tagHandlers.p();
+	} incontextof kag;
+*/	//	顔ウィンドウの消去(chara,storage,pos,layer)
+	kt.hffaceclear2	= function(elm)
+	{
+		tagHandlers._hfpos2lno(elm);
+		with(elm)
+		{
+			var layer	= .layer;
+			layer	= global.getLayerNoByStorage(.storage) if .storage != "";
+			if(.chara != "")
+			{
+				var l = fore.layers;
+				for(var i=0; i<l.count; i++)
+				{
+					if(l[i].storage.substr(0, l[i].storage.indexOf("-")) == "hf_"+.chara)
+					{
+						layer	= i;
+						break;
+					}
+				}
+			}
+			if(layer == "all")
+			{
+				//	二つとも削除
+				tagHandlers.hffaceclear(%[layer:"0"]);
+				.layer	= 1;
+				return tagHandlers.hffaceclear2(elm);
+			}
+
+			.layer		= string layer;
+			.pos		= void;
+			.textoff	= false;	//	テキストは消去しない
+//			.time		= 400 if .time === void;
+			if(.time > 0)
+			{
+				.page	= "back";
+				backupLayer(%[layer:"message"+((layer+1)&1)], true);	//	メッセージ保存
+				back.messages[layer].visible	= false;				//	現在の顔ウィンドウが表示されている方のメッセージウィンドウを消去する
+//				dm("back.messages["+layer+"].visible = "+back.messages[layer].visible);
+//				dm("back.messages["+((layer+1)&1)+"].visible = "+back.messages[((layer+1)&1)].visible);
+				return tagHandlers.cl_auto(elm);	//	立ち絵消去
+			}
+			else
+			{
+				.page	= "fore";
+				return tagHandlers.freeimage(elm);
+			}
+		}
+	} incontextof kag;
+	//	ページ切り替え待ちありの顔ウィンドウ消去
+	kt.hffaceclear	= function(elm)
+	{
+		elm.tagname			= "hffaceclear2";
+		conductor.pendings.insert(0, elm);
+		return tagHandlers.p();
+	} incontextof kag;
+	//	クリア
+	kt.hfclear	= function(elm)
+	{
+		for(var i=0; i<fore.messages.count; i++)
+		{
+//			tagHandlers.freeimage(%[page:"fore",layer:string i]) if ;
+			kag.fore.layers[i].freeImage() if kag.fore.layers.count > i;
+			fore.messages[i].visible	= false;
+		}
+		tagHandlers.cm(%[]);
+		return 0;
+	} incontextof kag;
+	//	全クリア
+	kt.hfallclear	= function(elm)
+	{
+		for(var i=0; i<fore.layers.count; i++)
+			tagHandlers.freeimage(%[page:"fore",layer:string i]);
+		for(var i=0; i<fore.messages.count; i++)
+			fore.messages[i].visible	= false;
+		for(var i=0; i<back.layers.count; i++)
+			tagHandlers.freeimage(%[page:"back",layer:string i]);
+		for(var i=0; i<back.messages.count; i++)
+			back.messages[i].visible	= false;
+		tagHandlers.cm(%[]);
+		return 0;
+	} incontextof kag;
+	//	フェイスを基本位置へ移動させる
+	//		pos, layer, storage, time, accel, opacity, wait, canskip
+	kt.hfface2def	= function(elm)
+	{
+		tagHandlers._hfpos2lno(elm);
+		with(elm)
+		{
+			.layer	= global.getLayerNoByStorage(.storage) if .storage != "";
+
+			.opacity	= 255 if .opacity === void;
+			.textoff	= false;
+			elm.path	= "("+global.hanafudaFacePos[.layer][0]+","+global.hanafudaFacePos[.layer][1]+","+.opacity+")";
+			.layer		= string .layer;
+		}
+		tagHandlers.move(elm);		//	移動開始
+		if(elm.wait!==void && !+elm.wait)
+			return 0;
+		else
+			return tagHandlers.wm(elm);	//	移動終了待ち
+	} incontextof kag;
+	//	フェイス/メッセージレイヤーを振動させる
+	//		pos, layer, storage, time, hmax, vmax, wait, canskip
+	//		※ 常に表と裏を振動させる
+	kt.hfquake	= function(elm)
+	{
+		tagHandlers._hfpos2lno2(elm);
+		with(elm)
+		{
+			.time	= -1 if .time === void;
+			var layer = elm.layerref;
+			layer.beginQuake(elm);
+			if((.wait === void || +.wait) && .time >= 0)
+				return tagHandlers.hfwquake(elm);
+			else
+				return 0;	//	待たない
+		}
+	} incontextof kag;
+	//	揺れが終了するのを待つ
+	kt.hfwquake	= function(elm)
+	{
+		tagHandlers._hfpos2lno2(elm);
+		return waitLayerQuake(elm);
+	} incontextof kag;
+	//	揺れを止める
+	kt.hfstopquake	= function(elm)
+	{
+		if(elm.layer===void && elm.pos===void)
+		{//	全てのレイヤーの揺れを止める
+			for(var i=0; i<fore.layers.count; i++)
+			{
+				fore.layers[i].stopQuake() if fore.layers[i].isQuaking;
+				back.layers[i].stopQuake() if back.layers[i].isQuaking;
+			}
+			for(var i=0; i<fore.messages.count; i++)
+			{
+				fore.messages[i].stopQuake() if fore.messages[i].isQuaking;
+				back.messages[i].stopQuake() if back.messages[i].isQuaking;
+			}
+		}
+		else
+		{//	指定レイヤーの揺れを止める
+			tagHandlers._hfpos2lno2(elm);
+			with(elm)
+			{
+				var layer = elm.layerref;
+				if(layer.isQuaking)
+					layer.stopQuake();
+				else
+				{
+					//	逆のページで揺れているかも
+					.page	= .page == "fore" ? "back" : "fore";
+					tagHandlers._hfpos2lno2(elm);
+					layer = elm.layerref;
+					if(layer.isQuaking)
+						layer.stopQuake();
+				}
+			}
+		}
+		return 0;
+	} incontextof kag;
+	//	テキストウィンドウを前景レイヤーへ展開
+	//		src(0〜), dest(2〜), page=fore
+	kag.tagHandlers.hfmsg2layer	= function(elm)
+	{
+		with(elm)
+		{
+			.page	= "fore" if .page===void;
+			.src	= currentNum if .src === void;
+			.dest	= 2 if .dest === void;
+			var srcl = kag[.page].messages[.src];
+			var destl = kag[.page].layers[.dest];
+			with(destl)
+			{
+				dm(@"msg2layer: src(face=${srcl.face} type=${srcl.type} holdAlpha=${srcl.holdAlpha} neutralColor=${srcl.neutralColor}) dest(face=${.face} type=${.type} holdAlpha=${.holdAlpha} neutralColor=${.neutralColor})");
+				.setPos(srcl.left, srcl.top);
+				.setSize(srcl.width, srcl.height);
+				var lastface = .face;
+				.face	= dfAlpha;
+				.holdAlpha	= false;
+				.copyRect(0, 0, srcl, 0, 0, .width, .height);
+				with(srcl.lineLayer)
+					destl.operateRect(.left, .top, srcl.lineLayer, 0, 0, .width, .height, omAlpha);
+				.type		= srcl.type;// == ltAddAlpha ? ltAddAlpha : ltAlpha;
+				.opacity	= srcl.opacity;
+				srcl.opacity= 0;
+				.visible	= true;
+				.face		= lastface;
+			}
+			return 0;
+		}
+	} incontextof kag;
+	//	汗をかく
+	//		layer, pos, falltime, time, both
+	kt.hfsweat	 = function(elm)
+	{
+		tagHandlers._hfpos2lno(elm);
+		with(elm)
+		{
+			.falltime	= 500 if .falltime === void;
+			.time		= 800 if .time === void;
+			new ImpatientIconLayer(kag, kag.fore.base, kag.fore.layers[+.layer], false, .falltime, .time);
+			if(.both === void || +.both)
+				new ImpatientIconLayer(kag, kag.back.base, kag.back.layers[+.layer], false, .falltime, .time);
+		}
+		return 0;
+	} incontextof kag;
+	//	青筋を立てる
+	//		layer, pos, count, both
+	kt.hfburstblood	= function(elm)
+	{
+		tagHandlers._hfpos2lno2(elm);
+		with(elm)
+		{
+			.count	= 2 if .count === void;
+			if(.count > 0)
+			{
+				//	指定の回数だけ表示する
+				new AngerIconLayer(kag, kag.fore.base, .layerref, false, .count);
+				if(.both === void || +.both)
+					new AngerIconLayer(kag, kag.back.base, kag.back.layers[+.layer], false, .count);
+			}
+			else
+			{
+				//	現在表示中でなければ、継続的な表示を開始する
+				if(typeof .layerref.burstblood == "undefined" || .layerref.burstblood == void)
+				{
+					.layerref["burstblood"]	= new AngerIconLayer(kag, kag.fore.base, .layerref, false, .count);
+					if(.both === void || +.both)
+					{
+						var layer = kag.back.layers[+.layer];
+						layer["burstblood"]	= new AngerIconLayer(kag, kag.back.base, layer, false, .count);
+					}
+				}
+			}
+		}
+		return 0;
+	} incontextof kag;
+	//	汗をすべて消す
+	kt.hfstopsweat	= function(elm)
+	{
+		finishAllMarks("ImpatientIconLayer");
+		return 0;
+	} incontextof kag;
+	//	青筋をすべて消す
+	kt.hfstopburstblood	= function(elm)
+	{
+		finishAllMarks("AngerIconLayer");
+		return 0;
+	} incontextof kag;
+	//	pos, currentNumからレイヤー番号を取得
+	kt._hfpos2lno	= function(elm)
+	{
+		with(elm)
+		{
+			//	顔位置指定があれば、それを入れる
+			if(.layer !== void)
+				return;
+			if(.pos !== void)
+			{
+				if(.pos == "upper")
+					tagHandlers.hfupper();
+				else if(.pos == "lower")
+					tagHandlers.hflower();
+				.layer	= global.hanafudaFace2no[.pos] != void ? global.hanafudaFace2no[.pos] : currentNum;
+			}
+			else
+				.layer	= currentNum;
+		}
+		return 0;
+	} incontextof kag;
+	//	メッセージレイヤーにも対応し、レイヤー自身への参照も取得
+	kt._hfpos2lno2	= function(elm)
+	{
+		with(elm)
+		{
+			var layer;
+			.page	= "fore" if .page === void;
+			if(.layer != void && .layer[0] == "m")
+				layer	= kag[.page].messages[+.layer[.layer.length-1]];
+			else
+			{
+				tagHandlers._hfpos2lno(elm);
+//				.layer		= global.getLayerNoByStorage(.storage) if .storage != "";
+				layer	= kag[.page].layers[+.layer];
+			}
+			elm["layerref"]	= layer;
+		}
+		return 0;
+	} incontextof kag;
+}
+
+//	花札モード用のページ切り替え
+kag.tagHandlers.hanafuda_pg	= function(elm)
+{
+	elm.tagname	= "er";
+	conductor.pendings.insert(0, elm);
+
+	return tagHandlers.p(%[]);
+} incontextof kag;
+
+//	ノーマルモードのマップでキャラクターが次のコマへ到着した後、点滅して音を鳴らす
+class OnOffMover extends LoopMover
+{
+	var	se;
+	var	time;
+
+	function OnOffMover()
+	{
+		super.LoopMover(...);
+	}
+
+	function finalize()
+	{
+		super.finalize(...);
+	}
+
+	function init(elm)
+	{
+		with(elm)
+		{
+			time	= .time != void ? +.time : 500;			//	点滅の間隔
+			se		= .se != void ? .se : "irse020.wav";	//	再生する効果音
+		}
+		interval	= time \ 10;
+		layer.visible	= false;	//	最初に消す
+	}
+
+	function handler()
+	{
+		var tick	= System.getTickCount();
+		if(startTick > tick || lastTick + time > tick)
+			return false;
+
+		move();
+		lastTick	= tick;
+	}
+
+	function move()
+	{
+		layer.visible	= !layer.visible;	//	出現と隠蔽を切り替える
+		if(layer.visible)
+			playSound(se);	//	出現したとき、効果音を再生する
+	}
+}
+
+@endif
+/*-----------------------------------------------------------------------------/
+/	End of HanafudaPlugin.tjs
+/-----------------------------------------------------------------------------*/
+

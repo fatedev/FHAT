@@ -1,0 +1,860 @@
+/*-----------------------------------------------------------------------------/
+/	Copyright (C) 2004 TYPE-MOON All Rights Reserved.
+/		花札ゲーム用のチップレイヤー
+/-----------------------------------------------------------------------------*/
+@if(__HF_CHIPLAYER_DEFINED__==0)
+@set(__HF_CHIPLAYER_DEFINED__=1)
+Scripts.execStorage("subroutine.tjs");
+Scripts.execStorage("HFSound.tjs");
+
+//	前後位置
+//var	CardAbsolute		= 10 〜 5000;
+var YakuChipAbsolute		=  20000;
+var ItemAbsolute			=  20000;
+var FaceAbsolute			=  5;
+var IconAbsolute			=  5;
+var ConnectAbsolute			=  22000;
+var YakuListAbsolute		=  50000;
+var KoikoiConfirmAbsolute	=  50001;
+var CutinAbsolute			=  60000;
+var BalloonAbsolute			=  80000;
+var MenuAbsolute			= 100000;
+var PopupAbsolute			= 200000;
+
+/*	//	DisposePlugin.disposeに移行
+//	掃除屋
+var sweeper	= new AsyncTrigger(eraseAll, "");
+var eraseList	= [];
+
+function addErase(it)
+{
+	//	削除リストへ追加して、削除を予約する
+	eraseList.add(it);
+	sweeper.trigger();
+}
+
+function eraseAll()
+{
+	for(var i=0; i<eraseList.count; i++)
+		invalidate eraseList[i];
+	eraseList.clear();
+}
+*/
+
+//	共有画像管理
+class ShareImageList
+{
+	var images;
+	var ref;
+
+	function ShareImageList()
+	{
+		images	= %[];
+	}
+
+	function finalize()
+	{
+		release(images);
+	}
+
+	function load(win, par, name, storage)
+	{
+		if(images[name] == void)
+		{
+			with(images[name] = new global.Layer(win, par))
+			{
+				.loadImages(storage);
+				.setSizeToImageSize();
+			}
+			images[name+"_ref"]	= 1;
+		}
+		else
+			images[name+"_ref"]++;
+	}
+
+	function get(name)
+	{
+		return images[name];
+	}
+
+	function release(name)
+	{
+		if(images[name] != void)
+		{
+			images[name+"_ref"]--;
+			if(images[name+"_ref"] == 0)
+			{
+				release(images[name]);
+				delete images[name];
+				delete images[name+"_ref"];
+			}
+		}
+	}
+}
+var shareimages;
+function createShareImages()
+{
+	if(shareimages == void)
+		shareimages = new ShareImageList();
+	shareimages.ref++;
+}
+function releaseShareImages()
+{
+	if(shareimages != void)
+	{
+		shareimages.ref--;
+		if(shareimages.ref == 0)
+		{
+			invalidate shareimages;
+			shareimages	= void;
+		}
+	}
+}
+
+//	色々な動きを自律で行うレイヤー
+var movingchips	= [];	//	現在動いているレイヤー
+var chip_exts	= [ "png", "tlg", "bmp", "jpg" ];
+var retire_color	= 0x000000;
+var retire_opacity	= 128;
+class ChipLayer extends Layer
+{
+	var elements	= [];
+	var _org;
+	var moving;
+	var centerleft, centertop;
+
+	//	アニメーション関連
+	var lastAnimeTick;
+	var animeFunc;
+	var animeInterval;
+	var animeFrame, animeMaxFrame;
+
+	function ChipLayer(win, par)
+	{
+		super.Layer(...);
+	}
+
+	property org
+	{
+		getter
+		{
+			if(_org == void)
+			{
+				with(_org = new global.Layer(window, this))
+				{
+					.name	= "original";
+					.setSize(1, 1);
+				}
+			}
+			return _org;
+		}
+	}
+
+	function finalize()
+	{
+		animeFunc	= void;
+		stopAll();
+		System.removeContinuousHandler(handler);
+		release(soundtimer);
+		release(org);
+		super.finalize(...);
+	}
+
+	function loadImages(storage, clkey)
+	{
+		var file = Storages.chopStorageExt(storage), st;
+		for(var i=0; i<chip_exts.count; i++)
+		{
+			st = file + "." + chip_exts[i];
+			if(Storages.isExistentStorage(st))
+			{
+				super.loadImages(st, clkey);
+				return st;
+			}
+		}
+		throw new Exception(storage+"(png,tlg,bmp,jpg)を開くことが出来ません。");
+//		super.loadImages(...);
+
+		//	オリジナルへ
+/*		with(org)
+		{
+			.setImageSize(imageWidth, imageHeight);
+			.copyRect(0, 0, this, 0, 0, imageWidth, imageHeight);
+		}
+*/
+	}
+
+	//	現在の画像を保存
+	function saveOriginal()
+	{
+		with(org)
+		{
+			.setImageSize(imageWidth, imageHeight);
+			.copyRect(0, 0, this, 0, 0, imageWidth, imageHeight);
+			.setSize(imageWidth, imageHeight);
+		}
+	}
+
+	//	継続状態開始
+	var continuousOn;
+	function startContinuous()
+	{
+		if(!continuousOn)
+		{
+			System.addContinuousHandler(handler);
+			movingchips.add(this);
+//			dm("moving chips add: "+name);
+			continuousOn	= true;
+		}
+	}
+
+	//	継続状態終了
+	function endContinuous()
+	{
+		//	アニメも移動もここで終了させているのはかなり問題なよう。
+		//	次の機会に分離する。
+//		dm(name+".endContinuous(): "+continuousOn+"/"+animeFunc+"/"+elements.count);
+		if(continuousOn && animeFunc == void && elements.count == 0)
+		{
+			var mc = movingchips;
+			for(var i=0; i<mc.count; i++)
+			{
+				if(mc[i] == this)
+				{
+//					dm("moving chips erase: "+mc[i].name);
+					mc.erase(i);
+					break;
+				}
+			}
+			System.removeContinuousHandler(handler);
+			continuousOn	= false;
+		}
+	}
+
+	//	アニメーション開始
+	function beginAnimation(func, maxframe, interval=50)
+	{
+		animeFunc		= func;
+		animeMaxFrame	= maxframe;
+		animeFrame		= 0;
+		animeInterval	= interval;
+		lastAnimeTick	= System.getTickCount();
+		startContinuous();
+//		dm(name+".animeFunc = "+animeFunc);
+	}
+
+	//	アニメーション停止
+	function endAnimation()
+	{
+		animeFunc	= void;
+		endContinuous();
+	}
+
+	//	継続処理の開始
+	function start(name, elm, delay = 0)
+	{
+		elm.name		= name;
+//		elm.starttick	= System.getTickCount() + delay;
+		elm.delay		= delay;
+		elements.add(elm);
+		startContinuous();
+	}
+
+	//	進行度による処理の呼び出し
+	function handler(tick)
+	{
+		var past;
+		if(!(this isvalid))	return;	//	自身が既に無効化されていたら、処理を行わない
+		//	アニメ処理を実行
+		if(animeFunc && (past = tick - lastAnimeTick) > animeInterval)
+		{
+			animeFrame	+= past \ animeInterval;
+			while(animeFrame >= animeMaxFrame)
+				animeFrame	-= animeMaxFrame;
+//			dm(name+".anime = "+animeFrame);
+			animeFunc(animeFrame);	//	アニメーション実行
+			lastAnimeTick	= tick;
+		}
+		//	動作を実行
+		if(elements.count > 0)
+		{
+			var elm = elements[0];
+			with(elm)
+			{
+				if(.starttick === void)
+					.starttick	= tick + .delay;
+				past = tick - .starttick;
+				if(.lasttick < tick)
+				{
+					if(past >= .time)
+						finish();
+					else if(past >= 0)
+					{
+						if(.init)
+						{
+							.init(elm);
+							.init	= void;
+							centerleft	= left + (width >> 1);	//	中心座標を計算しておく
+							centertop	= top + (height >> 1);
+							.initfunc(this, elm) if(.initfunc);
+						}
+						.construct(elm, calcAccel(past / .time, .accel)) if .construct != void;
+						.lasttick	= tick;
+					}
+				}
+			}
+		}
+	}
+
+	//	継続処理の終了
+	function finish(nn=0)
+	{
+		if(typeof nn == "String")
+		{//	指定の名前の処理を終了
+			for(var i=0; i<elements.count; i++)
+			{
+				if(elements[i].name == nn)
+				{
+					finish(i);
+					break;
+				}
+			}
+		}
+		else
+		{//	現在実行中のものを終了
+			if(elements.count > 0)
+			{
+				var elm;
+				with(elm = elements[0])
+				{
+					.init(elm) if(.init);
+					centerleft	= left + (width >> 1);	//	中心座標を計算する
+					centertop	= top + (height >> 1);
+					.initfunc(this, elm) if(.initfunc);
+					.construct(elm, 1) if .construct != void;
+					.func(this, elm) if(.func);
+				}
+			}
+			stop();
+		}
+	}
+
+	function finishAll()
+	{
+		while(elements.count > 0)
+			finish();
+		stopAll();
+
+		release(soundtimer); soundtimer = void;	//	サウンド再生予約の無効化
+	}
+
+	//	継続処理の停止
+	function stop()
+	{
+		if(elements.count > 0)
+			elements.erase(0);
+		endContinuous();
+	}
+
+	function stopAll()
+	{
+		while(elements.count > 0)
+			stop();
+	}
+
+	//	そのタイミングで指定の処理を行う
+	function doThat(delay=0, func=void, name="do")
+	{
+		var elm	= %[];
+		with(elm)
+		{
+			.time		= 0;
+			.func		= func;
+		}
+		start(name, elm, delay);
+	}
+
+	//	(サイズが変わっても影響のない)移動の登録
+	function moveTo(l=left, t=top, opac=opacity, time=500, accel=0, delay=0, func=void, name="move", initfunc=void)
+	{
+//		finish(name);	//	同じ物を実行中なら停止する
+
+		//	設定
+		var elm	= %[];
+		with(elm)
+		{
+//			.cleft		= l + (width >> 1);		//	完了時位置
+//			.ctop		= t + (height >> 1);
+			.left		= int(l + 0.5);		//	完了時位置
+			.top		= int(t + 0.5);
+//			dm(this.name+" "+name+" target: ("+.left+", "+.top+")");
+			.opacity	= int(opac + 0.5);
+			.time		= time;
+			.accel		= accel;
+			.construct	= move_construct;
+			.func		= func;
+			.init		= move_init;
+			.initfunc	= initfunc;
+		}
+
+		//	登録
+		start(name, elm, delay);	//	nameを変更すれば、移動を複数登録できる(時間差で移動とか)
+	}
+
+	function move_init(elm)
+	{
+		with(elm)
+		{
+			.scleft		= left + (width >> 1);		//	初期位置
+			.sctop		= top + (height >> 1);
+			.sopacity	= opacity;
+		}
+		visible	= true;
+	}
+
+	function move_construct(elm, per)
+	{
+//		dm("move   : "+name+"."+elm.name+": "+per);
+		with(elm)
+		{
+			var cleft = .left + (width >> 1), ctop = .top + (height >> 1);
+			centerleft = int((cleft - .scleft) * per + .scleft + 0.5);
+			centertop = int((ctop - .sctop) * per + .sctop + 0.5);
+			setPos(centerleft - (width >> 1), centertop - (height >> 1));
+//			dm("move["+per+"]   : "+this.name+" setPos("+left+", "+top+"), center("+centerleft+", "+centertop+"), size("+width+", "+height+")");
+			opacity	= int((.opacity - .sopacity) * per + .sopacity + 0.5);
+		}
+	}
+
+	//	拡縮の登録
+	function magnifyTo(w, h, time=500, accel=0, delay=0, func=void, name="magnify")
+	{
+//		finish(name);
+
+		var elm = %[];
+		with(elm)
+		{
+			.ew			= int(w + 0.5);
+			.eh			= int(h + 0.5);
+			.time		= time;
+			.accel		= accel;
+			.construct	= magnify_construct;
+			.func		= func;
+			.init		= magnify_init;
+//			dm(this.name+" "+name+": ("+width+", "+height+") → ("+.ew+", "+.eh+") time="+time+" / accel="+accel);
+		}
+
+		start(name, elm, delay);
+	}
+
+	function magnify_init(elm)
+	{
+		with(elm)
+		{
+			.sw		= width;
+			.sh		= height;
+			.ew		= width if .ew === void;
+			.eh		= height if .eh === void;
+//			dm(name+": ("+.sw+", "+.sh+") → ("+.ew+", "+.eh+")");
+		}
+		visible	= true;
+	}
+
+	function magnify_construct(elm, per)
+	{
+		with(elm)
+		{
+			var w = int((.ew - .sw) * per + .sw + 0.5), h = int((.eh - .sh) * per + .sh + 0.5);
+			setPos(centerleft - (w >> 1), centertop - (h >> 1));
+//			dm("magnify["+per+"]: "+this.name+" setPos("+left+", "+top+"), center("+centerleft+", "+centertop+"), setSize("+w+", "+h+")");
+			setSize(w, h);
+			face	= dfOpaque;	holdAlpha	= false;
+			operateStretch(0, 0, w, h, org, 0, 0, org.imageWidth, org.imageHeight, omOpaque,, window.currentInterpolationMode);
+		}
+		visible	= true;
+	}
+
+	//	回転の登録
+	function rotateTo(deg=-360, time=1000, accel=0, delay=0, func=void, name="rotate")
+	{
+//		finish(name);	//	同じ物を実行中なら停止する
+
+		//	設定
+		var elm = %[];
+		with(elm)
+		{
+			.rad	= deg * A2R;
+			.time	= time;
+			.accel	= accel;
+			.construct	= rotate_construct;
+			.func		= func;
+			.init	= rotate_init;
+		}
+
+		//	登録
+		start(name, elm, delay);
+	}
+
+	function rotate_init(elm)
+	{
+		visible	= true;
+	}
+
+	function rotate_construct(elm, per)
+	{
+//		dm("rotate : "+name+"."+elm.name+": "+per);
+		with(elm)
+		{
+			var eat	= new easyAffineTransform();
+			eat.addRotateMatrix(rad * per);
+			var size= eat.calc(org.imageWidth, org.imageHeight);
+			setPos(centerleft - (size[0] >> 1), centertop - (size[1] >> 1));
+			setSize(size[0], size[1]);
+			eat.transformByProgram(this, org, 0, 0, org.imageWidth, org.imageHeight, window.currentInterpolationMode);
+			invalidate eat;
+		}
+	}
+
+	//	拡縮移動
+	function mmTo(l, t, w, h, time=300, accel=0, delay=0, func=void, name="move&magnify")
+	{
+//		finish(name);
+
+		var elm = %[];
+		with(elm)
+		{
+			.width	= int(w + 0.5);
+			.height	= int(h + 0.5);
+			.cleft	= int(l + 0.5) + (.width >> 1);
+			.ctop	= int(t + 0.5) + (.height >> 1);
+			.time		= time;
+			.accel		= accel;
+			.construct	= mm_construct;
+			.func		= func;
+			.init		= mm_init;
+		}
+
+		start(name, elm, delay);
+	}
+
+	function mm_init(elm)
+	{
+		with(elm)
+		{
+			.swidth	= width;
+			.sheight= height;
+			.scleft	= left + (width >> 1);
+			.sctop	= top + (height >> 1);
+		}
+		visible	= true;
+	}
+
+	function mm_construct(elm, per)
+	{
+//		dm("move&magnify: "+name+"."+elm.name+": "+per);
+		with(elm)
+		{
+			var w = int((.width - .swidth) * per + .swidth), h = int((.height - .sheight) * per + .sheight);
+			var l = int((.cleft - .scleft) * per + .scleft - (w >> 1)), t = int((.ctop - .sctop) * per + .sctop - (h >> 1));
+			setPos(l, t);
+			if(w != width || h != height)
+			{
+				setSize(w, h);
+				with(org)
+				{
+//					dm(@"${name}["+int(per*100+0.5)+@"%]: (${l}, ${t}), (${.imageLeft}, ${.imageTop})-(${.width}, ${.height}) → (${w}, ${h})");
+					face	= dfOpaque;	holdAlpha	= false;
+					operateStretch(0, 0, w, h, org, -.imageLeft, -.imageTop, .width, .height, omOpaque,, window.currentInterpolationMode);
+				}
+			}
+		}
+	}
+
+	//	拡縮回転移動
+	function mmrTo(l, t, w, h, sr=0, r, time=300, accel=0, delay=0, func=void, name="move&magnify&rotate")
+	{
+		var elm = %[];
+		with(elm)
+		{
+			.width		= int(w + 0.5);
+			.height		= int(h + 0.5);
+			.cleft		= int(l + 0.5) + (.width >> 1);
+			.ctop		= int(t + 0.5) + (.height >> 1);
+			.srotate	= sr;
+			.rotate		= r;
+			.time		= time;
+			.accel		= accel;
+			.construct	= mmr_construct;
+			.func		= func;
+			.init		= mmr_init;
+		}
+		start(name, elm, delay);
+	}
+	function mmr_init(elm)
+	{
+		with(elm)
+		{
+			.swidth	= width;
+			.sheight= height;
+			.scleft	= left + (width >> 1);
+			.sctop	= top + (height >> 1);
+		}
+		visible	= true;
+	}
+	function mmr_construct(elm, per)
+	{
+		var w, h, r, l, t, iw, ih;
+		with(elm)
+		{
+			w	= (.width - .swidth) * per + .swidth;
+			h	= (.height - .sheight) * per + .sheight;
+			r	= (.rotate - .srotate) * per + .srotate;
+			centerleft = l	= (.cleft - .scleft) * per + .scleft;
+			centertop = t	= (.ctop - .sctop) * per + .sctop;
+			iw	= .swidth;
+			ih	= .sheight;
+		}
+		var eat;
+		with(eat = new easyAffineTransform())
+		{
+			//	アフィン変換マトリックスを用意
+			var iw = org.imageWidth, ih = org.imageHeight;
+			var iw2 = iw / 2, ih2 = ih / 2;
+			.addTransferMatrix(-iw2, -ih2);		//	回転中心を画像の中央に移動
+			.addRotateMatrix(r);				//	画像を回転
+			.addTransferMatrix(iw2, ih2);		//	回転中心を左上に戻す
+			.addMagnifyMatrix(w / iw, h / ih);	//	画像を拡縮
+
+			//	変換後のサイズ、位置のずれを調べる
+			var pt = [];
+			pt[0]	= .calc(0, 0);
+			pt[1]	= .calc(org.imageWidth, 0);
+			pt[2]	= .calc(org.imageWidth, org.imageHeight);
+			pt[3]	= .calc(0, org.imageHeight);
+			var min = [], max = [];
+			var str;
+			for(var i=0; i<4; i++)
+			{
+				var pt0 = pt[i][0], pt1 = pt[i][1];
+				min[0] = pt0 if min[0] > pt0;
+				min[1] = pt1 if min[1] > pt1;
+				max[0] = pt0 if max[0] < pt0;
+				max[1] = pt1 if max[1] < pt1;
+//				str	+= "-("+pt[i][0]+", "+pt[i][1]+")";
+			}
+//			dm("corner"+str);
+
+			//	サイズ、位置を更新
+			setSize(int(max[0] - min[0] + 0.5), int(max[1] - min[1] + 0.5));
+			setPos(centerleft - (width >> 1), centertop - (height >> 1));
+//			dm("mmr----------------------------------------------------------");
+//			dm(@"mmr.min(${min[0]}, ${min[1]}) max(${max[0]}, ${max[1]})");
+//			dm("mmr.setSize("+width+", "+height+"), setPos("+left+", "+top+")");
+
+			//	画像を描画
+			.addTransferMatrix(-min[0], -min[1]);	//	補正
+			fillRect(0, 0, width, height, 0x00000000);
+			.transformByProgram(this, org, 0, 0, iw, ih, window.currentInterpolationMode);
+		}
+		invalidate eat;
+	}
+
+	//	震える
+	function shake(sw = 5, time=500, accel=0, delay=0, func)
+	{
+		var elm = %[];
+		with(elm)
+		{
+			.sw		= sw;	//	最大振幅
+			.time	= time;
+			.accel	= accel;
+			.construct	= shake_construct;
+			.func	= shake_func;
+			.func2	= func;
+			.init	= shake_init;
+		}
+		start("shake", elm, delay);
+	}
+	function shake_init(elm)
+	{
+		with(elm)
+		{
+			.bleft	= left;
+			.btop	= top;
+		}
+		visible	= true;
+	}
+	function shake_construct(elm, per)
+	{
+		with(elm)
+		{
+			if(per - .lastper > 0.05 || per == 1.0)
+			{
+				var sx = int(Math.random() * (.sw << 1) - .sw);
+				var sy = int(Math.random() * (.sw << 1) - .sw);
+//				dm("shake("+sx+", "+sy+")");
+				setPos(.bleft + sx, .btop + sy);
+				.lastper	= per;
+			}
+		}
+	}
+	function shake_func(obj, elm)
+	{
+		with(elm)
+		{
+			setPos(.bleft, .btop);
+			if(.func2)
+				.func2(obj, elm);
+		}
+	}
+
+	//	拡縮と不透明度変化の登録
+	function magnifyToWithOpacity(w, h, o, time=500, accel=0, delay=0, func=void, name="magnify&opacity")
+	{
+//		finish(name);
+
+		var elm = %[];
+		with(elm)
+		{
+			.ew			= int(w + 0.5);
+			.eh			= int(h + 0.5);
+			.eo			= o;
+			.time		= time;
+			.accel		= accel;
+			.construct	= magnify_opacity_construct;
+			.func		= func;
+			.init		= magnify_opacity_init;
+//			dm(this.name+" "+name+": ("+width+", "+height+", "+opacity+") → ("+.ew+", "+.eh+", "+.eo+")");
+		}
+
+		start(name, elm, delay);
+	}
+
+	function magnify_opacity_init(elm)
+	{
+		with(elm)
+		{
+			.sw		= width;
+			.sh		= height;
+			.so		= opacity;
+			.ew		= width if .ew === void;
+			.eh		= height if .eh === void;
+			.eo		= opacity if .eo === void;
+//			dm(name+": ("+.sw+", "+.sh+") → ("+.ew+", "+.eh+")");
+		}
+		visible	= true;
+	}
+
+	function magnify_opacity_construct(elm, per)
+	{
+		with(elm)
+		{
+			var w = int((.ew - .sw) * per + .sw + 0.5), h = int((.eh - .sh) * per + .sh + 0.5);
+			setPos(centerleft - (w >> 1), centertop - (h >> 1));
+			opacity	= int((.eo - .so) * per + .so + 0.5);
+//			dm("magnify["+per+"]: "+this.name+" setPos("+left+", "+top+"), center("+centerleft+", "+centertop+"), setSize("+w+", "+h+"), opacity = "+opacity);
+			setSize(w, h);
+			face	= dfOpaque;	holdAlpha	= false;
+			operateStretch(0, 0, w, h, org, 0, 0, org.imageWidth, org.imageHeight, /*type == ltAddAlpha || type == ltAlpha ? omAlpha : */omOpaque,, window.currentInterpolationMode);
+		}
+	}
+
+	//	不透明度の変更
+	function opacityTo(opac, time, accel=0, delay=0, func=void, name="opacity", initfunc=void)
+	{
+		var elm	= %[];
+		with(elm)
+		{
+			.opacity	= int(opac + 0.5);
+			.time		= time;
+			.accel		= accel;
+			.construct	= opacity_construct;
+			.func		= func;
+			.init		= opacity_init;
+			.initfunc	= initfunc;
+		}
+
+		//	登録
+		start(name, elm, delay);
+	}
+	function opacity_init(elm)
+	{
+		with(elm)
+			.sopacity	= opacity;
+		visible	= true;
+	}
+	function opacity_construct(elm, per)
+	{
+		with(elm)
+			opacity	= int((.opacity - .sopacity) * per + .sopacity + 0.5);
+	}
+
+	//	サウンド再生の予約(サウンド番号, 遅延時間)
+	var soundstack = [], soundtimer;
+	function delaySound(sound, delay, volume)
+	{
+		//	サウンド番号, 再生開始時刻
+		soundstack.add([sound, delay + emptyTime + System.getTickCount(), volume]);
+		startSoundTimer();
+	}
+	//	予約時刻を待つ
+	function startSoundTimer()
+	{
+		soundtimer	= new Timer(onSoundTimer, "") if soundtimer == void;
+		var delay	= soundstack[0][1] - System.getTickCount();
+		if(delay > 0)
+		{
+			with(soundtimer)
+			{
+				.interval	= delay;
+				.enabled	= true;
+			}
+		}
+		else
+			onSoundTimer();
+	}
+	//	再生時刻になった
+	function onSoundTimer()
+	{
+		//	サウンド再生
+		if(typeof soundstack[0][0] == "Integer")
+			hfSound.play(soundstack[0][0]);
+		else
+			playSound(soundstack[0][0],, soundstack[0][2]);
+		soundstack.erase(0);
+		if(soundstack.count > 0)
+			startSoundTimer();	//	次のサウンド予約を待つ
+		else
+		{
+			release(soundtimer);
+			soundtimer = void;
+		}
+	}
+
+	//	現在スタックされている処理が完全に終了する時間
+	property emptyTime
+	{
+		getter
+		{
+			var elm = elements;
+			var time = 0;
+			if(elm.count > 0)
+			{
+				time	+= elm[0].time;
+				//	すでに処理に着手しているか？
+				if(elm[0].starttick !== void)
+					time	-= System.getTickCount() - elm[0].starttick;	//	開始からの経過時間を引く
+				else
+					time	+= elm[0].delay;	//	開始するまでの時間を足す
+				for(var i=1; i<elm.count; i++)
+					time	+= elm[i].delay + elm[i].time;
+			}
+			return time;
+		}
+	}
+}
+
+@endif
+/*-----------------------------------------------------------------------------/
+/	End of ChipLayer.tjs
+/-----------------------------------------------------------------------------*/

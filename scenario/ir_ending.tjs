@@ -1,0 +1,1084 @@
+/*******************************************************************************
+	風雲イリヤ城 - エンディング
+*******************************************************************************/
+
+
+
+
+Scripts.execStorage( "ir_ending_sub.tjs" );
+Scripts.execStorage( "ir_ending_obj.tjs" );
+Scripts.execStorage( "ir_ending_bg.tjs" );
+
+
+class CIriyaEnding extends CIriyaSceneEx
+{
+
+	function CIriyaEnding( parent, scene_id )
+	{
+		init_buffer();
+
+		super.CIriyaSceneEx( ... );
+		@if (DEBUG_MODE)
+		dm( "エンディング" );
+		@endif
+	}
+
+
+	function finalize()
+	{
+		super.finalize( ... );
+		Release();
+	}
+
+
+	@if (DEBUG_MODE  ==  1)
+	var		key_state;
+	@endif;
+
+// シーン処理管理関係
+var		scene_mode;
+	// 桜フレームイン開始
+	var	SCENE_MODE__SAKURA_START		=0;
+	// 桜フレームイン待ち
+	var	SCENE_MODE__SAKURA_IN			=1;
+
+	// 凛フレームイン開始
+	var	SCENE_MODE__RIN_IN				=10;
+
+	// バーサーカーフレームイン開始
+	var	SCENE_MODE__BS_CAR_IN			=20;
+
+
+	// サーバントフレームイン開始
+	var	SCENE_MODE__SERVANT_START		=30;
+	// サーバントフレームイン
+	var	SCENE_MODE__SERVANT_IN			=31;
+
+	// ゲーム処理メインループ中
+	var	SCENE_MODE__MAIN_PROCESS		=40;
+
+	// ゲーム終了フェードアウト
+	var	SCENE_MODE__FADE_OUT			=100;
+
+
+
+var		BACK_SCROLL_SPEED		=/*-12;/ */-16;
+
+
+var		MAX_FALL_OBJ_TYPE_NUM = 5;
+
+var		MAIN_FALL_OBJ_CYCLE	= 18;//16;
+
+
+var		back_obj;
+var		ground_obj;
+var		now_scroll_speed;
+
+
+var		car_obj;
+var		bs_car_obj;
+
+var		sakura_obj;
+
+var		fuji_obj;
+
+var		anime_stop_data;
+
+
+var		fall_obj_cg;
+
+
+var		fallRootObj;
+var		fall_obj_craete_flag;
+var		fall_obj_craete_cycle;
+
+var		check_fall_after_ev;
+var		fall_after_ev_counter;
+
+var		player_dead_num;
+var		game_counter;
+
+var		servant_dash_time;
+
+var		sys_fade;
+	function init_buffer()
+	{
+		anime_stop_data = void;
+
+		now_scroll_speed = 0;
+
+		back_obj   = void;
+		ground_obj = void;
+
+		car_obj    = void;
+		sakura_obj = void;
+		fuji_obj   = void;
+
+		bs_car_obj = void;
+
+
+		fall_obj_cg = void;
+
+		fallRootObj = void;
+
+		player_dead_num = 0;
+		game_counter = 0;
+
+		fall_obj_craete_flag = false;
+		fall_obj_craete_cycle = 0;
+
+		sys_fade = void;
+
+		check_fall_after_ev = 0;
+
+		clear_servant_dash_manage();
+		return;
+	}
+
+	function Release()
+	{
+		@if (DEBUG_MODE  ==  1)
+		if (CheckValid(key_state)  ==  true) {
+			EasyObjectInvalidate( key_state );
+			key_state = void;
+		}
+		@endif
+
+		EasyObjectInvalidate( anime_stop_data );
+		anime_stop_data = void;
+
+		EasyObjectInvalidate( fall_obj_cg );
+		fall_obj_cg = void;
+
+
+		EasyObjectInvalidate( back_obj );
+		back_obj = void;
+		EasyObjectInvalidate( ground_obj );
+		ground_obj = void;
+
+
+		EasyObjectInvalidate( sys_fade );
+		sys_fade = void;
+		return;
+	}
+
+
+	function init()
+	{
+		super.init( ... );
+
+		// 管理リスト追加
+		objects.add( fallRootObj = new CIrRootObject(this) );
+
+
+		// カメラのデータ設定
+		normalCamera.mode = CAMERAMODE_CUSTOM;
+		normalCamera.motionType = MOTIONTYPE_DEFAULT;
+		normalCamera.limitRectEnabled = false;
+		normalCamera.x = SCREEN_CENTER_X;
+		normalCamera.y = SCREEN_CENTER_Y;
+
+
+		anime_stop_data = new CIrAnimeStopData();
+
+
+		back_obj = new CIriyaEndingBg( parentWindow, parentLayer, this );
+		back_obj.Init();
+		back_obj.Print();
+		back_obj.SetPos(0);
+
+		ground_obj = new CIriyaEndingGroundManage( parentWindow, parentLayer, this );
+		ground_obj.Init();
+		ground_obj.Print();
+
+
+		// 落下物のCGキャッシュの作成
+		fall_obj_cg = new CImageBuffer( parentWindow, parentLayer );
+		fall_obj_cg.capacity = MAX_FALL_OBJ_TYPE_NUM;		// 画像キャシュバッファサイズ
+
+
+		EasyObjectInvalidate( sys_fade );
+		sys_fade = new CIriyaSystemFade( parentWindow, parentLayer );
+		sys_fade.StartUpFade( 60, "WHITE", "FADE_OUT" );
+
+
+		scene_mode = SCENE_MODE__SAKURA_START;
+
+
+		@if (DEBUG_MODE  ==  1)
+		key_state = new CIriyaKeyState();
+		key_state.UpdateState();
+		@endif
+	}
+
+
+
+
+	function onCreateServant( index )
+	{
+	var	obj;
+		obj = new CIrServantED( this, servantsRootObj, index );
+		return obj;
+	}
+	function onInitPlayer( player, index )
+	{
+		with ( player )
+		{
+			.setPlayerID( index );
+
+			if (index  ==  0)
+					.setDefPlayerMoveSpeed();
+			else	.setDefComputerMoveSpeed();
+
+
+			.x = -65535;//SCREEN_SIZE_W/2-256+rand_ave(256*2);
+			.y = -65535;//SCREEN_SIZE_H-148+index*32;
+			.onUpdateCom = servantUpdate;
+			.animation = ANI_STAND;//ANI_RUN;
+			.gauge.enabled = false; // ステータスゲージを削除
+			if ( .marker ) // プレイヤマーカーを削除
+				.marker.enabled = false;
+		}
+
+		return;
+	}
+	function initField()
+	{
+		createScreen = false;
+		super.initField();
+
+		fadeIn(0);
+		return;
+	}
+
+
+
+	// ウェイトカウンタ関係
+	var		wait_counter;
+	function set_wait_counter( _count )
+	{
+		wait_counter = _count;
+		return;
+	}
+	function update_wait_counter()
+	{
+		if (wait_counter  >  0) {
+			wait_counter -= 1;
+			return ( false );
+		}
+		return ( true );
+	}
+
+	// サーバントダッシュ時間管理
+	function clear_servant_dash_manage()
+	{
+		servant_dash_time = -1;
+		return;
+	}
+	function start_servant_dash_manage()
+	{
+//		servant_dash_time = FRAME_PER_SEC * 20;
+		servant_dash_time = FRAME_PER_SEC * 18;//16;
+		return;
+	}
+	function update_servant_dash_manage()
+	{
+		if (servant_dash_time  <  0)
+			return ( false );
+
+		if (servant_dash_time  ==  0)
+			return ( false );
+
+		servant_dash_time -= 1;
+		return ( true );
+ 	}
+
+	// 凛登場位置
+	var		RIN_CREATE_PX			= -256;
+	var		RIN_CREATE_PY			= SCREEN_SIZE_H-144;
+
+	// 桜登場位置
+	var		SAKURA_CREATE_PX		= -100;
+	var		SAKURA_CREATE_PY		= SCREEN_SIZE_H-80;
+
+	// バーサーカー登場位置
+	var		BS_CAR_CREATE_PX		= -256+48;
+//	var		BS_CAR_CREATE_PY		= SCREEN_SIZE_H;
+	var		BS_CAR_CREATE_PY		= SCREEN_SIZE_H-96;
+
+	// 藤ねぇ登場位置
+	var		FUJI_CREATE_PX			= -256;
+	var		FUJI_CREATE_PY			= SCREEN_SIZE_H-108;
+
+
+
+
+	// 凛登場
+	function create_frame_in_rin_car()
+	{
+		with (car_obj = new CIrServantEDCar(this, etcRootObj) )
+		{
+			.priority = PRIORITY_PLAYER;
+			.x = RIN_CREATE_PX;
+			.y = RIN_CREATE_PY;
+			.onUpdateCom = dammy_func;
+		}
+		return;
+	}
+	// 桜登場
+	function create_frame_in_sakura()
+	{
+		with (sakura_obj = new CIrEDSakura(this, etcRootObj) )
+		{
+			.priority = PRIORITY_PLAYER;
+			.gauge.enabled = false; // ステータスゲージを削除
+			if ( .marker ) // プレイヤマーカーを削除
+				.marker.enabled = false;
+			.x = SAKURA_CREATE_PX;
+			.y = SAKURA_CREATE_PY;
+			.onUpdateCom = servantUpdate;
+			.characterId = CHARA_ID_SAKURA;
+			.change_anime( .ANIME_FRAME_IN );
+		}
+		return;
+	}
+	// バーサーカー登場
+	function create_frame_in_bersercar()
+	{
+		with (bs_car_obj = new CIrServantEDBsCar(this, etcRootObj) )
+		{
+			.priority = PRIORITY_PLAYER;
+			.x = BS_CAR_CREATE_PX;
+			.y = BS_CAR_CREATE_PY;
+			.onUpdateCom = dammy_func;
+		}
+		return;
+	}
+	function change_bs_car_clash()
+	{
+		bs_car_obj.change_clash( now_scroll_speed );
+		return;
+	}
+	// 藤ねぇ登場
+	function create_frame_in_fuji()
+	{
+		with (fuji_obj = new CIrServantEDFuji(this, etcRootObj) )
+		{
+			.priority = PRIORITY_PLAYER;
+			.x = FUJI_CREATE_PX;
+			.y = FUJI_CREATE_PY;
+			.onUpdateCom = dammy_func;
+		}
+		return;
+	}
+
+
+
+
+
+	var		landing_yure_y = 0;
+	var		landing_yure_h = 0;
+	function LandingFallObjCallback( _size )
+	{
+//		dm( "landing obj size:"+_size );
+		if (scene_mode  !=  SCENE_MODE__FADE_OUT)
+			PlaySE( SE_ENDING_OBJ_LANDING );
+
+		if (_size  >  landing_yure_y) {
+			landing_yure_h = _size;
+			landing_yure_y = landing_yure_h;
+		}
+		return;
+	}
+
+
+
+
+
+	function servantUpdate( servant )
+	{
+		return;
+	}
+
+	function dammy_func( my_obj )
+	{
+	}
+
+
+	var FirstCameraPosX	= SCREEN_SIZE_W/2;
+	var FirstCameraPosY	= SCREEN_SIZE_H/2;
+
+	function servantAnimation( servant )
+	{
+		return;
+	}
+	function normalCameraUpdate( camera )
+	{
+		return;
+	}
+
+
+
+	function CheckFallObjHitServant( p_obj )
+	{
+	var		i;
+	var		hit_rc;
+	var		x,y,z;
+		with ( p_obj )
+		{
+			x = .x;
+			y = .y;
+			z = .z;
+			hit_rc = .cg_info.hitRect;
+		}
+
+		for (i=0;  i<players.count;  i++) {
+			with ( players[i] )
+			{
+				if (.getActMode()  !=  .ACT_MODE_NORMAL)
+					continue;
+				if ((x+hit_rc.sx)  >  .x)
+					continue;
+				if ((x+hit_rc.ex)  <  .x)
+					continue;
+				if ((y+hit_rc.sy)  >  .y)
+					continue;
+				if ((y+hit_rc.ey)  <  .y)
+					continue;
+				if ((z+hit_rc.sz)  <  .z)
+					continue;
+				if ((z+hit_rc.ez)  >  (.z+32))		// 多少キャラの高さを考慮
+					continue;
+
+
+				.ChangeFallObjClash();
+				SetSceneStopData( SCENE_STOP_PLAYER_CLASH );
+				PlaySE( SE_ENDING_SERVANT_CLASH );
+
+				player_dead_num += 1;
+			}
+		}
+
+		if (CheckValid(bs_car_obj)  ==  true) {
+		while (1)
+		{
+			with ( bs_car_obj )
+			{
+				if (.anime_no  !=  0)
+					break;
+				if (.x  <  32)
+					break;
+
+				if ((p_obj.obj_type  !=  p_obj.OBJ_TYPE_POLE_L)
+				&&	(p_obj.obj_type  !=  p_obj.OBJ_TYPE_FLOOR_L)
+				&&	(p_obj.obj_type  !=  p_obj.OBJ_TYPE_STONE))
+					break;
+				if ((x+hit_rc.sx-32)  >  .x)
+					break;
+				if ((x+hit_rc.ex+32)  <  .x)
+					break;
+				if ((y+hit_rc.sy)  >  .y)
+					break;
+				if ((y+hit_rc.ey+48)  <  .y)
+					break;
+				if ((z+hit_rc.sz)  <  .z)
+					break;
+				if ((z+hit_rc.ez)  >  (.z+32))		// 多少キャラの高さを考慮
+					break;
+
+				.change_clash( now_scroll_speed );
+				break;
+			}
+		}}
+		return;
+	}
+	// 岩移動処理
+	function action_fall_obj()
+	{
+	var		i;
+		for( i=0; i<fallRootObj.child.count; i++ ) {
+			with ( fallRootObj.child[i] )
+			{
+				.x += now_scroll_speed;
+				.updateMove();
+			}
+		}
+		return;
+	}
+
+	// プレイヤー移動処理
+	function action_player()
+	{
+	var		i;
+		for (i=0;  i<players.count;  i++) {
+			players[i].updateClickMove();
+		}
+
+
+		for (i=0;  i<players.count;  i++) {
+			with ( players[i] )
+			{
+				.x += .getMovePos();
+				switch ( .getActMode() )
+				{
+				case .ACT_MODE_NORMAL:
+					if (.x  >  (SCREEN_SIZE_W-64))
+						.x = (SCREEN_SIZE_W-64);
+					if (.x  <  0)
+						.x = 0;
+					break;
+				case .ACT_MODE_CLASH:
+					.x += now_scroll_speed;
+					if (.x  <  -65535)
+						.x = -65535;
+					break;
+				case .ACT_MODE_FALL:
+					.x += now_scroll_speed;
+					if (.x  <  -65535)
+						.x = -65535;
+					.z += -8;
+					if (.z  <  -65535)
+						.z = -65535;
+					break;
+				case .ACT_MODE_FINISH:
+					if (.x  >  65535)
+						.x = 65535;
+					break;
+				}
+			}
+		}
+		return;
+	}
+
+
+	var		SCENE_STOP_NONE					=-1;
+	var		SCENE_STOP_CLEAR				=0;
+	var		SCENE_STOP_SAKURA_VANISH		=1;
+	var		SCENE_STOP_PLAYER_CLASH			=2;
+	var		SCENE_STOP_PLAYER_FALL			=3;
+
+	var		next_scne_stop_flag = SCENE_STOP_NONE;
+	function set_scene_stop_data( _type )
+	{
+		// 現在無効化中
+		return;
+/*
+	var		stop_param;
+		with ( anime_stop_data )
+		{
+			switch ( _type )
+			{
+			case SCENE_STOP_CLEAR:
+				.SetStopAnimeData( .TYPE_CLEAR );
+				break;
+			case SCENE_STOP_SAKURA_VANISH:
+			case SCENE_STOP_PLAYER_CLASH:
+			case SCENE_STOP_PLAYER_FALL:
+				stop_param = new Dictionary();
+				stop_param.stop_cycle = 18;
+				stop_param.stop_time  = 60;
+				.SetStopAnimeData( .TYPE_STOP_CYCLE_EX, stop_param );
+				invalidate stop_param;
+				break;
+			}
+			next_scne_stop_flag = SCENE_STOP_NONE;
+		}
+		return;
+*/	}
+	function check_scene_stop_data()
+	{
+		if (next_scne_stop_flag  !=  SCENE_STOP_NONE)
+			set_scene_stop_data( next_scne_stop_flag );
+		return;
+	}
+
+	function SetSceneStopData( _type )
+	{
+		next_scne_stop_flag = _type;
+		return;
+	}
+
+
+
+
+	// 落下チェック
+	function fall_check_all()
+	{
+	var		i;
+	var		ret;
+		for (i=0;  i<players.count;  i++) {
+			with ( players[i] )
+			{
+				ret = ground_obj.FallCheck( .x, .y );
+				if (ret  <  0)
+					continue;
+
+				if (.getActMode()  !=  .ACT_MODE_FALL) {
+					if (.getActMode()  ==  .ACT_MODE_FINISH) {
+						continue;
+					}
+
+					if (.getActMode()  ==  .ACT_MODE_NORMAL) {
+						set_scene_stop_data( SCENE_STOP_PLAYER_FALL );
+						player_dead_num += 1;
+					}
+					.ChangeFallGround();
+				}
+				.z = -ret;
+			}
+		}
+
+		if (CheckValid(bs_car_obj)  ==  true) {
+			with ( bs_car_obj )
+			{
+				ret = ground_obj.FallCheck( .x, .y );
+				if (ret  >=  0) {
+					if (.anime_no  !=  2)
+						.fall( now_scroll_speed );
+					.z = -ret;
+				}
+			}
+		}
+
+		for (i=0;  i<fallRootObj.child.count;  i++) {
+			with ( fallRootObj.child[i] )
+			{
+				ret = ground_obj.FallCheck( .x, .y );
+				if (ret  <  0)
+					continue;
+
+				switch ( .GetAnimeNo() )
+				{
+				case .ANIME_START_FALL:
+					.ChangeAnimeFalling();
+//					.z = -ret;
+					break;
+				case .ANIME_LANDING:
+//					.ChangeAnimeFall();
+//					.z = -ret;
+					.ChangeAnimeFallingEx();
+					break;
+				case .ANIME_FALL:
+					.z = -ret;
+					break;
+				case .ANIME_FALLING:
+					if (.z  <=  -ret) {
+						.ChangeAnimeFall();
+						.z = -ret;
+					}
+					break;
+				}
+			}
+		}
+
+
+		return;
+	}
+
+
+	function update_chara_anime()
+	{
+	var i;
+
+		process_gama_scenario();
+
+		update_create_fall_object();
+
+		// プレイヤー移動処理
+		action_player();
+
+		// 岩移動処理
+		action_fall_obj();
+
+
+		systemRootObj.step();
+		servantsRootObj.step();
+		etcRootObj.step();
+		fallRootObj.step();
+
+		if (CheckValid(back_obj)  ==  true) {
+			back_obj.SetOffsetPos(normalCamera.x-SCREEN_CENTER_X, normalCamera.y-SCREEN_CENTER_Y);
+			back_obj.SetPos(back_obj.GetPos()+now_scroll_speed);
+		}
+		if (CheckValid(ground_obj)  ==  true) {
+			ground_obj.SetOffsetPos(normalCamera.x-SCREEN_CENTER_X, normalCamera.y-SCREEN_CENTER_Y);
+			ground_obj.AddPos(now_scroll_speed);
+		}
+
+
+		fall_check_all();
+		return;
+	}
+	function updateObjectList()
+	{
+		if ( timerCount % CORRECTION_INTERVAL == 0 )
+			removeDisactiveObjects();
+		return;
+	}
+
+
+	// 落下物生成処理ループ
+	function update_create_fall_object()
+	{
+		if (fall_obj_craete_flag  ==  false)
+			return;
+
+		if ((game_counter%fall_obj_craete_cycle)  !=  0)
+			return;
+
+		with ( new CIrServantEDFallObj(this, fallRootObj) )
+		{
+			.images = fall_obj_cg;
+			.x = 168+rand_ave(SCREEN_SIZE_W+200+100) -100-40;
+			.y = (SCREEN_SIZE_H-32)-148+rand_ave(MAX_PLAYER_NUM*32);
+			.z = SCREEN_SIZE_H+96;
+			.priority = PRIORITY_PLAYER;
+			.onUpdateCom = dammy_func;
+			.init_data();
+			.updateLayerImage();
+			.updateLayerPos();
+			if (CheckValid(.shadow)  ==  true)
+				.shadow.doUpdateCom();
+		}
+/*
+		if (rand_ave(100)  <  100) {
+		if (CheckValid(bs_car_obj)  ==  true) {
+//		if (bs_car_obj.x  >  168) 
+		{
+			with ( new CIrServantEDFallObj(this, fallRootObj) )
+			{
+				.images = fall_obj_cg;
+				.x = 168+rand_ave(SCREEN_SIZE_W+200+100) -100-40;
+				.y = BS_CAR_CREATE_PY-10+rand_ave(20);
+				.z = SCREEN_SIZE_H+96;
+				.priority = PRIORITY_PLAYER;
+				.onUpdateCom = dammy_func;
+				.init_data();
+				.updateLayerImage();
+				.updateLayerPos();
+				if (CheckValid(.shadow)  ==  true)
+					.shadow.doUpdateCom();
+			}
+		}
+		}
+		}
+*/
+		return;
+	}
+
+
+
+	function set_chara_alive_flag_all()
+	{
+	var		i;
+		for (i=0;  i<players.count;  i++) {
+			with ( parentLayer.CharaStatus[i] )
+			{
+				if (players[i].getActMode()  ==  players[i].ACT_MODE_FINISH)
+						.SetLastAliveFlag( true );
+				else	.SetLastAliveFlag( false );
+			}
+		}
+		return;
+	}
+
+
+
+	// 揺れ幅
+	var		YURE_W=3;
+	var		YURE_H=4;
+
+	// ゲームシナリオ進行管理
+	var		bg_yure_x=0;
+	function process_gama_scenario()
+	{
+	var		tmp;
+		normalCamera.x = SCREEN_CENTER_X-bg_yure_x;
+		bg_yure_x ^= YURE_W;
+
+		tmp = rand_ave(YURE_H)+landing_yure_y;
+		if (tmp  >  16)
+			tmp = 16;
+		normalCamera.y = SCREEN_CENTER_Y+tmp;
+		if (landing_yure_h  >  0) {
+			landing_yure_h -= 1.5;
+
+			if (landing_yure_h  <  0) {
+				landing_yure_h = 0;
+				landing_yure_y = 0;
+			} else {
+				if (landing_yure_y  ==  0)
+						landing_yure_y = landing_yure_h;
+				else	landing_yure_y = 0;
+			}
+		}
+
+
+		switch ( scene_mode )
+		{
+		case SCENE_MODE__SAKURA_START:
+			if (SE_ENDING_FIRST_VIBRATE  !==  void)
+				loopSound( SE_ENDING_FIRST_VIBRATE, SE_ENDING_FIRST_VIBRATE_FADE_IN_TIME );
+
+
+			BgmPlay( BGM_ENDING );
+
+
+			// 桜登場
+			create_frame_in_sakura();
+			scene_mode = SCENE_MODE__SAKURA_IN;
+			set_wait_counter( 110 );
+			break;
+		case SCENE_MODE__SAKURA_IN:
+			sys_fade.UpdateFade();
+
+			if (update_wait_counter()  ==  false)
+				break;
+			EasyObjectInvalidate( sys_fade );
+
+
+			scene_mode = SCENE_MODE__RIN_IN;
+			create_frame_in_rin_car();
+//			set_wait_counter( 140 );
+			set_wait_counter( 60 );
+
+//			parentLayer.StartUpStaffRoll();
+			break;
+		case SCENE_MODE__RIN_IN:
+			if (update_wait_counter()  ==  false)
+				break;
+
+			scene_mode = SCENE_MODE__SERVANT_START;
+			break;
+/*
+			scene_mode = SCENE_MODE__BS_CAR_IN;
+			set_wait_counter( 70 );
+			break;
+
+		case SCENE_MODE__BS_CAR_IN:
+			if (update_wait_counter()  ==  false)
+				break;
+			scene_mode = SCENE_MODE__SERVANT_START;
+			break;
+*/
+
+
+
+		case SCENE_MODE__SERVANT_START:
+			for (var i=0;  i<players.count;  i++) {
+				players[i].x = -192+rand_ave(192);
+				players[i].y = SCREEN_SIZE_H-148+i*32;
+				players[i].animation = ANI_RUN;
+				players[i].setBaseSpeed( 8 );
+			}
+			scene_mode = SCENE_MODE__SERVANT_IN;
+			set_wait_counter( 80 );
+			fall_obj_craete_flag = true;
+			fall_obj_craete_cycle = 25;
+			break;
+
+
+		case SCENE_MODE__SERVANT_IN:
+			if (update_wait_counter()  ==  false)
+				break;
+			for (var i=0;  i<players.count;  i++) {
+				players[i].setBaseSpeed( 0 );
+				players[i].startAction();
+			}
+
+			if (SE_ENDING_FIRST_VIBRATE  !==  void)
+				stopSound( SE_ENDING_FIRST_VIBRATE, SE_ENDING_FIRST_VIBRATE_FADE_OUT_TIME, true );
+			if (SE_ENDING_MAIN_VIBRATE  !==  void)
+				loopSound( SE_ENDING_MAIN_VIBRATE, SE_ENDING_MAIN_VIBRATE_FADE_IN_TIME );
+
+			fall_obj_craete_flag = true;
+			fall_obj_craete_cycle = MAIN_FALL_OBJ_CYCLE;//16;//8;
+
+			now_scroll_speed = BACK_SCROLL_SPEED;
+			scene_mode = SCENE_MODE__MAIN_PROCESS;
+			check_fall_after_ev = 1;
+			start_servant_dash_manage();
+			break;
+
+		case SCENE_MODE__MAIN_PROCESS:
+			if (update_servant_dash_manage()  ==  true) {
+				if (player_dead_num  !=  MAX_PLAYER_NUM)
+					break;
+			} else {
+				now_scroll_speed = 0;
+				ground_obj.SetFallLimitParam( SCREEN_SIZE_W+1000, -BACK_SCROLL_SPEED, -BACK_SCROLL_SPEED );
+				for (var i=0;  i<players.count;  i++) {
+					with ( players[i] )
+					{
+						if (.getActMode()  ==  .ACT_MODE_NORMAL) {
+							.setBaseSpeed( -BACK_SCROLL_SPEED );
+							.finishAction();
+						}
+					}
+				}
+
+			}
+
+//			if (SE_ENDING_MAIN_VIBRATE  !==  void)
+//				stopSound( SE_ENDING_MAIN_VIBRATE, SE_ENDING_MAIN_VIBRATE_FADE_OUT_TIME, true );
+
+			scene_mode = SCENE_MODE__FADE_OUT;
+			set_wait_counter( FRAME_PER_SEC*1 );
+
+			EasyObjectInvalidate( sys_fade );
+			sys_fade = new CIriyaSystemFade( parentWindow, parentLayer );
+			sys_fade.StartUpFade();
+
+			fadeOutAll( SE_ENDING_MAIN_VIBRATE_FADE_OUT_TIME );
+			break;
+
+		case SCENE_MODE__FADE_OUT:
+			if (sys_fade.UpdateFade()  ==  true)
+				return;
+
+			if (update_wait_counter()  ==  false)
+				break;
+
+			set_chara_alive_flag_all();
+
+			next = SCENE_ENDING_NEXT;
+			break;
+		}
+
+		switch ( check_fall_after_ev )
+		{
+		case 0:
+			break;
+		case 1:
+create_frame_in_bersercar();
+			fall_after_ev_counter = 30*1 +4;
+			check_fall_after_ev = 2;
+//			ground_obj.SetGroundFallFlag( true );
+			break;
+		case 2:
+			if (update_fall_counter()  ==  false)
+				break;
+			check_fall_after_ev = 5;
+			fall_after_ev_counter = 6-4;
+//			create_frame_in_bersercar();
+//			ground_obj.SetGroundFallFlag( true );
+			break;
+
+		case 5:
+			if (update_fall_counter()  ==  false)
+				break;
+/*			with ( new CIrServantEDFallObj(this, fallRootObj) )
+			{
+				.images = fall_obj_cg;
+				.x = SCREEN_SIZE_W+48;
+				.y = SCREEN_SIZE_H+16;
+				.z = SCREEN_SIZE_H+96;
+				.priority = PRIORITY_PLAYER;
+				.onUpdateCom = dammy_func;
+				.init_data( .OBJ_TYPE_POLE_L_EX );
+				.updateLayerImage();
+				.updateLayerPos();
+				if (CheckValid(.shadow)  ==  true)
+					.shadow.doUpdateCom();
+			}
+*/			check_fall_after_ev = 6;
+			fall_after_ev_counter = 5;
+			break;
+
+		case 6:
+			if (update_fall_counter()  ==  false)
+				break;
+/*			with ( new CIrServantEDFallObj(this, fallRootObj) )
+			{
+				.images = fall_obj_cg;
+				.x = SCREEN_SIZE_W-128;
+				.y = SCREEN_SIZE_H+1;
+				.z = SCREEN_SIZE_H+96;
+				.priority = PRIORITY_PLAYER;
+				.onUpdateCom = dammy_func;
+				.init_data( .OBJ_TYPE_FLOOR_L_EX );
+				.updateLayerImage();
+				.updateLayerPos();
+				if (CheckValid(.shadow)  ==  true)
+					.shadow.doUpdateCom();
+				.vector_data.SetVector( 0,-32, 0,0, 0,0 );
+			}
+*/
+			check_fall_after_ev = 10;
+			fall_after_ev_counter = 30*1-6  -1-5  -4;
+			break;
+
+
+
+
+		case 10:
+			if (update_fall_counter()  ==  false)
+				break;
+			check_fall_after_ev = 20;
+			create_frame_in_fuji();
+
+			fall_after_ev_counter = 3 +2+60 + 120;
+			break;
+		case 20:
+			if (update_fall_counter()  ==  false)
+				break;
+//			change_bs_car_clash();
+			check_fall_after_ev = 30;
+//			ground_obj.SetGroundFallFlag( true );
+			ground_obj.SetGroundFallFlag( true );
+			break;
+		}
+
+
+		return;
+	}
+	function update_fall_counter()
+	{
+		if (fall_after_ev_counter  >  0) {
+			fall_after_ev_counter -= 1;
+			return ( false );
+		}
+		return ( true );
+	}
+
+	function gameProc()
+	{
+
+		@if (DEBUG_MODE  ==  1)
+		if (CheckValid(key_state)  ==  true) {
+		with ( key_state )
+		{
+			.UpdateState();
+			if (.GetCtrlKeyState()  ==  .KEY_FIRAST) {
+				stopAll();
+				next = SCENE_ENDING_NEXT;
+				return true;
+			}
+		}}
+		@endif
+
+
+		check_scene_stop_data();
+
+		if (anime_stop_data.use_flag  ==  false) {
+			update_chara_anime();
+		} else {
+			if (anime_stop_data.ProcessAnimeStop()  ==  false) {
+				update_chara_anime();
+			}
+		}
+
+		game_counter += 1;
+		if (game_counter  >  65535)
+			game_counter = 0;
+		return true;
+	}
+	function onEventPlaying()
+	{
+//		eventSwitch = EVENTSWITCH_FADEOUT;
+		return;
+	}
+}
+
+
+

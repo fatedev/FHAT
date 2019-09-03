@@ -1,0 +1,777 @@
+/*-----------------------------------------------------------------------------
+/	Copyright (C) TYPE-MOON All Rights Reserved.
+/		シーン再生メニュー
+/----------------------------------------------------------------------------*/
+@if(__SCENEPLAYMENULAYER_DEFINED__==0)
+@set(__SCENEPLAYMENULAYER_DEFINED__=1)
+
+Scripts.execStorage("MusicListLayer.tjs");
+
+//	直前まで選択してた/いる日付・場所・シーン
+var SPM_lastdate	= 0;
+var SPM_lastplace	= 0;
+var SPM_lastscene	= -1;
+
+//	既読/未読シーン数を返す
+function countAlreadyRead(flags, lines=void)
+{
+	if(lines == void)
+		lines	= [].load(SceneListFile);
+
+	var	count;	//	総数
+	var	arcnt;	//	既読数
+	var	flagnames	= %[];	//	重複を弾く
+	for(var i=0; i<lines.count; i++)
+	{
+		if(lines[i][0] == "#" || lines[i] == "")
+			continue;	//	コメント行や空行は無視
+
+		var	tmp	= lines[i].split("\t");
+		var	key	= "trail_%s-%02d".sprintf(tmp[3], tmp[4]);
+		if(flagnames[key] > 0)
+			continue;
+		flagnames[key]++;
+		count++;
+		if(flags[key] == void)
+		{
+//			dm("未読: "+key);
+			continue;	//	フラグが立ってなければ無視
+		}
+
+		arcnt++;
+	}
+	return [ count, arcnt, lines ];
+}
+
+//	フローチャート名とIDをキーに、シーン名を記録している辞書配列を返す
+function getSceneDictionary(lines=void)
+{
+	if(lines == void)
+		lines	= [].load(SceneListFile);
+
+	var	dic	= %[];
+//	var	id	= "%s-%02d";
+	for(var i=0; i<lines.count; i++)
+	{
+		if(lines[i][0] == "#" || lines[i] == "")
+			continue;
+
+		var	tmp	= lines[i].split("\t");
+//		dic[id.sprintf(tmp[3], tmp[4])]	= tmp[2];
+		dic["%s-%02d".sprintf(tmp[3], tmp[4])]	= tmp[2];
+	}
+	return dic;
+}
+
+var SceneListFile	= "シーン一覧.txt";
+class ScenePlayMenuLayer extends ExtendMenuLayer
+{
+	var testmode	= false;	//	テストモードか？
+
+	var datebuttonnames	= [ "10月8日", "10月9日", "10月10日", "10月11日", "その他", "Hollow", "eclipse" ];
+	var placebuttonnames= [
+		[ "衛宮邸", "街", "学校", "柳洞寺" ],
+		/*同上*/,
+		/*同上*/,
+		/*同上*/,
+		[ "合宿", "夜間", "アインツベルン城", "夜の聖杯戦争", "特別編" ],
+		[ "本編" ],
+		[ "番外編" ]
+	];
+	var maxplacebuttoncount	= 5;	//	場所ボタンの最大数
+	var buttonpos	= %[left:37,datetop:74,placetop:103,spacing:3];
+	var buttonext	= "rp_btn-";
+	var	bgmstorage	= [ "bgm118", "bgm114" ];
+
+	var enterse	= "";
+	var clickse	= "";
+	var selectse= "";	//	場所、日付を選択したとき
+	var startse	= "";	//	シーン再生を開始するとき
+
+	var list;
+	var info;
+	var datebuttons, placebuttons;
+	var back;
+	var title, bar;
+
+	var scenes;
+	var currentscene;
+	var currentno;		//	現在のリストの中の項目番号
+	var currentid;		//	フローチャート名-フローID
+	var showed;
+
+	var return_storage, return_label;
+
+	var defaulttime	= 400;
+
+	function ScenePlayMenuLayer(win, par)
+	{
+		super.ExtendMenuLayer(...);
+
+		var date	= SPM_lastdate;
+		var place	= SPM_lastplace;
+		var scene	= SPM_lastscene;
+
+		name	= "シーン再生メニュー";
+		loadImages("rp_回想bg");
+		setSizeToImageSize();
+		hitThreshold	= 0;
+		opacity	= 0;
+
+		global.play_storage	= "";
+//		var sceneflags	= global.sf.sceneCount[CurrentTicketNo];
+		var	sceneflags	= global.tf;
+		sceneflags	= %[] if sceneflags == void;
+		var datetime	= global.tf.playDatetime;
+		datetime	= %[] if datetime == void;
+
+		//	既読シーンのリスト作成
+		scenes	= [];
+		var date2no	= %[], place2no	= %[];
+		for(var i=0; i<datebuttonnames.count; i++)
+			date2no[datebuttonnames[i]]	= i;
+		for(var i=0; i<placebuttonnames.count; i++)
+		{
+			var d = placebuttonnames[i];
+			if(d == void)
+				continue;
+			for(var j=0; j<d.count; j++)
+				place2no[d[j]]	= j;
+		}
+		var lines	= [].load(SceneListFile);
+		for(var i=0; i<lines.count; i++)
+		{
+			if(lines[i][0] == "#")
+				continue;
+
+			var tmp	= lines[i].split("\t");
+//			dm(tmp[0]+"/"+tmp[1]+": "+tmp[2]+" = "+(sceneflags[tmp[2]] != void ? "true" : "false"));
+			var	label	= "trail_%s-%02d".sprintf(tmp[3], tmp[4]);
+			if(sceneflags[label] == void && !testmode)		//	既読フラグでチェック
+				continue;	//	まだ見ていないシーン
+
+			var d	= date2no[tmp[0]], p = place2no[tmp[1]];
+			if(d === void || p === void)
+			{
+				dm("ERROR: date = "+tmp[0]+" / place = "+tmp[1]);
+				continue;
+			}
+			scenes[d]	= [] if(scenes[d] == void);
+			scenes[d][p]= [] if(scenes[d][p] == void);
+
+			var	name	= tmp[2];
+			var	marks	= %["+" => 1, "-" => 1];
+			if(marks[name[0]])
+				name	= name.substr(1);	//	シーン名の先頭が記号なら、取り除く
+			var	dt;
+			if(datetime[tmp[2]] != void)
+				dt	= datetime[tmp[2]];		//	Rev.810以前
+			else if(datetime[label] != void)
+				dt	= datetime[label];		//	Rev.810以降
+			scenes[d][p].add([[ tmp[3], tmp[4], dt ], name]);	//	[フロー名、ラベル名、日付], シーン名
+		}
+
+		//	日付ボタン
+		var bn	= datebuttonnames, btn;
+		var l	= buttonpos.left, t = buttonpos.datetop;
+		var id	= "date.";
+		var dbarray	= [];
+		for(var i=0; i<bn.count; i++)
+		{
+			//	表示可能であるかのチェック
+			if(scenes[i] == void)
+				continue;
+
+			//	ラディオボタン作成
+			if(datebuttons)
+				btn	= datebuttons.add(id+i, l, t, buttonext+bn[i]);
+			else
+				btn = datebuttons = new global.SPTabButtonLayer(win, this, id+i, l, t, buttonext+bn[i]);
+			with(btn)
+			{
+				.no	= i;
+				.entersound	= enterse;
+				.changeRadioButton(true);
+				.on() if i == date;
+				.hitThreshold	= 0;
+				l	+= .width + buttonpos.spacing;
+			}
+			dbarray.add(btn);
+		}
+
+		//	場所ボタン名
+		for(var i=0; i<placebuttonnames.count; i++)
+			placebuttonnames[i] = placebuttonnames[0] if placebuttonnames[i] == void;
+
+		//	場所ボタン(とりあえず、衛宮邸で作成する)
+		var bn	= "衛宮邸", btn;
+		var l	= buttonpos.left, t = buttonpos.placetop;
+		var id	= "place.";
+		var pbarray	= [];
+		for(var i=0; i<maxplacebuttoncount; i++)
+		{
+			if(placebuttons)
+				btn	= placebuttons.add(id+i, l, t, buttonext+bn);
+			else
+				btn = placebuttons = new global.SPTabButtonLayer(win, this, id+i, l, t, buttonext+bn);
+			with(btn)
+			{
+				.no	= i;
+				.entersound	= enterse;
+				.hitThreshold	= 0;
+				.changeRadioButton(true);
+			}
+			pbarray.add(btn);
+		}
+
+		//	詳細レイヤー
+		info = new SceneInfoLayer(win, this);
+
+		//	リスト
+		if(scenes[date] == void)
+			currentscene	= [];	//	その日付自体が無い(→全くプレイしていないとき)
+		else
+		{
+			if(scenes[date][place] == void)
+			{//	その日付で衛宮邸をプレイしていないとき
+				place	= void;
+				for(var i=0; i<scenes[date].count; i++)
+				{
+					if(scenes[date][i] != void)
+					{
+						place	= i;
+						break;
+					}
+				}
+			}
+			if(place !== void)
+				currentscene	= scenes[date][place];
+			else
+				currentscene	= [];
+		}
+		with(list = new global.MusicListLayer(win, this, currentscene, 41, 136, 696, 269, 748))
+		{
+			.onenter	= info.setInformation;	//	一回クリックした時点で選択状態にする
+			.onclick	= playScene;		//	ダブルクリック(enterしている項目をもう一度クリック)したら、そのシーンを再生
+			.textcolor	= [ rgb(192,192,192), rgb(255, 247, 157) ];
+			.shadowcolor= [ rgba(193,25,76,255), rgba(238,123,156,255) ];
+			if(scene >= 0)
+				.enter(scene);
+			else
+				.draw();	//	色を変更したので描画しなおし
+		}
+
+		//	戻るボタン
+		with(back = new global.ExButtonLayer(win, this, "back", 681, 548, "gl_back", "EXTRAメニューへ戻ります。"))
+		{
+			.mode	= 3;
+			.entersound	= enterse;
+			.hitThreshold	= 0;
+			.readyVisible();
+		}
+
+		//	タイトル
+		with(title = new global.Layer(win, this))
+		{
+			.loadImages("rp_回想タイトル");
+			.setSizeToImageSize();
+			.setPos(34, 15);
+			.hitThreshold	= 256;
+			.visible	= true;
+		}
+
+		//	バー
+		with(bar = new global.Layer(win, this))
+		{
+			.loadImages("rp_回想バー");
+			.setSizeToImageSize();
+			.setPos(245, 36);
+			.hitThreshold	= 256;
+			.visible	= true;
+		}
+
+		//	日付ボタンのフォーカス移動指定
+		var btn = datebuttons;
+		var tmp	= [ back ];
+		while(btn)
+		{
+			btn.uppers	= tmp;
+			btn.lowers	= pbarray;
+			btn	= btn.bros;		//	次へ
+		}
+
+		//	場所ボタンのフォーカス移動指定
+		btn	= placebuttons;
+		tmp	= [ list ];
+		do
+		{
+			btn.uppers	= dbarray;
+			btn.lowers	= tmp;
+			btn	= btn.bros;		//	次へ
+		}
+		while(btn);
+
+		//	テキスト履歴を無効にする
+		kag.setHistoryOptions(%[enabled:false]);
+
+		changePlaceButton(date, place);	//	ふさわしいものに変更する
+
+		bgmstorage	= bgmstorage[tf["夜の聖杯戦争クリア"]?1:0];
+		playBGM(bgmstorage, 0) if kag.bgm.playingStorage != bgmstorage;
+	}
+
+	function finalize()
+	{
+		release(info);
+		release(title);
+		release(bar);
+		release(list);
+		release(back);
+		release(placebuttons);
+		release(datebuttons);
+		release(scenes);
+		super.finalize(...);
+	}
+
+	function show()
+	{
+		if(!showed)
+			super.show(...);
+		showed	= true;
+	}
+
+	function hide(time=defaulttime, accel, func)
+	{
+		if(showed)
+		{
+//			super.hide(...);
+			func() if func != void;
+		}
+		showed	= false;
+	}
+
+	//	リストの変更
+	function changeList(date=SPM_lastdate, place=SPM_lastplace)
+	{
+		if(date == SPM_lastdate && place == SPM_lastplace)
+			return;
+
+		//	表示できるシーンが存在するかチェック
+		if(scenes[date][place] == void)
+		{
+			for(var i=0; i<scenes[date].count; i++)
+			{
+				if(scenes[date][i] != void)
+				{
+					place	= i;
+					break;
+				}
+			}
+			if(scenes[date][place] == void)
+				return;
+		}
+		playSound(selectse);
+
+		if(date != SPM_lastdate)
+			changePlaceButton(date, place);
+		with(list)
+		{
+			if(.files != scenes[date][place])
+			{
+				.files	= currentscene	= scenes[date][place];
+				.draw();
+			}
+		}
+
+		SPM_lastdate	= date;
+		SPM_lastplace	= place;
+
+		info.resetInformation();
+	}
+
+	//	場所ボタンの変更(placebuttonnames[date][place])
+	function changePlaceButton(date, place, fprce=false)
+	{
+		if(date < 0 || date >= placebuttonnames.count)
+			return;
+
+		//	ボタンの中身を変えていく/使わないボタンは非表示・無効化
+		var bn	= placebuttonnames[date];
+		var l	= buttonpos.left, t = buttonpos.placetop;
+		for(var i=0; i<maxplacebuttoncount; i++)
+		{
+			with(placebuttons.get("place."+i))
+			{
+//				dm("scenes["+datebuttonnames[date]+"]["+placebuttonnames[i]+"] = "+scenes[date][i]+" / "+bn[i]);
+				if(scenes[date] != void && scenes[date][i] != void)
+				{//	表示するシーンがある場所
+					//	ボタンを表示する
+//					dm(.imgfile+" != "+buttonext+bn[i]);
+					if(.imgfile != buttonext+bn[i])
+						.load(buttonext+bn[i]);
+					.setPos(l, t);
+					.readyVisible();
+					.enabled	= true;
+					if(i == place)
+						.on();
+					else
+						.off();
+					l	+= .width + buttonpos.spacing;
+				}
+				else
+				{//	ない場所
+					.enabled	= false;
+					.visible	= false;
+				}
+			}
+		}
+	}
+
+	//	現在選択中のシーンを再生
+	function playScene()
+	{
+		if(currentid == "")
+			return false;
+
+		playSound(startse);
+
+		//	再生するシーンファイルを決定
+		global.play_storage	= currentid+".ks";
+
+		//	シーン再生スクリプトを呼び出す
+		return_storage	= "title.ks";
+		return_label	= "*playscene";
+
+		//	テキスト履歴を有効にする
+		kag.setHistoryOptions(%[enabled:true]);
+
+		//	メニューを閉じる
+		closeThis();
+		return true;
+	}
+
+	//	閉じる
+	function closeThis(withparent=false)
+	{
+		if(typeof parent.closeChild != "undefined")
+			parent.closeChild(this, withparent);
+		else
+			hideScenePlayMenu();
+	}
+
+	function onMouseDown(x, y, button, shift)
+	{
+		if(button == mbRight)
+			closeThis();
+	}
+
+	function onButtonDown(btn)
+	{
+		switch(btn.id)
+		{
+		case "back":
+			playSound(clickse);
+			closeThis();	//	閉じる
+			return;
+		case "sceneplay":
+			//	再生のみ
+			playScene();
+			return;
+		case "restart":
+			//	選択シーンから再開
+			return;
+		}
+
+		//	切り替え
+		var tmp	= btn.id.split(".");
+		if(tmp[0] == "date")
+		{
+			changeList(btn.no);
+		}
+		else if(tmp[0] == "place")
+		{
+			changeList(, btn.no);
+		}
+	}
+}
+
+class SceneInfoLayer extends Layer
+{
+	var btndata	= [
+//		[ "restart",	438, 88,	"rp_再開ボタン","このシーンからゲームを再開する。" ],
+		[ "sceneplay",	574, 84,	"rp_再生ボタン","このシーンを再生する。\n(終了後はこのメニューに戻ります)" ]
+	];
+	var thumbpos	= %[left:12,top:14,width:128,height:96];
+	var thumbkey	= "rpt_";	//	init.tjsの「キー入力をフック」にも記述あり
+	var commentkey	= "rpcomments";
+
+	var infobgcolor;
+	var restart, sceneplay, datetime, comment, thumb;
+
+	function SceneInfoLayer()
+	{
+		super.Layer(...);
+
+		name	= "詳細表示レイヤー";
+		loadImages("rp_回想ウィンドウ");
+		setSizeToImageSize();
+		setPos(25, 416);
+		opacity	= 255;
+		hitThreshold	= 256;
+		visible	= true;
+		infobgcolor	= (getMaskPixel(277, 16) << 24) | getMainPixel(277, 16);
+
+		global.tf[commentkey]	= %[] if global.tf[commentkey] == void;
+
+		//	日付表示
+		with(datetime = new global.Layer(window, this))
+		{
+			.name	= "日付表示";
+			with(datetime["number"] = new global.Layer(window, datetime))
+			{
+				.loadImages("tk_numA");
+				.setSize(.imageWidth \ 10, .imageHeight);
+			}
+			.setSize(datetime.number.width * (4+(1+2)*5), datetime.number.height);
+			.setPos(277, 16);
+			.fillRect(0, 0, .width, .height, 0x00000000);
+			.hitThreshold	= 256;
+			.visible	= true;
+		}
+
+		//	サムネール表示
+		with(thumb = new global.Layer(window, this))
+		{
+			.name	= "サムネール表示";
+			.setImageSize(thumbpos.width, thumbpos.height);
+			.setSizeToImageSize();
+			.setPos(thumbpos.left, thumbpos.top);
+			.fillRect(0, 0, .width, .height, 0x00000000);
+			.hitThreshold	= 256;
+			.visible		= true;
+		}
+
+		//	コメント表示
+		with(comment = new InputLayer(window, this, false))
+		{
+			.name	= "コメント表示";
+			.setPos(152, 45);
+			.setSize(526, 24);
+			.font.height	= 24;
+			.Edit_textColor	= 0xFFFFFF;
+			.Edit_color		= 0x000000;
+			.Edit_opacity	= 0;
+			.shadowcolor	= 0x000000;
+			.hint			= "コメントが記入可能です。";
+			.visible		= true;
+		}
+
+		//	再開、再生
+		for(var i=0; i<btndata.count; i++)
+		{
+			var d	= btndata[i];
+			with(this[d[0]] = new global.ExButtonLayer(window, this, d[0], d[1], d[2], d[3], d[4]))
+			{
+				.mode	= 3;
+				.hitThreshold	= 0;
+				.readyVisible();
+				.target	= this;
+			}
+		}
+	}
+
+	function finalize()
+	{
+		release(restart);
+		release(sceneplay);
+		release(comment);
+		release(thumb);
+		release(datetime);
+		super.finalize(...);
+	}
+
+	//	詳細の切替
+	function setInformation(no)
+	{
+//		dm(currentscene[no][0][0]+", "+currentscene[no][0][1]+", "+currentscene[no][0][2]);
+
+		//	日時更新
+		var data	= parent.currentscene[no][0];
+		parent.currentno	= no;
+		parent.currentid	= "%s-%02d".sprintf(data[0], data[1]);	//	フローチャート名-シーンID
+		with(datetime)
+		{
+			var dt	= data[2];
+/*
+			with(new Date())
+				dt	= "%4d/%2d/%2d %2d:%02d:%02d".sprintf(.getYear(), .getMonth()+1, .getDate(), .getHours(), .getMinutes(), .getSeconds());
+*/
+//	dm("play date: "+dt+"("+.number.width+","+.number.height+")");
+			if(dt != void)
+			{
+				var num	= "0123456789";
+				var l	= 0, w = .number.width, h = .number.height;
+				for(var i=0; i<dt.length; i++)
+				{
+//	dm(dt[i]+": "+num.indexOf(dt[i]));
+					if(num.indexOf(dt[i]) >= 0)
+						.copyRect(l, 0, .number, dt[i] * w, 0, w, h);
+					else
+						.fillRect(l, 0, w, h, 0x00000000);
+					l	+= w;
+				}
+			}
+			else
+				.fillRect(0, 0, .width, .height, 0x00000000);
+			.visible	= true;
+		}
+
+		//	サムネール変更
+		with(thumb)
+		{
+			var storage	= thumbkey+parent.currentid;
+			if(isExistentImage(storage))
+			{
+				.loadImages(storage);
+				.setSizeToImageSize();
+				.visible	= true;
+			}
+			else
+				.visible	= false;	//	見つからなかったら、表示しない
+		}
+
+		//	コメント更新
+		with(comment)
+		{
+			.text	= global.tf[commentkey][parent.currentid];
+			.visible= true;
+		}
+		SPM_lastscene	= no;
+	}
+
+	//	詳細をリセット
+	function resetInformation()
+	{
+		//	日付、サムネール、コメントをリセット
+		datetime.visible	= false;
+		thumb.visible		= false;
+		comment.visible		= false;
+
+		//	処理対象をリセット
+		parent.currentno	= void;
+		parent.currentid	= "";
+
+		SPM_lastscene	= -1;
+	}
+
+	//	ユーザーによるコメント記入の反映
+	function onChangeText(obj)
+	{
+		if(parent.currentid != "")
+			global.tf[commentkey][parent.currentid]	= obj.text;
+	}
+
+	function onButtonDown()
+	{
+		parent.onButtonDown(...);
+	}
+
+	property showed
+	{
+		getter	{ return parent.showed; }
+	}
+}
+
+class SPTabButtonLayer extends ExButtonLayer
+{
+	var uppers, lowers;	//	↑キー、↓キーに対応するオブジェクト
+
+	function SPTabButtonLayer()
+	{
+		super.ExButtonLayer(...);
+	}
+
+	function finalize()
+	{
+		super.finalize(...);
+	}
+
+	function create(id, l, t, img, hint)
+	{
+		return new global.SPTabButtonLayer(window, parent, id, l, t, img, hint, false);
+	}
+
+	function onKeyDown(key, shift)
+	{
+		if(key == VK_UP || key == VK_DOWN)
+		{
+			//	一番近い、フォーカスを受け取れるオブジェクトへフォーカスを渡す
+			var objs	= [ uppers, lowers ];
+			objs	= objs[key == VK_UP ? 0 : 1];
+			var min	= 60000;					//	最小距離
+			var center = left + (width >> 1);	//	中心位置
+			var next= void;
+			for(var i=0; i<objs.count; i++)
+			{
+				with(objs[i])
+				{
+					var dist	= Math.abs(center - (.left + (.width >> 1)));
+					if(.enabled && .focusable && dist < min)
+					{
+						next	= objs[i];
+						min		= dist;
+					}
+				}
+			}
+			if(next != void)
+				next.focus();	//	フォーカスを渡す
+		}
+		else
+			super.onKeyDown(...);
+	}
+}
+
+//	シーン再生メニューを開く
+var sceneplaymenu;
+function showScenePlayMenu(st, ret)
+{
+	if(sceneplaymenu != void)
+//		return false;
+		invalidate sceneplaymenu;
+
+	with(sceneplaymenu = new ScenePlayMenuLayer(kag, kag.fore.base))
+	{
+		.hitThreshold	= 0;
+		.return_storage	= st;
+		.return_label	= ret;
+		.show();
+	}
+	return true;
+}
+
+function hideScenePlayMenu()
+{
+	if(sceneplaymenu == void)
+		return false;
+
+	dm("hide scene play menu");
+	with(sceneplaymenu)
+	{
+		kag.process(.return_storage, .return_label);
+
+		.hide(,, closeScenePlayMenu);
+	}
+}
+
+function closeScenePlayMenu()
+{
+	dm("close scene play menu");
+//	dispose(sceneplaymenu);
+	heapGarbage(sceneplaymenu);	//	廃棄予約をしておいて、トランジション終了後に廃棄可能にする
+	sceneplaymenu	= void;
+}
+
+/*-----------------------------------------------------------------------------
+/	End of File
+/----------------------------------------------------------------------------*/
+@endif

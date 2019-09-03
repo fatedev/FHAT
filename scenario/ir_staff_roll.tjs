@@ -1,0 +1,140 @@
+
+/**************************************************************
+
+
+	イリヤ城用エンディングスタッフロール
+
+
+**************************************************************/
+
+
+class CIriyaStaffRoll
+{
+var		parWin,parLayer;
+
+	function CIriyaStaffRoll( _pr_win, _pr_layer )
+	{
+		parWin   = _pr_win;
+		parLayer = _pr_layer;
+
+		init_data();
+	}
+	function finalize()
+	{
+		release_data();
+	}
+
+	var		ED_ROLL_SPEED_Y	=-2;
+
+	var		PRN_STAFF_ROLL_LAYER	= PRIORITY_INFO_OBJ;
+//	var		PRN_STAFF_ROLL_BASE_X	= SCREEN_SIZE_W-320;
+
+	var		prn_layer;
+	var		event_no;
+	var		frame_count;
+
+	function init_data()
+	{
+		prn_layer = void;
+
+
+		event_no = 0;
+		frame_count = 0;
+		return;
+	}
+
+	function Init()
+	{
+		prn_layer = new Array();
+		return;
+	}
+	function release_data()
+	{
+	var		i;
+		for (i=0;  i<prn_layer.count;  i++) {
+//			EasyReleaseLayer( prn_layer[i] );
+			if ((typeof prn_layer[i])  ===  "Object") {
+				invalidate prn_layer[i];
+				prn_layer[i] = void;
+			}
+		}
+//		ReleaseArray( prn_layer );
+		prn_layer = void;
+		return;
+	}
+
+
+	// CGを足す
+	function add_staff_roll_cg( _file_no )
+	{
+	var		p_layer;
+		 p_layer = EasyCreateLayerObject( parWin, parLayer, "ir_staff%04d".sprintf(_file_no),
+		 				clAdapt,true, 0, SCREEN_SIZE_H, PRN_STAFF_ROLL_LAYER );
+		p_layer.setPos( SCREEN_SIZE_W-p_layer.width, p_layer.top );
+		prn_layer.add( p_layer );
+		return;
+	}
+
+
+	// 表示されているレイヤの更新
+	function update_prn_layer()
+	{
+	var		i;
+		if (CheckValid(prn_layer)  ==  false)
+			return;
+
+		for (i=0;  i<prn_layer.count;  ) {
+			if (CheckValid(prn_layer[i])  ==  false)
+				continue;
+			with ( prn_layer[i] )
+			{
+				.setPos( (SCREEN_SIZE_W-.width)/2, .top+ED_ROLL_SPEED_Y );
+				if ((.top+.height)  <  0) {
+					EasyObjectInvalidate( prn_layer[i] );
+					prn_layer.erase( i );
+					continue;
+				}
+			}
+
+			i += 1;
+		}
+		return;
+	}
+
+
+	function update_event()
+	{
+		switch ( event_no )
+		{
+		case 0:
+			add_staff_roll_cg( 0 );
+			frame_count = -1;
+			break;
+		}
+		return;
+	}
+
+	function Update()
+	{
+		update_prn_layer();
+
+
+		if (frame_count  >  0) {
+			frame_count -= 1;
+		}
+		if (frame_count  ==  0) {
+			update_event();
+		}
+
+		return;
+	}
+
+	function CheckEnd()
+	{
+		if ((prn_layer.count  ==  0)
+		&&	(frame_count  ==  -1))
+				return ( true );
+		else	return ( false );
+	}
+}
+

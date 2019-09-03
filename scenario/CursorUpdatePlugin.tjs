@@ -1,0 +1,62 @@
+/*-----------------------------------------------------------------------------/
+/	Copyright (C) TYPE-MOON All Rights Reserved.
+/		トランジション中にカーソル位置を更新しつづけるプラグイン
+/		※	トランジション中のフォーカス移動を正常なものにするため
+/-----------------------------------------------------------------------------*/
+if(typeof global.cursorupdate_object == 'undefined')
+{
+
+class CursorUpdatePlugin extends KAGPlugin
+{
+	var CursorUpdateInterval	= 100;
+
+	var	window;
+	var	timer;
+
+	function CursorUpdatePlugin(window)
+	{
+		super.KAGPlugin();
+		this.window	= window;
+		start();
+	}
+
+	function finalize()
+	{
+		stop();
+		super.finalize(...);
+	}
+
+	function start()
+	{
+		if(timer != void)
+			return;
+
+		with(timer = new Timer(handler, ""))
+			.interval = CursorUpdateInterval, .capacity = 1, .enabled = true;
+	}
+
+	function handler()
+	{
+		if(window.mouseCursorState != 0/* mcsVisible */)
+			return;
+		if(window.transCount > 0 || window.moveCount > 0)
+		{//	このウィンドウでトランジションが進行中/自動移動が実行中なら
+			//	カーソル位置を更新しつづける
+			with(window.primaryLayer)
+				.setCursorPos(.cursorX, .cursorY);	//	現在のカーソル位置を入れなおす
+		}
+	}
+
+	function stop()
+	{
+		if(timer == void)
+		{
+			invalidate timer;
+			timer	= void;
+		}
+	}
+}
+
+kag.addPlugin(global.cursorupdate_object = new CursorUpdatePlugin(kag));
+
+}

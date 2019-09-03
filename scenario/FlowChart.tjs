@@ -1,0 +1,545 @@
+/*-----------------------------------------------------------------------------
+/	Copyright (C) TYPE-MOON All Rights Reserved.
+/		フローチャートデータ
+/----------------------------------------------------------------------------*/
+@if(__FLOWCHART_DEFINED__==0)
+@set(__FLOWCHART_DEFINED__=1)
+
+//	フラグ判定/処理クラス
+class FlowFlag
+{
+	var name;
+	var value0, value1;
+	var type;
+	var str;
+	var changed;	//	operate()で値が変化したか
+	var owner;
+
+	function FlowFlag(str, type, flagnames, owner)
+	{
+		var pos;
+		name	= str.substr(0, pos = str.indexOf("//"));
+		{//	未登録のフラグ名のみ追加する
+			var	i;
+			for(i=0; i<flagnames.count; i++)
+				if(flagnames[i] == name)	break;
+			if(i==flagnames.count)
+			{
+				flagnames.add(name);	//	フラグ名を追加
+			}
+		}
+		str		= str.substr(pos+2);
+		value0	= +(str.substr(0, pos = str.indexOf("//")));
+		str		= str.substr(pos+2);
+		value1	= +str;
+		this.type	= type;
+		this.owner	= owner;
+	}
+
+	function decide()
+	{
+		var flags	= Flags;
+		if(flags[name]===void)
+			dm(@"フラグ「${name}」には値が入っていません。");
+		str	= @"(${name}[${flags[name]}] ";
+		switch(value0)
+		{
+		case 0:
+			str += @"と ${value1} が等しい? →${flags[name]==value1?'YES':'NO!'})";
+			return (flags[name]==value1);
+		case 1:
+			str += @"と ${value1} が等しくない? → ${flags[name]!=value1?'YES':'NO!'})";
+			return (flags[name]!=value1);
+		case 2:
+			str += @"が ${value1} より小さい? → ${flags[name]<value1?'YES':'NO!'})";
+			return (flags[name]<value1);
+		case 3:
+			str += @"が ${value1} より大きい? → ${flags[name]>value1?'YES':'NO!'})";
+			return (flags[name]>value1);
+		case 4:
+			str += @"が ${value1} 以下? → ${flags[name]<=value1?'YES':'NO!'})";
+			return (flags[name]<=value1);
+		case 5:
+			str += @"が ${value1} 以上? → ${flags[name]>=value1?'YES':'NO!'})";
+			return (flags[name]>=value1);
+		}
+		return 0;
+	}
+
+	function operate()
+	{
+		var flags	= Flags;
+		changed	= false;
+		switch(value1)
+		{
+		case 1:
+			str = @"${name} に ${value0} 加える(${flags[name]==void?0:flags[name]} から ";
+//			flags[name]	+= value0;
+			changed	= owner.addFlag(name, value0);
+			return str+flags[name]+" へ)";
+		case 2:
+			str = @"${name} から ${value0} 引く(${flags[name]==void?0:flags[name]} から ";
+//			flags[name]	-= value0;
+			changed	= owner.addFlag(name, -value0);
+			return str+flags[name]+" へ)";
+		case 3:
+			str = @"${name} に ${value0} 入れる(${flags[name]==void?0:flags[name]} から ";
+//			flags[name]	= value0;
+			changed	= owner.setFlag(name, value0);
+			return str+flags[name]+" へ)";
+		}
+	}
+
+	property Flags
+	{
+		getter
+		{
+			if(name[0] == "_")
+				return owner.globalFlag;
+			return owner.localFlag;
+		}
+	}
+
+	property value
+	{
+		getter	{ return Flags[name]; }
+	}
+
+	property decision
+	{
+		getter
+		{
+			switch(value0)
+			{
+			case 0:
+				if(value1==1)
+					return @"${name}が真";
+				else
+					return @"${name} == ${value1}";
+			case 1:
+				if(value1==1)
+					return @"${name}が偽";
+				else
+					return @"${name} != ${value1}";
+			case 2:	return @"${name} < ${value1}";
+			case 3:	return @"${name} > ${value1}";
+			case 4:	return @"${name} <= ${value1}";
+			case 5:	return @"${name} >= ${value1}";
+			}
+		}
+	}
+
+	property operation
+	{
+		getter
+		{
+			switch(value1)
+			{
+			case 1:	return @"${name} += ${value0}";
+			case 2:	return @"${name} -= ${value0}";
+			case 3:
+				if(value0==0)
+					return @"${name}をOFF";
+				else if(value0==1)
+					return @"${name}をON";
+				else
+					return @"${name} = ${value0}";
+			}
+		}
+	}
+}
+
+//	分岐クラス
+class FlowBifurcation
+{
+	var decisions;
+	var link;
+	var target;
+	var str;
+
+	function FlowBifurcation(str, flagnames, owner)
+	{
+		var pm	= [].split(":", str);
+		decisions	= [];
+		var i;
+		for(i=0; i<+pm[0]; i++)
+			decisions.add(new FlowFlag(pm[1+i], "d", flagnames, owner));
+		i++;
+		link	= +pm[i++];
+		target	= +pm[i];
+	}
+
+	function check()
+	{
+//		dm("decisions.count = "+decisions.count+" / link = "+link);
+		var result	= 0;
+		if(decisions.count<1)
+			return 1;	//	判定が存在しないときはOKと判断
+
+		var sept;
+		switch(link)
+		{
+		case 1:	//	すべての判定がtrueの時のみOK
+			result	= 1;
+			for(var i=0; i<decisions.count; i++)
+			{
+				result	&= decisions[i].decide();
+				str	+= sept+decisions[i].str;
+				sept= " かつ ";
+			}
+			break;
+
+		case 2:	//	いずれかの判定がtrueならOK
+			for(var i=0; i<decisions.count; i++)
+			{
+				result	|= decisions[i].decide();
+				str	+= sept+decisions[i].str;
+				sept= " 又は ";
+			}
+			break;
+		}
+		return result;
+	}
+
+	property bifurcation
+	{
+		getter
+		{
+			var	conn= link==1 ? " and " : " or ";
+			var	res	= "";
+			var	sept= "";
+			for(var i=0; i<decisions.count; i++)
+			{
+				res	+= sept+decisions[i].decision;
+				sept= conn;
+			}
+			return res;
+		}
+	}
+}
+
+//	(一つ一つの)選択肢クラス
+class FlowAlternative extends FlowBifurcation
+{
+	var text;	//	選択肢テキスト
+	var	owner;	//	フローチャート全体
+	var	base;	//	選択肢グループのベース
+	var	no;		//	選択肢内での番号
+
+	function FlowAlternative(str, target, owner, flagnames, base, no)
+	{
+		var pm	= [].split(":", str);
+		text	= pm[0];
+		this.owner	= owner;
+		this.base	= base;
+		this.no		= no;
+		decisions	= [];
+//		dm(text+": pm.count = "+pm.count+" / "+pm[1]);
+		if(pm.count > 1)
+		{
+			var i;
+			for(i=0; i<+pm[1]; i++)
+			{
+//			dm("pm["+i+"] = "+pm[i+2]);
+				decisions.add(new FlowFlag(pm[i+2], "d", flagnames, owner));
+			}
+			link	= +pm[i+2];
+		}
+		this.target	= target;
+	}
+
+	//	選択肢を示すキー
+	property key
+	{
+		getter	{ return base.key+"-"+no; }
+	}
+
+	//	選択されたことがあるか
+	property hasSelected
+	{
+		getter
+		{
+			tf["choicedAlter"]	= %[] if tf["choicedAlter"] == void;
+			return tf.choicedAlter[this.key] !== void;
+		}
+	}
+}
+
+//	フローチャートを構成するオブジェクト
+class FlowObject
+{
+	var	owner;
+	var	type, id;
+	var	left, top;
+	var	width, height;
+	var	title;
+	var	skipmode;
+	var	cx, cy;	//	フローチャートの描画に使用
+
+	function FlowObject(owner, pm)
+	{
+		this.owner	= owner;
+		type	= pm[0];
+		id		= +pm[1];
+		left	= +pm[2];
+		top		= +pm[3];
+		width	= +pm[4] - left;
+		height	= +pm[5] - top;
+		title	= pm[10];
+
+		//	タイトルの1文字目から、シーンのスキップモードを決定
+		skipmode	= "";	//	指定なし(通常動作: 既読/ユーザー指示によるスキップ
+		if(title != "")
+		{
+			//	このシーンのスキップモード
+			if(title[0] == "+")
+			{
+				skipmode	= "play";	//	既読/実行
+				title		= title.substr(1);
+			}
+			else if(title[0] == "-")
+			{
+				skipmode	= "skip";	//	既読/強制スキップ
+				title		= title.substr(1);
+			}
+		}
+	}
+
+	//	オブジェクトを示すキー(既読チェックと同じ)
+	property key
+	{
+		getter	{ return "trail_"+Storages.chopStorageExt(owner.filename)+"-%02d".sprintf(id); }
+	}
+
+	//	既読かどうか
+	property hasRead
+	{
+		getter	{ return tf[key] !== void; }
+	}
+}
+
+//	シーンクラス
+class FlowScene extends FlowObject
+{
+	var	jump;
+	var	flagoperation;
+
+	function FlowScene(owner, pm)
+	{
+		super.FlowObject(...);
+
+		jump	= [];
+		var j;
+		for(j=0; j<+pm[11]; j++)
+			jump.add(new FlowBifurcation(pm[12+j], owner.flagnames, owner));
+		var last = pm[12+j];
+		flagoperation	= [];
+		if(last!="0")
+		{
+			pm	= [].split(":", last);
+			for(j=0; j<+pm[0]; j++)
+				flagoperation.add(new FlowFlag(pm[1+j], "o", owner.flagnames, owner));
+//			dm(title+": "+flagoperation.count);
+		}
+	}
+}
+
+//	選択肢シーンクラス
+class FlowAlternatives extends FlowObject
+{
+	var	alternative;
+
+	function FlowAlternatives(owner, pm)
+	{
+		super.FlowObject(...);
+
+		alternative	= [];
+		for(var j=0; j<+pm[11]; j++)
+			alternative.add(new FlowAlternative(pm[12+j*3+2], +pm[12+j*3], owner, owner.flagnames, this, j));
+	}
+}
+
+//	外部ラベルへの移動クラス
+class FlowOuterlabel extends FlowObject
+{
+	var	file, target;
+
+	function FlowOuterlabel(owner, pm)
+	{
+		super.FlowObject(...);
+
+		file	= pm[10];	//	移動先ファイル
+		target	= +pm[11];	//	移動先ID
+	}
+}
+
+//	オプションクラス
+class FlowOption extends FlowObject
+{
+	var	name, func;
+
+	function FlowOption(owner, pm)
+	{
+		super.FlowObject(...);
+
+		name	= pm[10];	//	名前
+		func	= pm[11];	//	機能名
+	}
+}
+
+class FlowChart
+{
+	var extension	= ".fcf";
+
+	var filename, lastfile;
+	var flow;
+	var flagnames;
+
+	var id;
+
+	var history;	//	移動履歴
+
+	var changed;	//	今回変化したフラグ
+
+	function FlowChart()
+	{
+		flow		= [];
+		flagnames	= [];
+
+		history		= [];
+	}
+
+	function load(file=filename)
+	{
+		//	初期化
+		flow.clear();
+
+		//	ファイルチェック
+		var ext	= Storages.extractStorageExt(file);
+		if(ext=="")
+			file	+= extension;
+		else if(ext!=extension)
+		{
+			dm(ext+" != "+extension);
+			return false;
+		}
+		if(!Storages.isExistentStorage(file))
+		{
+			dm(file+" is'nt exist.");
+			return false;
+		}
+
+		//	ファイルからフローチャートを読み込む
+		lastfile	= filename;
+		file = filename = Storages.extractStorageName(file);
+		var	lines	= [].load(file);
+		for(var i=1; i<lines.count; i++)
+		{
+			var pm = [].split(";", lines[i]);
+			pm	= [].split("'", pm[1]);
+			var	scene	= void;
+			switch(pm[0])
+			{
+			case "SCENE":		flow[+pm[1]]	= new FlowScene(this, pm);			break;
+			case "SELECTER":	flow[+pm[1]]	= new FlowAlternatives(this, pm);	break;
+			case "OUTERLABEL":	flow[+pm[1]]	= new FlowOuterlabel(this, pm);		break;
+			case "OPTION":		flow[+pm[1]]	= new FlowOption(this, pm);			break;
+			case "ROUTE":		break;	//	何もしない
+			}
+
+		}
+		return true;
+	}
+
+	function get(id)
+	{
+		if(id >= 0 && id < flow.count)
+			return flow[id];
+		else
+			return void;
+	}
+
+	function getScriptFilename(id)
+	{
+		return Storages.chopStorageExt(filename)+"-%02d.ks".sprintf(id);
+	}
+
+	//	直前のシーンを取り出す
+	function popHistory()
+	{
+		var	last	= history[history.count - 1];
+		history.erase(history.count - 1);
+		return last;
+	}
+
+	property isValid	{ getter { return flow.count < 1; } }
+	property count		{ getter { return flow.count; } }
+
+	property current
+	{
+		setter(c)
+		{
+			if(lastfile != "")
+				history.add([lastfile, id]);	//	移動履歴を記録
+			lastfile= filename;		//	load -> current してはじめて、履歴が記録できる
+			id		= c;
+		}
+		getter	{ return id; }
+	}
+
+	property globalFlag	{ getter { return global.sf; } }
+	property localFlag	{ getter { return global.tf; } }
+//	property localFlag	{ getter { return global.f; } }
+
+	function setFlag(key, value)
+	{
+		var	flag	= key[0] == "_" ? globalFlag : localFlag;
+		var	last	= flag[key];
+		flag[key]	= value;	//	値を入れる
+
+		//	値が変わったら、更新日時を記録する
+		if(last != value)
+		{
+			dm("set flag: "+key+" "+last+" to "+value);
+			flag[key+"_update"]	= System.getTickCount();
+			changed[key]	= [last, value];	//	変化したフラグリストへ登録
+			return true;
+		}
+		return false;
+	}
+
+	function addFlag(key, value)
+	{
+		var	flag	= key[0] == "_" ? globalFlag : localFlag;
+		var	last	= flag[key];
+		flag[key]	+= value;	//	値を足す
+
+		//	値が変わったら、更新日時を記録する
+		if(last != value)
+		{
+			dm("update flag: "+key+" "+last+" to "+value);
+			flag[key+"_update"]	= System.getTickCount();
+			changed[key]	= [last, value];	//	変化したフラグリストへ登録
+			return true;
+		}
+		return false;
+	}
+
+	//	フラグの状態変化をリセット
+	function reset()
+	{
+		changed	= %[] if changed == void;
+		(Dictionary.clear incontextof changed)();
+	}
+
+	//	変化したフラグのリストを取得
+	property changedFlags
+	{
+		getter	{ return changed; }
+	}
+}
+
+/*----------------------------------------------------------------------------/
+/	
+/----------------------------------------------------------------------------*/
+@endif

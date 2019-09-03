@@ -1,0 +1,122 @@
+/*-----------------------------------------------------------------------------/
+/	Copyright (C) 2004 TYPE-MOON All Rights Reserved.
+/		花札サウンド再生
+/-----------------------------------------------------------------------------*/
+@if(__HANAFUDASOUND_DEFINED__==0)
+@set(__HANAFUDASOUND_DEFINED__=1)
+Scripts.execStorage("subroutine.tjs");
+
+class HanafudaSound
+{
+	var storages	= [
+		"hfse001.wav",	//	0
+		"hfse002.wav",	//	1
+		"hfse003.wav",	//	2
+		"hfse004.wav",	//	3
+		"hfse005.wav",	//	4
+		"hfse006.wav",	//	5
+		"hfse007.wav",	//	6
+		"hfse008.wav",	//	7
+		"hfse009.wav",	//	8
+		"hfse010.wav",	//	9
+		"hfse011.wav",	//	10
+		"hfse012.wav",	//	11
+		"hfse004.wav",	//	12
+		"hfse013.wav",	//	13
+		"hfse014.wav",	//	14
+		"hfse015.wav",	//	15
+		"hfse008.wav",	//	16
+		"hfse017.wav",	//	17
+		"hfse018.wav",	//	18
+		"hfse019.wav",	//	19
+		"hfse035.wav",	//	20
+		"se439.wav",	//	21
+		"se098.wav",	//	22
+		"hfse014.wav",	//	23
+		"irse010.wav",	//	24
+		"hfse033.wav"	//	25
+	];
+	var bgmstorages	= [
+		"hfbgm01.ogg",
+		"hfbgm02.ogg",
+		"hfbgm03.ogg",
+		"",
+		"hfbgm05.ogg",
+		"hfbgm06.ogg",
+		"hfbgm07.ogg",
+		"hfbgm08.ogg"
+	];
+
+	function HanafudaSound()
+	{
+	}
+
+	function play(no)
+	{
+//		dm("play: "+storages[no]);
+		if(Storages.isExistentStorage(storages[no]))
+			playSound(storages[no]);
+	}
+
+	function stop(no)
+	{
+		if(Storages.isExistentStorage(storages[no]))
+			stopSound(storages[no]);
+	}
+
+	function playbgm(no, intime=0, overlap, loop=true)
+	{
+//		dm("playbgm: "+bgmstorages[no]);
+		if(Storages.isExistentStorage(bgmstorages[no]))
+			playBGM(bgmstorages[no], intime, overlap, loop);
+	}
+
+	function stopbgm(outtime=400, overlap)
+	{
+		stopBGM(outtime, overlap);
+	}
+
+	property 勝負開始		{ setter(s) { if(s) play(0); else stop(0); } getter { return(0); } }
+	property めくる			{ setter(s) { if(s) play(1); else stop(1); } getter { return(1); } }
+	property 配る			{ setter(s) { if(s) play(2); else stop(2); } getter { return(2); } }
+	property 軽く置く		{ setter(s) { if(s) play(3); else stop(3); } getter { return(3); } }
+	property 重く置く		{ setter(s) { if(s) play(4); else stop(4); } getter { return(4); } }
+	property こいこい		{ setter(s) { if(s) play(5); else stop(5); } getter { return(5); } }
+	property 勝負			{ setter(s) { if(s) play(6); else stop(6); } getter { return(6); } }
+	property メニュー出現	{ setter(s) { if(s) play(7); else stop(7); } getter { return(7); } }
+	property 宝具音			{ setter(s) { if(s) play(8); else stop(8); } getter { return(8); } }
+	property パンチ			{ setter(s) { if(s) play(9); else stop(9); } getter { return(9); } }
+	property クリック		{ setter(s) { if(s) play(10); else stop(10); } getter { return(10); } }
+	property 決定			{ setter(s) { if(s) play(11); else stop(11); } getter { return(11); } }
+	property 場に置く		{ setter(s) { if(s) play(12); else stop(12); } getter { return(12); } }
+	property キャラ決定		{ setter(s) { if(s) play(13); else stop(13); } getter { return(13); } }
+	property アイコン表示	{ setter(s) { if(s) play(14); else stop(14); } getter { return(14); } }
+	property 宝具札移動		{ setter(s) { if(s) play(15); else stop(15); } getter { return(15); } }
+	property ボタンエンター	{ setter(s) { if(s) play(16); else stop(16); } getter { return(16); } }
+	property ふすま移動		{ setter(s) { if(s) play(17); else stop(17); } getter { return(17); } }
+	property 石化			{ setter(s) { if(s) play(18); else stop(18); } getter { return(18); } }
+	property 宝具アイコン	{ setter(s) { if(s) play(19); else stop(19); } getter { return(19); } }
+	property ガード			{ setter(s) { if(s) play(20); else stop(20); } getter { return(20); } }
+	property パンチ2		{ setter(s) { if(s) play(21); else stop(21); } getter { return(21); } }
+	property 文字出現		{ setter(s) { if(s) play(22); else stop(22); } getter { return(22); } }
+	property 役チップ出現	{ setter(s) { if(s) play(23); else stop(23); } getter { return(23); } }
+	property 役チップ解除	{ setter(s) { if(s) play(24); else stop(24); } getter { return(24); } }
+	property ファンファーレ	{ setter(s) { if(s) play(25); else stop(25); } getter { return(25); } }
+
+	property bgm1			{ setter(s) { if(s) playbgm(0); else stopbgm(); } getter { return(0); } }
+	property bgm2			{ setter(s) { if(s) playbgm(1); else stopbgm(); } getter { return(1); } }
+	property bgm3			{ setter(s) { if(s) playbgm(2); else stopbgm(); } getter { return(2); } }
+	property bgm4			{ setter(s) { if(s) playbgm(3); else stopbgm(); } getter { return(3); } }
+	property bgm5			{ setter(s) { if(s) playbgm(4,,, false); else stopbgm(); } getter { return(4); } }
+	property bgm6			{ setter(s) { if(s) playbgm(5); else stopbgm(); } getter { return(5); } }
+	property bgm7			{ setter(s) { if(s) playbgm(6); else stopbgm(); } getter { return(6); } }
+	property bgm8			{ setter(s) { if(s) playbgm(7); else stopbgm(); } getter { return(7); } }
+}
+
+var hfSound	= new HanafudaSound();
+
+@endif
+
+/*-----------------------------------------------------------------------------/
+/	End of HFSound.tjs
+/-----------------------------------------------------------------------------*/

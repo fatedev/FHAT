@@ -1,0 +1,216 @@
+
+var __dummyLayer;
+
+@if (PRN_CIMAGE_COUNT  ==  1)
+var		CImageBufferMakeCount=0;
+@endif
+class CImageBuffer
+{
+	var parentWindow;
+	var parentLayer;
+	var capacity;
+	var owners = [];
+	var __items = [];
+	
+	function CImageBuffer( _window, _layer )
+	{
+@if (PRN_CIMAGE_COUNT  ==  1)
+CImageBufferMakeCount += 1;
+dm("constract CImageBufferMakeCount:"+CImageBufferMakeCount);
+@endif
+		parentWindow = _window;
+		parentLayer = _layer;
+		capacity = IMAGEBUFFER_CAPACITY_DEFAULT;
+	}
+	
+	function finalize()
+	{
+@if( DEBUG_MODE )
+		var i;
+		if ( owners.count>1 )
+		{
+			dm( "invalidate images. images.owner.count=%d".sprintf( owners.count ) );
+			for ( i=0; i<owners.count; i++ )
+				if ( CheckValid(owners[i]) )
+					if ( owners[i].enabled )
+						dm( "### images を破棄したが、images を共有している %s は有効なままになっている".sprintf(owners[i].type));
+		}
+@endif
+		clear();
+		invalidate __items;
+
+@if (PRN_CIMAGE_COUNT  ==  1)
+CImageBufferMakeCount -= 1;
+dm("destract CImageBufferMakeCount:"+CImageBufferMakeCount);
+@endif
+	}
+	
+	function clear()
+	{
+		var i;
+		for ( i=0; i<__items.count; i++ )
+		{
+			if ( CheckValid(__items[i].layer) )
+				invalidate __items[i].layer;
+		} 
+		__items.clear();
+	}
+	
+	function get( info )
+	{
+		if ( info==void || info.filename=="" )
+			return void;
+		var layer = findLayer( info );
+		if ( layer==void )
+		{
+			layer = addLayer( info );
+//			dm( "(NEW) "+info.filename );
+		}
+		else
+		{
+//			dm( "(RECYCLE)"+info.filename );
+		}
+		return layer;
+	}
+	
+	
+	function isMatch( item, info )
+	{
+		if ( item.mirror != info.mirror )
+			return false;
+		if ( item.filename != info.filename )
+			return false;
+		if ( item.clipRect && info.clipRect )
+		{
+			if ( item.clipRect.left != info.clipRect.left )
+				return false;
+			if ( item.clipRect.top != info.clipRect.top )
+				return false;
+		}
+		return true;
+	}
+	
+	
+	function findLayer( info )
+	{
+		// 要求された情報と一致するバッファを探す
+		var item;
+		var i;
+		for ( i=__items.count-1; i>=0; i-- )
+		{
+			item = __items[i];
+			// 一致するものが見つかったら、そのバッファを一番先頭に移動し、レイヤを返す
+			if ( isMatch( item, info ) )
+			{
+				__items.erase(i);
+				__items.add(item);
+				return item.layer;
+			}
+		}
+		// 見つからなかった場合
+		return void;
+	}
+
+	// レイヤを追加する
+	function addLayer( info )
+	{
+		var item = %[];
+		item.filename = info.filename;
+		item.mirror = info.mirror;
+		item.clipRect = info.clipRect;
+		item.layer = newLayer( info );
+		// レイヤリストに新しいレイヤを追加
+		__items.add( item );
+		// リストの保持するレイヤ数が指定数を超えた場合は、超えた部分を削除する
+		while ( __items.count > capacity )
+		{
+			if ( CheckValid(__items[0].layer) )
+				invalidate __items[0].layer;
+			__items.erase(0);
+		}
+		return item.layer;
+	}
+	
+	// 画像情報 info を元にして新しいレイヤを作成する
+	function newLayer( info )
+	{
+		var filename = info.filename;
+		var 左上透過 = info.adapt;
+		var 範囲 = info.clipRect;
+
+		// 新しいレイヤを作る
+		// バッファに画像をロードする
+		var buf = new CSpriteLayer( parentWindow, parentLayer );
+		with ( buf )
+		{
+			if ( 左上透過 )
+				.loadImages( filename, clAdapt );
+			else
+				.loadImages( filename, clNone );
+			.setImagePos( 0, 0 );
+			.setSize( .imageWidth, .imageHeight );
+		}
+		// 位置調整
+		if ( 範囲 )
+		{
+			if ( 範囲.width < 0 ) 範囲.width = buf.width;
+			if ( 範囲.height< 0 ) 範囲.height = buf.height;
+			
+			if ( 範囲.left==0 && 範囲.top==0 && 範囲.width==buf.width && 範囲.height==buf.height )
+				;
+			else
+			{
+				buf.copyRect( 0, 0, buf, 範囲.left, 範囲.top, 範囲.width, 範囲.height );
+				buf.width = 範囲.width;
+				buf.height = 範囲.height;
+				buf.setImageSize( buf.width, buf.height );
+			}
+		}	
+		// バッファの画像をチップ用レイヤに転送する
+		if ( info.mirror )
+			buf.flipLR();
+		// 新しく作ったレイヤを返す
+		return buf;
+	}
+}
+
+
+
+
+function getCharacterImageFileInfo( char_id, image_id, muki )
+{
+	var obj = new CIrServant();
+	obj.characterId = char_id;
+	obj.imageId = image_id;
+	obj.direction = muki;
+	var info = obj.getImageFileInfo();
+	invalidate obj;
+	return info;
+}
+
+
+function GetLoadCharaData( file_name, _pr_win, _pr_layer, _off_x, _off_y )
+{
+var		load_buf;
+var		ret_cg;
+	if (CheckValid(file_name)  ==  false)
+		return ( void );
+
+	if (isImageFile(file_name.filename)  ==  false)
+		return ( void );
+
+	load_buf = EasyCreateLayerObject( _pr_win,_pr_layer, file_name.filename, clAdapt, false, 0,0, 0 );
+	with (ret_cg = new CSpriteLayer(_pr_win,_pr_layer) )
+	{
+		if (file_name.mirror  ==  false)
+				.assign( load_buf );
+		else	.assignMirror( load_buf );
+
+		.setPos( _off_x-file_name.centerX, _off_y-file_name.centerY );
+	}
+	invalidate load_buf;
+	load_buf = void;
+
+	return ( ret_cg );
+}
+

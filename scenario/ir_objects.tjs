@@ -1,0 +1,5828 @@
+/*******************************************************************************
+
+	ゲーム内のオブジェクトを定義
+	
+*******************************************************************************/
+
+
+// カメラ
+var CAMERAMODE_DEFAULT	= 0;
+var CAMERAMODE_SCAN		= 1;
+var CAMERAMODE_TARGET	= 2;
+var CAMERAMODE_CUSTOM	= 3;
+// 動き
+var MOTION_SMOOTH	= 0;
+var MOTION_LINER	= 1;
+//
+var MOTIONTYPE_STOP				= 0;
+var MOTIONTYPE_DEFAULT			= 1; // 一定の速度
+var MOTIONTYPE_SCHEDULED_LINER	= 2; // 決められた時間に到達する
+var MOTIONTYPE_SCHEDULED_JUMP	= 3;
+var MOTIONTYPE_SCHEDULED_SIN 	= 4;
+var MOTIONTYPE_SCHEDULED_SIN_RETURN = 5;
+var MOTIONTYPE_INVERCE			= 6; // 速度は残り距離に反比例する
+var MOTIONTYPE_LINER			= 7; // 指定地点まで直線移動する
+
+// 向き
+var MUKI_DEFAULT	= 0;		// 向きの区別がないチップの場合に使う
+var	MUKI_RIGHT		= 1;
+var MUKI_LEFT		= 2;
+var	MUKI_RIGHTBACK	= 3;
+var MUKI_LEFTBACK	= 4;
+var MUKI_CLOCK01	= 11;
+var MUKI_CLOCK02	= 12;
+var MUKI_CLOCK03	= 13;
+var MUKI_CLOCK04	= 14;
+var MUKI_CLOCK05	= 15;
+var MUKI_CLOCK06	= 16;
+var MUKI_CLOCK07	= 17;
+var MUKI_CLOCK08	= 18;
+var MUKI_CLOCK09	= 19;
+var MUKI_CLOCK10	= 20;
+var MUKI_CLOCK11	= 21;
+var MUKI_CLOCK12	= 22;
+
+// アニメの種類
+var ANI_SERVANT			= 0x0100;
+var ANI_MASTER			= 0x0200;
+var ANI_BOSS			= 0x0300;
+var ANI_EMOTION			= 0x0400;
+var ANI_BUTTON			= 0x0500;
+var ANI_STAGE1			= 0x1000;
+var ANI_STAGE2			= 0x2000;
+var ANI_STAGE3			= 0x3000;
+// ユーザー定義のアニメオフセット
+var ANI_SERVANT_USER	= ANI_SERVANT|0x90;
+var ANI_MASTER_USER		= ANI_MASTER|0x90;
+
+var ANI_START			= 1;
+
+var ANI_STAND			= ANI_SERVANT|0x02;
+var ANI_MOVE			= ANI_SERVANT|0x03;
+var ANI_RUN				= ANI_SERVANT|0x04;
+var ANI_JUMP			= ANI_SERVANT|0x05;
+var ANI_JUMPING			= ANI_SERVANT|0x06;
+var ANI_MOVETO_JUMPPOS	= ANI_SERVANT|0x07;
+var ANI_DAMAGE			= ANI_SERVANT|0x08;
+var ANI_KNOCKBACK		= ANI_SERVANT|0x09;
+var ANI_BLOWN			= ANI_SERVANT|0x0A;
+var ANI_HOUGUDAMAGED	= ANI_SERVANT|0x0B;
+var ANI_MOVETOGOAL		= ANI_SERVANT|0x0C;
+var ANI_DEAD			= ANI_SERVANT|0x0D;
+var ANI_LANDING			= ANI_SERVANT|0x0E;
+var ANI_FIGHT			= ANI_SERVANT|0x10;
+var ANI_イベント待機	= ANI_SERVANT|0x11;
+var ANI_イベント移動	= ANI_SERVANT|0x12;
+var	ANI_GOAL			= ANI_SERVANT|0x13;
+var ANI_勝利			= ANI_SERVANT|0x14;
+var ANI_麻痺			= ANI_SERVANT|0x15;
+var ANI_気絶			= ANI_SERVANT|0x16;
+var ANI_FIGHT_WIN		= ANI_SERVANT|0x17;
+var ANI_FIGHT_READY		= ANI_SERVANT|0x18;
+var ANI_HOUGU			= ANI_SERVANT|0x19;
+var ANI_HOUGU2			= ANI_SERVANT|0x1A;
+var ANI_HOUGU3			= ANI_SERVANT|0x1B;
+var ANI_HOUGU4			= ANI_SERVANT|0x1C;
+var ANI_HOUGU_DEFENSE	= ANI_SERVANT|0x1D;
+var ANI_ENDING_STAND	= ANI_SERVANT|0x1E;
+
+var ANI_DROWNED			= ANI_SERVANT|0x30;
+var ANI_DROWN			= ANI_SERVANT|0x31;
+var ANI_通常着地		= ANI_SERVANT|0x32;
+var ANI_溺れ着地		= ANI_SERVANT|0x33;
+var ANI_ゴール着地		= ANI_SERVANT|0x34;
+var ANI_飲み込まれる	= ANI_SERVANT|0x35;
+
+var ANI_HANG			= ANI_SERVANT|0x50;
+var ANI_HANG_PINCH		= ANI_SERVANT|0x51;
+var ANI_食事			= ANI_SERVANT|0x52;
+var ANI_食事待機		= ANI_SERVANT|0x53;
+var ANI_MOVETOTABLE		= ANI_SERVANT|0x54;
+var ANI_崖_移動			= ANI_SERVANT|0x55;
+var ANI_崖_登る			= ANI_SERVANT|0x56;
+var ANI_崖_しがみつき	= ANI_SERVANT|0x57;
+var ANI_崖_落下			= ANI_SERVANT|0x58; 
+var ANI_崖_落下した		= ANI_SERVANT|0x59;
+var ANI_登る			= ANI_SERVANT|0x5A;
+var ANI_飛び乗る		= ANI_SERVANT|0x5B;
+var ANI_飛び乗る_ジャンプ中	= ANI_SERVANT|0x5C;
+var ANI_飛び降りる		= ANI_SERVANT|0x5D;
+var ANI_脱落			= ANI_SERVANT|0x5E;
+var ANI_落下			= ANI_SERVANT|0x60;
+
+var ANI_場外			= ANI_SERVANT|0x70;
+var	ANI_復帰			= ANI_SERVANT|0x71;
+var ANI_DEFENSE_STAND	= ANI_SERVANT|0x72;
+var ANI_DEFENSE_MOVE	= ANI_SERVANT|0x73;
+var ANI_SHIELD			= ANI_SERVANT|0x74;
+var ANI_放り出される	= ANI_SERVANT|0x75;
+var ANI_しゃがみ		= ANI_SERVANT|0x76;
+var ANI_起き上がり		= ANI_SERVANT|0x77;
+var	ANI_復帰２			= ANI_SERVANT|0x78;
+
+var ANI_FOLLOWTARGET	= ANI_SERVANT|0x90;
+
+var ANI_MASTER_STAND	= ANI_MASTER|0x01;
+var ANI_MASTER_RUN		= ANI_MASTER|0x02;
+var ANI_MASTER_JUMP		= ANI_MASTER|0x03;
+var ANI_MASTER_FAILED	= ANI_MASTER|0x04;
+var ANI_MASTER_SUCCEEDED= ANI_MASTER|0x05;
+var ANI_MASTER_起き上がり=ANI_MASTER|0x06;
+
+var ANI_BUTTON_FIGHT	= ANI_BUTTON|0x01;
+var ANI_BUTTON_EAT		= ANI_BUTTON|0x02;
+var ANI_BUTTON_登る		= ANI_BUTTON|0x03;
+var ANI_BUTTON_HIDE		= ANI_BUTTON|0x04;
+
+//
+var ANI_EMOTION_CONDITION	= 0x80;
+
+var ANI_EMOTION_HAPPY		= ANI_EMOTION|0x01;
+var ANI_EMOTION_SILENCE		= ANI_EMOTION|0x02;
+var ANI_EMOTION_EXCLAMATION = ANI_EMOTION|0x03;
+var ANI_EMOTION_CONFUSE		= ANI_EMOTION|0x04|ANI_EMOTION_CONDITION;
+var ANI_EMOTION_PARALYZE	= ANI_EMOTION|0x05|ANI_EMOTION_CONDITION;
+var ANI_EMOTION_NODAMAGE	= ANI_EMOTION|0x06|ANI_EMOTION_CONDITION;
+var ANI_EMOTION_RAPID		= ANI_EMOTION|0x07|ANI_EMOTION_CONDITION;
+var ANI_EMOTION_ANGER		= ANI_EMOTION|0x08;
+var ANI_EMOTION_SWEAT		= ANI_EMOTION|0x09;
+var ANI_EMOTION_EXCLAMATION2= ANI_EMOTION|0x0A;
+
+//
+var ANIWAIT_TITLE = 1;
+var ANIWAIT_GOAL = 1;
+var ANIWAIT_CONGRATULATIONS = 1;
+var ANIWAIT_RETIRE = 1;
+var ANIWAIT_HIT	= 2;
+var ANIWAIT_FIGHT = 6;
+var ANIWAIT_STAND = 15;
+var ANIWAIT_WALK = 5;
+var ANIWAIT_RUN	 = 2;
+var ANIWAIT_JUMP = 6;
+var ANIWAIT_着地 = 6;
+var ANIWAIT_ボタン連打 = 3;
+var ANIWAIT_DAMAGE = 4;
+var ANIWAIT_溺れ = 10;
+var ANIWAIT_EAT = 4;
+var ANIWAIT_登る = 2;
+var ANIWAIT_FIGHTEFF_ARCHER = 3;
+var ANIWAIT_FIGHTEFF_CASTER = 6;
+var ANIWAIT_FIGHTEFF_LANCER = 3;
+var ANIWAIT_FIGHTEFF_RIDER = 6;
+var ANIWAIT_FIGHTEFF_SABER = 6;
+
+
+// サーバントとマスターの組み合わせによるエモーションの組み合わせを得る
+var EMOSCENE_SELECT = 0;		// キャラ選択時
+var EMOSCENE_QUIZ_SUCCESS = 1;	// クイズ正解時
+var EMOSCENE_QUIZ_FAIL = 2;		// クイズ不正解時
+
+
+var OBJTYPE_BALL	= "ball";
+var OBJTYPE_SHOT	= "shot";
+var OBJTYPE_SERVANT	= "servant";
+var OBJTYPE_BOSS	= "boss";
+var OBJTYPE_SHADOW	= "shadow";
+var OBJTYPE_HALBERD = "halberd";
+var OBJTYPE_GILGAMESH="gilgamesh";
+var OBJTYPE_SWORD	= "sword";
+var OBJTYPE_ITEM	= "item";
+
+var STATUS_PLAYING	= 0;
+var STATUS_FAILED	= 1;
+var STATUS_SUCCEEDED= 2;
+
+
+var IMAGEID_TYPEUSER	= 0x100000;
+var IMAGEID_TYPEMASK	= 0xFFFF00;
+var IMAGEID_INDEXMASK	= 0x00FF;
+
+var IMAGEID_DROWNED		= 0x0100;	// 水死体
+var IMAGEID_ATTACK		= 0x0200; 	// 攻撃
+var IMAGEID_SHIELD		= 0x0300;	// 盾にされている
+var IMAGEID_EAT			= 0x0400;	// 食べる
+var IMAGEID_CLIMB		= 0x0500;	// よじ登る
+var IMAGEID_DEFENSE_STAND = 0x0600;	// 盾を持った状態での待機
+var IMAGEID_DEFENSE_MOVE  = 0x0700;	// 盾を持った状態での歩行
+var IMAGEID_CROUCH		= 0x0800;	// しゃがむ・起き上がる
+var IMAGEID_DAMAGE		= 0x0900;	// ダメージ受けた
+var IMAGEID_JUMP		= 0x0A00;	// ジャンプ
+var IMAGEID_HANG		= 0x0B00;	// しがみつく
+var IMAGEID_HANG_PINCH	= 0x0C00;	// しがみつく（ピンチ）
+var IMAGEID_DROWN		= 0x0D00;	// 溺れる
+var IMAGEID_LANDING		= 0x0E00;	// 着地
+var IMAGEID_WALK		= 0x0F00;	// 歩く
+var IMAGEID_STAND		= 0x1000;	// 待機
+var IMAGEID_WIN			= 0x2000;	// 勝利
+var IMAGEID_RUN			= 0x3000;	// 走る
+var IMAGEID_DOWN		= 0x4000;	// 気絶
+var IMAGEID_HOUGU		= 0x5000;	// 宝具使用
+var IMAGEID_HOUGU_DEFENSE = 0x5500;	// 宝具で攻撃された場合の防御アニメ
+var IMAGEID_ENDINGSTAND = 0x6000;	// エンディングでの立ち
+
+
+class CMotion
+{
+	var x;				// 座標
+	var y;
+	var z;
+	var speedX;			// 速度
+	var speedY;
+	var speedZ;
+	var accelX;			// 加速度
+	var accelY;
+	var accelZ;
+	var motionSpeed;	// 速度（各速度成分の合成値）
+	var motionStartX;	// 初期位置
+	var motionStartY;
+	var motionStartZ;
+	var motionDestX;	// 目標位置
+	var motionDestY;
+	var motionDestZ;
+	var motionRateX;	// 移動割合
+	var motionRateY;
+	var motionRateZ;
+	var motionTimer;	// 経過時間
+	var motionType;		// 動き方
+	var motionFollow;	// 追跡対象
+	var motionLength;	// 所要時間
+	var motionHeight;	// ジャンプ高さ
+	var motionDone;		// 移動中かどうか
+	var type;
+	
+	function CMotion()
+	{
+		type = "CMotion";
+		x = 0;
+		y = 0;
+		z = 0;
+		speedX = 0;
+		speedY = 0;
+		speedZ = 0;
+		motionSpeed = 0;
+		motionType = MOTIONTYPE_DEFAULT;
+		motionStart();
+		motionDone = true;
+	}
+
+	// ベクトルクリア
+	function stop()
+	{
+		speedX = 0;
+		speedY = 0;
+		speedZ = 0;
+		accelX = 0;
+		accelY = 0;
+		accelZ = 0;
+		motionType = MOTIONTYPE_DEFAULT;
+		motionSpeed = 0;
+		motionDone = true;
+	}
+
+	// 新しい動きをはじめる
+	function motionStart()
+	{
+		motionStartX = x;
+		motionStartY = y;
+		motionStartZ = z;
+		motionTimer = 0;
+		motionDone = false;
+	}
+
+	// 指定された方法で動く
+	function motionUpdate()
+	{
+		switch( motionType )
+		{
+		// 指定された速度、加速度にしたがって移動する
+		case MOTIONTYPE_DEFAULT:
+			motionUpdateDefault();
+			break;
+			
+		// 指定された場所に移動する
+		case MOTIONTYPE_LINER:
+			motionUpdateLiner();
+			break;
+
+		// 指定された場所に移動する（所要時間を指定）
+		case MOTIONTYPE_SCHEDULED_LINER:
+			motionUpdateScheduledLiner();
+			break;
+			
+		// 指定された場所に飛び移る（所要時間を指定）
+		case MOTIONTYPE_SCHEDULED_JUMP:
+			motionUpdateScheduledJump();
+			break;
+			
+		// 指定された場所まで移動（所要時間を指定）
+		case MOTIONTYPE_SCHEDULED_SIN:
+			motionUpdateScheduledSin();
+			break;
+
+		// 指定された場所まで移動し、また戻ってくる（所要時間を指定）
+		case MOTIONTYPE_SCHEDULED_SIN_RETURN:
+			motionUpdateScheduledSinReturn();
+			break;
+
+		// 目的地に近づくほど速度が遅くなる
+		case MOTIONTYPE_INVERCE:
+			motionUpdateInverce();
+			break;
+			
+		default:
+			dm( "unknwon motion-type : "+motionType );
+			break;	
+		}
+		motionTimer++;
+	}
+	
+	function motionUpdateDefault()
+	{
+		x += speedX;
+		y += speedY;
+		z += speedZ;
+		speedX += accelX;
+		speedY += accelY;
+		speedZ += accelZ;
+		motionDone = false;
+	}
+	
+	function motionUpdateLiner()
+	{	
+		var dx;
+		var dy;
+		var dz;
+		// 目的地までの距離
+		dx = motionDestX - x;
+		dy = motionDestY - y;
+		dz = motionDestZ - z;
+		var old_distance = Math.sqrt(dx*dx+dy*dy+dz*dz);
+		// 目的地に非常に近い場合は、到着したものとする
+		if ( old_distance < 0.1 )
+		{
+			x = motionDestX;
+			y = motionDestY;
+			z = motionDestZ;
+			motionDone = true;
+			return;
+		}
+		// 座標更新
+		speedX = motionSpeed*dx/old_distance;
+		speedY = motionSpeed*dy/old_distance;
+		speedZ = motionSpeed*dz/old_distance;
+		x += speedX;
+		y += speedY;
+		z += speedZ;
+		// 目的地までの距離（座標更新後）
+		dx = motionDestX - x;
+		dy = motionDestY - y;
+		dz = motionDestZ - z;
+		var new_distance = Math.sqrt(dx*dx+dy*dy+dz*dz);
+		// 到着チェック（移動後の方が移動前よりも目的地から離れた場合は、目的地に到着したとみなす）
+		if ( new_distance >= old_distance )
+		{
+			x = motionDestX;
+			y = motionDestY;
+			z = motionDestZ;
+			motionDone = true;
+		}
+		else
+			motionDone = false;
+	}
+	
+	
+	function motionUpdateScheduledLiner()
+	{
+		if ( motionTimer >= motionLength )
+		{
+			x = motionDestX;
+			y = motionDestY;
+			z = motionDestZ;
+			motionDone = true;
+		}
+		else
+		{
+			x += ( motionDestX-x ) / (motionLength-motionTimer);
+			y += ( motionDestY-y ) / (motionLength-motionTimer);
+			z += ( motionDestZ-z ) / (motionLength-motionTimer);
+			motionDone = false;
+		}
+	}
+	
+	function motionUpdateScheduledJump()
+	{
+		var timeLeft = motionLength-motionTimer;
+		if ( timeLeft <= 0 )
+		{
+			x = motionDestX;
+			y = motionDestY;
+			z = motionDestZ;
+			motionDone = true;
+		}
+		else
+		{
+			x += ( motionDestX-x ) / timeLeft;
+			y += ( motionDestY-y ) / timeLeft;
+			z  = motionStartZ + ( motionDestZ-motionStartZ )*motionTimer/motionLength + motionHeight * Math.sin( Math.PI*motionTimer/motionLength );// 擬似放物線
+			motionDone = false;
+		}
+	}
+	
+	function motionUpdateScheduledSin()
+	{
+		if ( motionTimer >= motionLength )
+		{
+			x = motionDestX;
+			y = motionDestY;
+			z = motionDestZ;
+			motionDone = true;
+		}
+		else
+		{
+			var sin = Math.sin( Math.PI/2*motionTimer/motionLength );
+			x = motionStartX + (motionDestX-motionStartX) * sin;
+			y = motionStartY + (motionDestY-motionStartY) * sin;
+			z = motionStartZ + (motionDestZ-motionStartZ) * sin;
+			motionDone = false;
+		}
+	}
+	
+	function motionUpdateScheduledSinReturn()
+	{
+		if ( motionTimer >= motionLength )
+		{
+			x = motionStartX;
+			y = motionStartY;
+			z = motionStartZ;
+			motionDone = true;
+		}
+		else
+		{
+			var sin = Math.sin( Math.PI*motionTimer/motionLength );
+			x = motionStartX + (motionDestX-motionStartX) * sin;
+			y = motionStartY + (motionDestY-motionStartY) * sin;
+			z = motionStartZ + (motionDestZ-motionStartZ) * sin;
+			motionDone = false;
+		}
+	}	
+	
+	function motionUpdateInverce()
+	{
+		// ターゲットオブジェクトが指定されている場合は、そのオブジェクトの座標を目的地とする
+		if ( CheckValid(motionFollow) )
+		{
+			motionDestX = motionFollow.x;
+			motionDestY = motionFollow.y;
+			motionDestZ = motionFollow.z;
+		}
+		// 速度を決定する
+		speedX = ( motionDestX-x ) * motionRateX;
+		speedY = ( motionDestY-y ) * motionRateY;
+		speedZ = ( motionDestZ-z ) * motionRateZ;
+		// 移動量が少なくなった場合は目的地に一致させる
+		if ( Math.abs(speedX)<0.01 ){ speedX=0; x=motionDestX; }
+		if ( Math.abs(speedY)<0.01 ){ speedY=0; y=motionDestY; }
+		if ( Math.abs(speedZ)<0.01 ){ speedZ=0; z=motionDestZ; }
+		// 座標を更新する
+		x += speedX;
+		y += speedY;
+		z += speedZ;
+		// X,Y,Zすべての移動量がゼロの場合は移動完了とする
+		if ( speedX || speedY || speedZ )
+			motionDone = false;
+		else
+			motionDone = true;
+	}
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+//==============================================================================
+//	視点情報
+//==============================================================================
+class CIriyaCamera extends CMotion
+{
+	// スクリーンサイズ
+	var screenWidth;
+	var screenHeight;
+	// カメラモード
+	var mode;
+	//
+	var limitRect; // 移動可能範囲
+	var limitRectEnabled;
+	// event
+	var onUpdate;
+	
+	function CIriyaCamera()
+	{
+		super.CMotion();
+		type = "CIriyaCamera";
+		screenWidth = 0;
+		screenHeight = 0;
+		x = 0;
+		y = 0;
+		mode = CAMERAMODE_DEFAULT;
+		motionType = MOTIONTYPE_DEFAULT;
+		motionRateX = 0.3;
+		motionRateY = 0.3;
+	}
+
+	//--------------------------------------------------------------------------
+	// 実際に表示されている範囲を left, top, right, bottom を要素とする辞書配列で得る
+	//--------------------------------------------------------------------------
+	property visibleRect{
+		getter(){
+			return %[
+				left	:	x - screenWidth /2,
+				top		:	y - screenHeight/2,
+				right	:	x - screenWidth /2 + screenWidth,
+				bottom	:	y - screenHeight/2 + screenHeight
+			];
+		}
+	}
+	
+	//--------------------------------------------------------------------------
+	// ウィンドウ上での座標をフィールド上での座標に変換する
+	//--------------------------------------------------------------------------
+	function windowToField( win_x, win_y )
+	{
+		var __px = this.x - screenWidth\2  + win_x;
+		var __py = this.y - screenHeight\2 + win_y;
+	
+		var pos = %[
+			x : __px,
+			y :	__py
+		];
+
+		return pos;
+	}
+		
+	//--------------------------------------------------------------------------
+	// 指定された範囲を超えないように調整する
+	//--------------------------------------------------------------------------
+	function adjust()
+	{
+		if ( limitRect )
+		{
+			x = round( limitRect.left+screenWidth\2, x, limitRect.right-screenWidth\2   );
+			y = round( limitRect.top+screenHeight\2, y, limitRect.bottom-screenHeight\2 );
+		}
+	}
+
+	// カメラ座標を更新する
+	function update()
+	{
+		if ( onUpdate )
+			if ( onUpdate( this ) == false )
+				switch( mode )
+				{
+				case CAMERAMODE_DEFAULT:
+				case CAMERAMODE_TARGET:
+					motionDestX = motionFollow.x;
+					motionDestY = motionFollow.y;
+					break;
+				case CAMERAMODE_SCAN:
+					break;
+				}
+		var _x = x;
+		var _y = y;
+		motionUpdate();
+		if ( limitRectEnabled )
+			adjust();
+		if ( Math.abs(_x-x)<0.1 && Math.abs(_y-y)<0.1 )
+			motionDone = true;
+	}
+
+	function copyFrom( camera )
+	{
+		with( camera )
+		{
+			screenWidth = .screenWidth;
+			screenHeight= .screenHeight;
+			x = motionDestX = .x;
+			y = motionDestY	= .y;
+		}
+	}
+}
+
+
+
+
+
+
+
+
+
+//==============================================================================
+//	描画オブジェクトをあらわすためのクラス
+//==============================================================================
+class CIriyaObject extends CMotion
+{
+	//property parentWindow; // （プロパティ）親ウィンドウ
+	//property parentLayer;	 // （プロパティ）親レイヤ
+	var child;			// 子オブジェクトリスト
+	var scene;			// 親シーン
+	var scrollRateX;	// X方向にスクロールする際、X座標と、実際に描画するX座標との割合。 1.0 でX座標と一致する
+	var scrollRateY;
+	var origin;			// 原点をどこにするか. ORIGIN_ で始まる定数を指定する
+	var timing;			// アニメが切り替わってからの経過フレーム数. animation プロパティを書き換えた場合にリセットされる
+	var imageId;		// 使用している画像ID
+	var imageInfo;		// 使用中の画像情報
+	var imageWidth;		// 画像サイズ
+	var imageHeight;
+	var direction;		// キャラクタの向き
+	var priority;		// 描画の優先度 値が大きいほど手前に表示される
+	var allowAnimationWhileUsingHougu;	// 宝具使用中でもアニメ可能な状態ならば true
+	var allowFadeAnimationWhileUsingHougu;	// 宝具使用中でもフェードアニメ可能な状態ならば true. allowAnimation がtrueの場合、この値は無視される
+	var layer;			// 表示用のキャラクタレイヤ
+	var index;
+	var parent;			// 親オブジェクト（追尾ゲージや影など、他のオブジェクトに従属する場合に使用する）
+	var autoImageMemory;	// 画面外の場合はレイヤを破棄する
+	var drawOffsetX;
+	var drawOffsetY;
+	var autoPriority;
+	// コールバックイベント
+	var onUpdateCom;		// 行動更新イベント
+	var onUpdatePos;		// 座標更新イベント
+	var onMoved;			// 座標更新の直後に発生するイベント
+	var onAnimation;		// アニメ更新イベント
+	var onDraw;				// 描画する際に呼び出される
+	var onImageFileInfo;	// 画像情報を要求された場合に発生するイベント
+	// animation		(プロパティ) 選択されているアニメ. この値を変更すると timing が 0 にリセットされる
+	// visible			(プロパティ) 描画の有無
+	// enabled			(プロパティ) 有効かどうか. false に設定されている場合、適切なタイミングで削除される
+	// images			(プロパティ) 画像バッファ
+	var __images;
+	var __usingDefaultImageBuffer;
+	var __enabled;
+	var __animation;
+	var __fadeInfo = %[];
+	
+	var condition;
+
+	function CIriyaObject( _scene, _parent )
+	{
+		super.CMotion();
+		type = "CIriyaObject";
+		child = [];
+		scene = _scene;
+		parent = _parent;
+		if ( CheckValid(scene) )
+		{
+			__images = new CImageBuffer( parentWindow, parentLayer );
+			__images.owners.add(this);
+			__usingDefaultImageBuffer = true;
+			// レイヤを生成
+			layer = new CSpriteLayer( parentWindow, parentLayer );
+			layer.setSize( 0, 0 );
+		}
+		// 親のリストに自分を追加する
+		if ( CheckValid(parent) )
+			parent.child.add(this);
+		//
+		timing = 0;
+		origin = ORIGIN_FIELD;
+		direction = MUKI_DEFAULT;
+		allowAnimationWhileUsingHougu = false;
+		allowFadeAnimationWhileUsingHougu = false;
+		index = -1;
+		scrollRateX = 1;
+		scrollRateY = 1;
+		visible = true;
+		enabled = true;
+		imageWidth = 0;
+		imageHeight = 0;
+		imageCenterX = 0;
+		imageCenterY = 0;
+		autoPriority = true;
+	}
+
+	function finalize()
+	{
+		// 子オブジェクトを解放
+		var i;
+		for( i=0; i<child.count; i++ )
+			invalidate child[i];
+		child.clear();
+		// コンストラクタで作成されたままならば、画像バッファオブジェクトを解放
+		if ( __usingDefaultImageBuffer )
+			invalidate __images;
+		// 自身のレイヤを解放
+		if ( CheckValid(layer) )
+			invalidate layer;
+	}
+	
+	// 画像バッファ
+	// 		CImageBuffer オブジェクトを指定する.
+	//		通常、このオブジェクトは CIriyaObject のコンストラクタで生成され、finalize で破棄されるが、
+	//		images プロパティに別の場所で生成した CImageBuffer を代入した場合、自動的には削除されないので注意すること.
+	property images
+	{
+		getter()
+		{
+			return __images;
+		}
+		
+		setter( value )
+		{
+			if ( __usingDefaultImageBuffer ) // 元々持っていたオブジェクトを破棄.
+				invalidate __images;
+			__images = value; // 新しいオブジェクトをセット
+			__images.owners.add(this);
+			__usingDefaultImageBuffer = false; // 自動破棄フラグを off に.
+		}
+	}
+
+	// オブジェクトが有効かどうか. false を指定した場合には、適切なタイミングで削除される
+	property enabled
+	{
+		getter(){ return __enabled; }
+		setter(value){
+			var i;
+			for ( i=0; i<child.count; i++ ) // 子オブジェクトの状態を変更
+				child[i].enabled = value;
+			__enabled = value;
+		}
+	}
+
+	// 描画の有無
+	var __visible;
+	property visible
+	{
+		getter()
+		{
+			return __visible;
+		}
+		setter(value)
+		{
+			var i;
+			for ( i=0; i<child.count; i++ ) // 子オブジェクトの状態を変更
+				child[i].visbile = value;
+			__visible = value;
+		}
+	}
+
+	// 現在選択されているアニメ
+	property animation
+	{
+		getter(){ return __animation; }
+		setter(name){
+			if ( __animation !== name ){
+				timing	= 0;
+				__animation = name;
+			}
+		}
+	}
+	
+	// 画像の中心座標
+	var __imageCenterX;
+	property imageCenterX
+	{
+		getter()
+		{
+			if ( imageInfo && imageInfo.mirror )
+				return imageWidth - (__imageCenterX);
+			else
+				return __imageCenterX;
+		}
+		setter(value)
+		{
+			__imageCenterX = value;
+		}
+	}
+	
+	var __imageCenterY;
+	property imageCenterY
+	{
+		getter()
+		{
+			return __imageCenterY;
+		}
+		setter(value)
+		{
+			__imageCenterY = value;
+		}
+	}
+
+	// 親ウィンドウ
+	property parentWindow
+	{
+		getter(){ return scene.parentWindow; }
+	}
+	
+	// 親レイヤ
+	property parentLayer
+	{
+		getter(){ return scene.parentLayer; }
+	}
+
+	// オブジェクトが画面外にある場合はtrueを返す
+	function outOfScreen( margin=0 )
+	{
+		var cam = scene.normalCamera;
+	
+		var p = getLayerPos( cam );
+		if ( p.x+imageWidth  < -margin ) return true; // 画面左の外側にある
+		if ( p.y+imageHeight < -margin ) return true; // 画面上の外側にある
+		if ( p.x > cam.screenWidth +margin)  return true;  // 画面右の外側にある
+		if ( p.y > cam.screenHeight+margin ) return true;  // 画面下の外側にある
+		return false; // 画面内にある
+	}
+
+	// 法具イベント中かどうか
+	property houguEventProcessing
+	{
+		getter()
+		{
+			return scene.houguEventProcessing;
+		}
+	}
+
+	// 当たり判定
+	property hitRect
+	{
+		getter(){
+			if ( imageInfo===void || imageInfo.hitRect===void )
+				return %[left:0, top:0, right:0, bottom:0 ];
+			with( imageInfo.hitRect )
+			{
+				var rect = %[];
+				rect.top	= .top;
+				rect.bottom	= .bottom;
+				if ( imageInfo.mirror )
+				{
+					rect.left = -.right;
+					rect.right= -.left;
+				}
+				else
+				{
+					rect.left = .left;
+					rect.right= .right;
+				}
+				return rect;
+			}
+		}
+	}
+
+	// オブジェクトから見た、座標(tx,ty)の角度を度（degree）単位で返す
+	// 目標座標とオブジェクトが完全に重なっている場合はvoidを返す
+	function directionDegOf( tx, ty, onscreen=true )
+	{
+		var rad;
+		if ( onscreen )
+			rad = arctan( tx-x, ty-(y-z) );
+		else
+			rad = arctan( tx-x, ty-y );
+		return radToDeg( rad );
+	}
+
+	// オブジェクトから見た、座標(tx,ty)の距離を返す
+	function distanceOf( tx, ty )
+	{
+		return hypot( tx-x, ty-y );
+	}
+	
+	function distanceSq( tx, ty )
+	{
+		return (tx-x)*(tx-x) + (ty-y)*(ty-y);
+	}
+		
+	// フェードインを始める（透明→不透明）
+	//	length	:	所要時間をフレーム単位で指定する
+	function fadeIn( length = 60 )
+	{
+		fade( 0, 255, length );
+	}
+
+	// フェードアウトを始める（不透明→透明）
+	//	length	:	所要時間をフレーム単位で指定する
+	function fadeOut( length = 60 )
+	{
+		fade( 255, 0, length );
+	}
+
+	// フェードを始める
+	//	start	:	開始アルファ値
+	//	end		:	終了アルファ値
+	//	length	:	所要時間をフレーム単位で指定する
+	function fade( start, end, length=60 )
+	{
+		with ( __fadeInfo )
+		{
+			.alphaStart	= start;
+			.alpha		= start;
+			.alphaEnd	= end;
+			.enabled	= true;
+			.timer		= 0;
+			.length		= length;
+		}	
+	}
+	
+	property fadeAlpha
+	{
+		getter( ){ return __fadeInfo.alpha; }
+		setter(x){ fade(x,x,0); }
+	}
+
+	// フェード処理中ならば true を返す
+	property fadeProcessing
+	{
+		getter(){
+			return __fadeInfo.enabled;
+		}
+	}
+
+	// １フレーム毎のフェード処理を行う
+	//	フェード処理中かどうかは fadeProcessing プロパティで調べる
+	function fadeProc()
+	{
+		var argb;
+	
+		with ( __fadeInfo )
+		{
+			if ( ! .enabled )
+				return;
+				
+			if ( .timer >= .length )
+			{
+				.alpha = .alphaEnd;
+				.enabled = false;
+			}
+			else
+				.alpha = .alphaStart + ( .alphaEnd - .alphaStart) * .timer / .length;
+			.timer++;
+			layer.opacity = .alpha;
+		}
+	}
+
+	// 子オブジェクトのアニメを一括変更する. 再帰的には変更しない
+	function changeChildAnimation( anim )
+	{
+		var i;
+		for ( i=0; i<child.count; i++ )
+			child[i].animation = anim;
+	}
+	
+	// 指定したアニメを使用している子オブジェクト数を返す
+	// 再帰的にはカウントしないため、孫オブジェクトのアニメは無関係
+	function countChildAnimation( anim )
+	{
+		var count = 0;
+		var i;
+		for ( i=0; i<child.count; i++ )
+		{
+			with( child[i] )
+				if ( .enabled )
+					if ( .animation === anim )
+						count++;
+		}
+		return count;
+	}
+	
+	// オブジェクトの状態を１フレーム分進める
+	function step()
+	{
+		if ( ! enabled )
+			return;
+		// イベント中
+		if ( houguEventProcessing )
+			// 宝具イベント中のアニメが許可されていない場合は何もしない
+			if ( ! allowAnimationWhileUsingHougu )
+			{
+				// ただし、フェード処理が許可されている場合はそれを行う
+				if ( allowFadeAnimationWhileUsingHougu )
+					fadeProc();
+				return;
+			}
+		// update action
+		doUpdateCom();
+		// update motion
+		if ( onUpdatePos )
+			onUpdatePos( this );
+		else
+			motionUpdate();	
+		// 
+		if ( onMoved )
+			onMoved( this );
+		// アニメを更新する
+		//		アニメ更新ルーチン内でアニメが変更されていた場合、
+		//		新しくセットされたアニメの初期化を行うために
+		//		再びアニメ更新ルーチンを実行する
+		if ( onAnimation )
+		{
+			var old;
+			do
+			{
+				old = animation;
+				onAnimation( this );
+			} while ( animation !== old );
+		}
+		// アニメタイマ
+		timing++;
+		// フェード処理
+		fadeProc();
+		// 子オブジェクトの状態を変更する
+		var i;
+		for ( i=0; i<child.count; i++ )
+			child[i].step();
+	}
+	
+	// 無効な子オブジェクトを削除する
+	function pack()
+	{
+		var objlist = [];
+		var obj;
+		var i;
+		// scan
+		for ( i=0; i<child.count; i++ )
+		{
+			obj = child[i];
+			if ( obj.enabled )
+				obj.pack();
+			else
+				objlist.add( obj );
+		}
+		// remove disactive objects
+		for ( i=0; i<objlist.count; i++ )
+		{
+			child.remove( objlist[i], true );
+			invalidate objlist[i];
+		}
+		invalidate objlist;
+	}
+	
+	// 行動を更新するために onUpdateCom イベントを発生させる
+	function doUpdateCom()
+	{
+		if ( onUpdateCom )
+			onUpdateCom(this);
+	}
+	
+	// 必要に応じてレイヤを破棄又は生成する
+	function updateLayerBuffer()
+	{
+		if ( autoImageMemory )
+		{
+			// 画面外の場合は画像を破棄する. デバッグバージョンではレイヤを破棄をせず、レイヤ情報を表示するために使用する
+			if ( outOfScreen() )
+				releaseLayer();
+			else
+				createLayer();
+		}
+	}
+	
+	// 自身のレイヤ及び子オブジェクトのレイヤを更新する
+	function paint()
+	{
+		updateLayerBuffer();
+		updateLayerImage();
+		updateLayerPos();
+		var i;
+		for ( i=0; i<child.count; i++ )
+			child[i].paint();
+	}
+	
+	// オブジェクトのレイヤ画像を更新する
+	var __old_file;
+	var __old_mirror;
+	var __old_valid;
+	var __layerIsValid = true;
+	var __drawProcCounter = 0;
+	var forceUpdate;
+	function updateLayerImage()
+	{
+		__drawProcCounter++;
+		// 無効状態の場合は非表示に
+		if ( ! enabled )
+			visible = false;
+		// 可視状態を更新
+		if ( CheckValid(layer) )
+			if ( layer.visible != visible )
+				layer.visible = visible;
+		// 画像情報を更新する
+		imageInfo = getImageFileInfo();
+		// 中心座標情報を更新する
+		if ( imageInfo )
+		{
+			imageCenterX = imageInfo.centerX;
+			imageCenterY = imageInfo.centerY;
+			imageWidth = imageInfo.width  if ( imageInfo.width > 0 );
+			imageHeight= imageInfo.height if ( imageInfo.height> 0 ); 
+		}
+		// 非表示の場合は描画しない
+		if ( visible==false )
+			return;
+		// ダメージを受けないよう保護されている場合は点滅させる
+		if ( condition==CONDITION_PROTECTED && __drawProcCounter%2==0 )
+			return;
+		// レイヤが存在しない場合は何もしない
+		if ( ! CheckValid(layer) || ! __layerIsValid )
+		{
+@if(DEBUG_MODE)
+			// デバッグ版では、実際にはレイヤは破棄されていないので、レイヤ情報を表示するために使う
+			if ( debugShowLayerInfo )
+			{
+				if ( ! CheckValid(layer) )
+					layer = new CSpriteLayer(parentWindow,parentLayer);
+				drawLayerInfo(layer);
+			}
+@endif
+			__old_valid = false;
+			return;
+		}
+		// 描画イベントがある場合はそちらを利用する
+		var defaultdraw = true;
+		if ( onDraw )
+			if ( onDraw(this,imageInfo) )
+				defaultdraw = false;
+		if ( defaultdraw )
+		{
+			// 画像情報が得られない場合は何もしない
+			if ( imageInfo===void )
+				return;
+			// 画像に変更がない場合は何もしない
+			if ( !forceUpdate && imageInfo.filename==__old_file && imageInfo.mirror==__old_mirror && __old_valid )
+				return;
+			__old_file = imageInfo.filename;
+			__old_mirror = imageInfo.mirror;
+			// レイヤ画像を更新する
+			if ( images === void )
+			{
+				dm( "### 'images' is void. object.type='%s'".sprintf(type));
+				return;
+			}
+			var source = images.get(imageInfo);
+			if ( CheckValid(source) )
+				with ( layer )
+				{
+					.assignImages( source );
+					if ( .width!=source.width || .height!=source.height )
+						.setSizeToImageSize();
+				}
+		}
+		if ( debugShowLayerInfo )
+			drawLayerInfo( layer );
+		__old_valid = true;
+		// 画像サイズを更新する
+		imageWidth = layer.width;
+		imageHeight = layer.height;
+		//
+		forceUpdate = false;
+	}
+	
+	function drawLayerInfo( _layer )
+	{
+		var col = 0x00FF00;
+		with(_layer)
+		{
+			if ( imageWidth>2 && imageHeight>2 )
+				.setSize( imageWidth, imageHeight );
+			else
+				.setSize( 80, 80 );
+			.fillRect( 0, 0, imageWidth, 1, 0xFF00FF00 );
+			.fillRect( imageWidth-1, 0, imageWidth, imageHeight, 0xFF00FF00 );
+			.fillRect( 0, imageHeight-1, imageWidth, imageHeight, 0xFF00FF00 );
+			.fillRect( 0, 0, 1, imageHeight, 0xFF00FF00 );
+			if ( true )
+			{
+				.fillRect( 0, 0, imageWidth, imageHeight, 0xFF00FF00 );
+				.fillRect( 1, 1, imageWidth-2, imageHeight-2, 0x1100FF00 );
+			}
+			.font.height = 12;
+			.font.face = "ＭＳ ゴシック";
+			.drawText( 2, 2, type, col);
+			.drawText( 2, 12, "pos :%d,%d".sprintf(.left,.top), col);
+			.drawText( 2, 24, "size:%d,%d".sprintf(.width,.height), col);
+			if ( imageInfo && imageInfo.clipRect )
+			{
+				var rect = imageInfo.clipRect;
+				.drawText( 2, 36, "clip:%d,%d,%d,%d".sprintf(rect.left,rect.top,rect.width,rect.height), col);
+			}
+			else
+				.drawText( 2, 36, "clip:void", col );
+			if ( imageInfo )
+				.drawText( 2, 48, "file:"+imageInfo.filename, col );
+			else
+				.drawText( 2, 48, "file:void:", col );
+		}
+	}
+		
+	// オブジェクトの描画位置を更新する
+	function updateLayerPos()
+	{
+		if ( ! CheckValid(layer) )
+			return;
+		var pos;
+		var newX, newY, newPriority;
+		// レイヤの位置を更新する
+		pos = getLayerPos();
+		newX = pos.x;
+		newY = pos.y;
+		if ( layer.left==newX && layer.top==newY )
+			;
+		else
+			layer.setPos( newX, newY );
+		if ( autoPriority )
+		{
+			// レイヤの優先順位を更新する
+			switch( origin )
+			{
+			case ORIGIN_FIELD:
+				layer.absolute = priority + y; // y座標が大きい = 画面下にあるほど優先度を高く
+				break;
+			case ORIGIN_PARENT:
+				layer.absolute = priority + parent.y + y; // 優先順位には親のＹ座標を足しておく. 親がさらに親を持つ場合には対応しない
+				break;
+			default:
+				layer.absolute = priority;
+				break;
+			}
+		}
+		else
+			layer.absolute = priority;
+		//layer.update();
+	}
+	
+	// 自分と重なっているサーバント一覧を返す
+	function findHitServants( mode )
+	{
+		if ( CheckValid(scene) )
+			return scene.findHitServants(this, mode);
+		else
+			return [];
+	}
+
+	// 表示するべき画像についての情報を返す. 下位オブジェクトで実装すること.
+	function getImageFileInfo()
+	{
+		// abstract method
+	}
+	
+	// オブジェクトが実際に描画される際の座標を返す
+	var pos = %[];
+	function getDrawPos( camera )
+	{
+		var cx = camera.screenWidth /2;
+		var cy = camera.screenHeight/2;
+		pos.x = 0;
+		pos.y = 0;
+		switch ( origin )
+		{
+		// ウィンドウ左上を原点とする座標系の場合
+		case ORIGIN_WINDOW:
+			pos.x = x;
+			pos.y = y-z;
+			return pos;
+				
+		// ウィンドウの中心を原点とする座標系の場合
+		case ORIGIN_WINDOWCENTER:
+			pos.x = x+cx;
+			pos.y = y+cy-z;
+			return pos;
+			
+		// フィールドの左上を原点とする座標系の場合
+		case ORIGIN_FIELD:
+			pos.x = (x-camera.x+cx  ) * scrollRateX;
+			pos.y = (y-camera.y+cy-z) * scrollRateY;
+			return pos;
+			
+		case ORIGIN_PARENT:
+			if ( CheckValid(parent) )
+				with( parent.getDrawPos(camera) )
+				{
+					pos.x = .x + x;
+					pos.y = .y + y-z;
+				}
+			return pos;
+			
+		default:
+			throw new Exception( "getDrawPos : origin の値がおかしい "+obj.origin );
+		}
+		return void;
+	}
+	
+	var __layerpos = %[];
+	function getLayerPos( camera )
+	{
+		if ( camera===void )
+			camera = scene.currentCamera;
+		with( getDrawPos( camera ) )
+		{
+			__layerpos.x = .x - imageCenterX + drawOffsetX;
+			__layerpos.y = .y - imageCenterY + drawOffsetY;
+		}
+		return __layerpos;
+	}
+	
+	var __fieldpos = %[];
+	function getFieldPos()
+	{
+		if ( origin==ORIGIN_PARENT && CheckValid(parent) )
+		{
+			__fieldpos = parent.getFieldPos();
+			__fieldpos.x += x;
+			__fieldpos.y += y;
+			__fieldpos.z += z;
+		}
+		else
+		{
+			__fieldpos.x = x;
+			__fieldpos.y = y;
+			__fieldpos.z = z;
+		}
+		return __fieldpos;
+	}
+	
+	// レイヤを作成する。デバッグバージョンでは作成を行わず、状態フラグだけを変更しておく
+	function createLayer()
+	{
+		if ( ! debugShowLayerInfo )
+			if ( ! CheckValid(layer) )
+			{
+				//dm( 'create layer' );
+				layer = new CSpriteLayer(parentWindow,parentLayer);
+			}
+		__layerIsValid = true; // デバッグバージョンでのみ使用するフラグ
+	}
+	
+	// レイヤを破棄する。デバッグバージョンでは破棄は行わず、状態フラグだけを変更しておく
+	function releaseLayer()
+	{
+		if ( ! debugShowLayerInfo )
+		{
+			if ( CheckValid(layer) )
+			{
+				invalidate layer;
+				layer = void;
+			}
+			if (__usingDefaultImageBuffer)
+				images.clear();
+		}
+		__layerIsValid = false; // デバッグバージョンでのみ使用するフラグ
+	}
+	
+	function updateDirectionByMotionDest()
+	{
+		if ( x < motionDestX-5 )
+			direction = MUKI_RIGHT;
+		if ( x > motionDestX+5 )
+			direction = MUKI_LEFT;
+	}
+	
+	function syssound( file )
+	{
+		PlaySE( file );
+	}
+	
+	function sound( file, 画面外の場合は無音=true )
+	{
+		// 画面外のオブジェクトの場合は音を鳴らさない
+		if( outOfScreen() )
+		{
+			if( ! 画面外の場合は無音 )
+				playSound( file, true, SE音量_画面外 );
+			return;
+		}	
+		playSound( file, true, SE音量_画面内 );
+	}
+}
+
+
+
+
+
+
+
+
+class CIrRootObject extends CIriyaObject
+{
+	function CIrRootObject( _scene, _parent )
+	{
+		super.CIriyaObject( ... );
+		allowAnimationWhileUsingHougu = true;
+		invalidate images;
+	}
+
+	function finalize()
+	{
+		super.finalize(...);
+	}
+}
+
+
+
+
+
+
+
+
+class CIrTitle extends CIriyaObject
+{
+	function CIrTitle( _scene, _parent )
+	{
+		super.CIriyaObject( ... );
+		type = "CIrTitle";
+		x			= 0;
+		y			= 0;
+		origin		= ORIGIN_WINDOWCENTER;
+		priority	= PRIORITY_SYSTEM;
+		animation	= 0;
+		visible		= false;
+ 	}
+ 	
+ 	function finalize()
+ 	{
+ 		super.finalize(...);
+ 	}
+	
+ 	function show()
+ 	{
+ 		animation = 1;
+ 		visible = true;
+ 	}
+ 	
+	function onAnimation()
+	{
+		if ( animation == false )
+			return;
+		var w = ANIWAIT_TITLE;
+		if ( TITLE_FULLANIMATION )
+		{
+			switch( animation )
+			{
+			case 0:
+				break;
+			case 1:
+				imageId = timing\w;
+				if ( imageId < 20 )
+					break;
+				animation = 2;
+				break;
+			case 2:
+				imageId = 20;
+				if( timing<20 )
+					break;
+				fadeOut( 40 );
+				animation = 3;
+				break;				
+			case 3:
+				if( fadeProcessing )
+					break;
+				enabled = false;
+				break;
+			}
+		}
+		else
+		{
+			switch( animation )
+			{
+			case 0:
+				break;
+			case 1:
+				if( timing == 0 )
+				{
+					imageId = 20;
+					fadeIn(30);
+				}
+				if ( fadeProcessing )
+					break;
+				animation = 2;
+				break;
+			case 2:
+				if( timing<20 )
+					break;
+				fadeOut( 40 );
+				animation = 3;
+				break;
+			case 3:
+				if( fadeProcessing )
+					break;
+				enabled = false;
+				break;
+			}
+		}
+	}
+	
+	function getImageFileInfo()
+	{
+		var file;
+		var cx;
+		var cy;
+		switch( scene.id )
+		{
+		case SCENE_STAGE1:	file="ir_st1_title%02d".sprintf(imageId); cx=256; cy=128; break;
+		case SCENE_STAGE2:	file="ir_st2_title%02d".sprintf(imageId); cx=320; cy=128; break;
+		case SCENE_STAGE3:	file="ir_st3_title%02d".sprintf(imageId); cx=320; cy=128; break;
+		case SCENE_BOSS:	file="ir_st5_title%02d".sprintf(imageId); cx=320; cy=128; break;
+		default:
+			return void;
+		}
+		var info=%[];
+		info.filename = file;
+		info.centerX = cx;
+		info.centerY = cy;
+		info.mirror = false;
+		info.adapt = true;
+		return info;
+	}
+}
+
+
+
+
+
+
+
+class CIrServantFightEffect extends CIriyaObject
+{
+	var characterId;
+	
+	function CIrServantFightEffect( _scene, _parent )
+	{
+		super.CIriyaObject( ... );
+		type = "CIrServantFightEffect";
+		characterId = _parent.characterId;
+		origin = ORIGIN_PARENT;
+		enabled = CREATE_FIGHT_EFFECT;
+		imageWidth = 256;
+		imageHeight = 256;
+		autoImageMemory = true;
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	function onAnimation()
+	{
+		// 親が無効になっていたらエフェクトを消す
+		if ( ! CheckValid(parent) )
+		{
+			enabled = false;
+			return;
+		}
+		// 親が小競り合い中でなければエフェクトを消す
+		if ( parent.animation!=ANI_FIGHT &&parent.animation!=ANI_HOUGU)
+		{
+			enabled = false;
+			return;
+		}
+		// 親の位置、向きに合わせる
+		priority = parent.priority+10;
+		direction = parent.direction;
+		// 使用画像を設定
+		switch( characterId )
+		{
+		case CHARA_ID_CASTER:
+			switch( timing\ANIWAIT_FIGHTEFF_CASTER % 5 )
+			{
+			case 0:	visible=false; break;
+			case 1:	visible=false; break;
+			case 2:	visible=false; break;
+			case 3: visible=true; imageId=0; break;
+			case 4: visible=true; imageId=1; break;
+			}
+			break;
+		case CHARA_ID_ARCHER:
+			imageId = timing \ ANIWAIT_FIGHTEFF_ARCHER % 7;
+			break;
+		case CHARA_ID_LANCER:
+			imageId = timing \ ANIWAIT_FIGHTEFF_LANCER % 15;
+			break;
+		case CHARA_ID_RIDER:
+			imageId = timing \ ANIWAIT_FIGHTEFF_RIDER % 7;
+			break;
+		case CHARA_ID_SABER:
+			imageId = timing \ ANIWAIT_FIGHTEFF_SABER % 12;
+			break;
+		}
+	}
+	
+	function getImageFileInfo()
+	{
+		var file; // ファイル名
+		var cx, cy; // 中心座標
+		// ファイル名の基本部分と座標
+		switch( characterId )
+		{
+		case CHARA_ID_ARCHER:
+			file="ir_eff_archer%02d".sprintf(imageId);
+			cx=95;
+			cy=110;
+			break;
+		case CHARA_ID_CASTER:
+			file="ir_eff_caster%02d".sprintf(imageId);
+			cx=-10;
+			cy=75; 
+			break;
+		case CHARA_ID_LANCER:
+			file="ir_eff_lancer%02d".sprintf(imageId);
+			cx=35;
+			cy=180;
+			break;
+		case CHARA_ID_RIDER:
+			file="ir_eff_rider%02d".sprintf(imageId);
+			cx=110;
+			cy=162; 
+			break;
+		case CHARA_ID_SABER:
+			file="ir_eff_saber%02d".sprintf(imageId);
+			cx=60;
+			cy=140; 
+			break;
+		default:
+			return void;		
+		}
+		// 情報をセットし、それを返す
+		var info=%[];
+		info.filename = file;
+		info.mirror = (direction==MUKI_LEFT) ? true : false;
+		info.centerX = cx;
+		info.centerY = cy;
+		return info;
+	}
+}
+
+
+var CONDITION_NORMAL	= 0; // 通常状態
+var CONDITION_PROTECTED = 1; // 復帰直後などでダメージを受けないよう保護されている状態
+var CONDITION_CONFUSE	= 2; // 混乱
+var CONDITION_PARALYZE	= 3; // 麻痺
+var CONDITION_RAPID		= 4; // 速度上昇
+var CONDITION_NODAMAGE	= 5; // 無敵
+
+
+class CIrLivingObject extends CIriyaObject
+{
+	var hpMax = 100;
+	var mpMax = 100;
+	// condition			（プロパティ）状態
+	// conditionTimeLeft	（プロパティ）正常に戻るまでの残り時間
+	var onGuard;			//（イベント）無敵状態中にダメージを防いだ場合に発生
+	var onHpChanged;
+	var isPlayer;
+
+	var position;
+	var damageTimeLeft; // ダメージを受けてからの経過時間
+	
+	function CIrLivingObject( _scene, _parent )
+	{
+		super.CIriyaObject( ... );
+		type = "CIrLivingObject";
+		hp = hpMax;
+		mp = mpMax;
+		isPlayer = false;
+		condition = CONDITION_NORMAL;
+	}
+
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	var __hp;
+	property hp
+	{
+		getter(){ return __hp; }
+		setter(value)
+		{
+			if ( __hp == value )
+				return;
+			// ＨＰを範囲内に修正し、イベントを発生させる
+			__hp = round( 0, value, hpMax );
+			if( onHpChanged )
+				onHpChanged(this);
+		}
+	}
+	
+	function hpDamage( x )
+	{
+		// 無敵状態の場合はダメージを無視し、ガードイベントを発生させる
+		if ( condition==CONDITION_NODAMAGE )
+		{
+			doGuard();
+			return;
+		}
+		// 保護状態の場合はダメージを無視する
+		if ( condition==CONDITION_PROTECTED )
+			return;
+		// ダメージ音
+		if( damageTimeLeft<=0 && isPlayer )
+			sound( SE_DAMAGE );
+		// ダメージを受けた場合はダメージタイマをセットする
+		damageTimeLeft = 15;
+		hp -= x*INFO.DEFENCE;
+	}
+	
+	var __mp;
+	property mp
+	{
+		getter(){ return __mp; }
+		setter(x){ __mp = round( 0, x, mpMax ); }
+	}
+	
+	// 無敵状態時にダメージを防いだ場合
+	function doGuard()
+	{
+		if ( onGuard )
+			onGuard(this);
+	}
+	
+	// 法具による攻撃を受けた
+	function houguDamaged()
+	{
+	}
+	
+	var __condition;
+	property condition
+	{
+		getter()
+		{
+			return __condition;
+		}
+		setter(value)
+		{
+			if ( value==CONDITION_NORMAL )
+				__conditionTimeLeft = 0;
+			__condition = value;
+		}
+	}
+	
+	var __conditionTimeLeft;
+	property conditionTimeLeft
+	{
+		getter()
+		{
+			return __conditionTimeLeft;
+		}
+		setter(value)
+		{
+			if ( value<=0 )
+			{
+				value=0;
+				__condition = CONDITION_NORMAL;
+			}
+			__conditionTimeLeft = value;
+		}
+	}
+				
+	function doUpdateCom()
+	{
+		super.doUpdateCom(...);
+		if ( conditionTimeLeft > 0 )
+		{
+			// 状態更新
+			conditionTimeLeft--;
+			if ( conditionTimeLeft==0 )
+				visible = true;
+		}
+		damageTimeLeft--;
+		if ( damageTimeLeft < 0 )
+			damageTimeLeft = 0;
+	}
+}
+
+
+
+
+class CIrPlayerMarker extends CIriyaObject
+{
+	function CIrPlayerMarker( _scene, _parent )
+	{
+		super.CIriyaObject( ... );
+		type = "CIrPlayerMarker";
+		origin = ORIGIN_PARENT;
+		z = 130;
+		if ( PLAYER_MARKER_ANIMATION )
+			onDraw = onDraw_Animation;
+	}
+	
+	function finalize()
+	{
+		super.finalize( ... );
+	}
+	
+	function doUpdateCom()
+	{	
+		super.doUpdateCom(...);
+		priority = parent.priority;
+	}
+	
+	function onDraw_Animation()
+	{ 
+		var sc=10;
+		if ( parent.condition==CONDITION_RAPID )
+			sc=20;
+		var source = images.get( imageInfo );
+		var w = Math.sin( degToRad(timing*sc) )*source.width;
+		w = Math.abs(w);
+		layer.setSize( w, source.height );
+		imageCenterX = layer.width\2;
+		imageCenterY = layer.height\2;
+		layer.stretchCopy( 0, 0, layer.width, layer.height, source, 0, 0, source.width, source.height );
+		return true;
+	}
+	
+	function getImageFileInfo()
+	{
+		// 情報をセットし、それを返す
+		var info = %[];
+		info.filename = "ir_sys_marker";
+		info.mirror = false;
+		info.centerX = 32;
+		info.centerY = 32;
+		info.adapt = true;
+		return info;
+	}
+}
+
+
+
+
+
+
+
+class CIrServant extends CIrLivingObject
+{
+	var gauge;
+	var shadow;
+	var rank;
+	var marker;
+	var masterId;
+	var clearTime;
+	var emoObj;
+	var point;
+	var onHouguDamaged;
+	var aniFuncList;
+	var winnerEff;
+	var shield;
+	var トドメをさされた;
+	var itemflag = false;;
+			
+	function CIrServant( _scene, _parent )
+	{
+		super.CIrLivingObject( ... );
+		type		= OBJTYPE_SERVANT;
+		priority	= PRIORITY_PLAYER;
+		animation	= ANI_イベント待機;
+		direction	= MUKI_RIGHT;
+		rank		= -1;
+		clearTime	= -1;
+		point		= 0;
+		if ( scene )
+		{
+			gauge = new CIrStatusGauge( scene, this );
+			shadow = scene.addShadow(this);
+		}
+		initDefaultAnimation();
+		initImageFileInfo();
+		トドメをさされた = void;
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	function houguDamaged()
+	{
+		// 宝具での攻撃がヒットした場合
+		super.houguDamaged( ... );
+		if ( onHouguDamaged )
+			onHouguDamaged(this);
+		// 吹き飛ぶ
+		animation = ANI_BLOWN;
+	}
+	
+	// 宝具のターゲットとして指定できる状態の一覧
+	var __houguTargetAnimations = [
+		ANI_STAND,
+		ANI_MOVE,
+	//	ANI_DROWN,
+		ANI_JUMP,
+		ANI_JUMPING,
+		ANI_LANDING,
+		ANI_SHIELD,
+	//	ANI_KNOCKBACK,
+		ANI_DAMAGE
+	];
+	
+	function houguTargetQuery()
+	{
+		// 盾を持っている場合には、宝具のターゲットにはならない
+		if ( shield )
+			return false;
+		// 指定されたアニメでない場合は、宝具のターゲットにはならない
+		if ( __houguTargetAnimations.find(animation) < 0 )
+			return false;
+		// 保護状態の場合はターゲットにならない
+		if ( condition == CONDITION_PROTECTED )
+			return false;
+		// OK
+		return true;
+	}
+	
+	function scoreInc( p )
+	{
+		scene.addServantScore( this, p );
+	}
+	
+	function initDefaultAnimation()
+	{
+		aniFuncList = [];
+		
+		aniFuncList[ANI_MASTER_JUMP] = function
+		{
+			var i = ( timing\ANIWAIT_JUMP % 2 );
+			imageId = IMAGEID_JUMP|i;
+		};
+		
+		aniFuncList[ANI_MASTER_FAILED] = function
+		{
+			if ( timing\8 == 0 )
+				imageId = IMAGEID_DOWN|0;
+			else
+				imageId = IMAGEID_DOWN|1;
+		};
+		
+		aniFuncList[ANI_MASTER_起き上がり] = function
+		{
+			switch( timing )
+			{
+			case 0:
+				imageId = IMAGEID_DOWN|0;
+				break;
+			case 30:
+				stop();
+				imageId = IMAGEID_CROUCH|0;
+				break;
+			case 45:
+				imageId = IMAGEID_STAND|0;
+				break;
+			case 60:
+				animation = ANI_MASTER_SUCCEEDED;
+				break;
+			}
+		};
+		
+		aniFuncList[ ANI_MASTER_STAND ] =
+		aniFuncList[ ANI_イベント待機 ] =
+		aniFuncList[ ANI_STAND ] = function
+		{
+			if (timing == 0)
+				stop();
+			var i = ( timing\ANIWAIT_STAND % 2 );
+			imageId = IMAGEID_STAND|i;
+		};
+
+		aniFuncList[ ANI_ENDING_STAND ] = function
+		{
+			if (timing == 0)
+				stop();
+			imageId = IMAGEID_ENDINGSTAND|0;
+		};
+		
+		aniFuncList[ ANI_FIGHT_READY ] = function
+		{
+			imageId = IMAGEID_ATTACK|0;
+		};
+		
+		aniFuncList[ ANI_MASTER_SUCCEEDED ] = 
+		aniFuncList[ ANI_GOAL ] = 
+		aniFuncList[ ANI_勝利 ] = function
+		{
+			if ( timing == 0 )
+				stop();
+			var i = ( timing\8 % 2 );
+			imageId = IMAGEID_WIN|i;
+		};
+		
+		aniFuncList[ ANI_イベント移動 ] =
+		aniFuncList[ ANI_MOVE ] = function
+		{
+			var i = ( timing\ANIWAIT_WALK % 2 );
+			imageId = IMAGEID_WALK|i;
+		};
+		
+		aniFuncList[ ANI_MASTER_RUN ] = function
+		{
+			var i =( timing\6 % 2 );
+			imageId = IMAGEID_RUN|i;
+		};
+		
+		aniFuncList[ ANI_RUN ] = function
+		{
+			var i =( timing\ANIWAIT_RUN % 2 );
+			imageId = IMAGEID_RUN|i;
+		};
+		
+		aniFuncList[ ANI_HOUGU ] = function
+		{
+			switch( characterId )
+			{
+			case CHARA_ID_ARCHER:
+				var i = timing\4 % 4;
+				imageId = IMAGEID_HOUGU|i;
+				break;
+				
+			case CHARA_ID_CASTER:
+				doAnimation( ANI_勝利 );
+				break;
+
+			case CHARA_ID_LANCER:
+				var i = timing\2 %2;
+				if ( timing <= 15 )
+					imageId = IMAGEID_HOUGU|i;
+				else
+					animation = ANI_HOUGU2;
+				break;
+
+			case CHARA_ID_RIDER:
+				var i = timing\3;
+				if ( i <= 19 )
+					imageId = IMAGEID_HOUGU|i;
+				else
+					animation = ANI_HOUGU2;
+				break;
+				
+			case CHARA_ID_SABER:
+				if ( timing\5<5 )
+				{
+					var i = timing\5 % 2;
+					imageId = IMAGEID_HOUGU|i;
+					break;
+				}
+				animation = ANI_HOUGU2;
+				break;
+			}
+		};
+		
+		aniFuncList[ ANI_HOUGU2 ] = function
+		{
+			switch( characterId )
+			{
+			case CHARA_ID_ARCHER:
+			case CHARA_ID_CASTER:
+				break;
+			
+			case CHARA_ID_LANCER:
+				var i = 2 + timing\5%2;
+				imageId = IMAGEID_HOUGU|i;
+				if ( timing<=10 )
+					break;
+				animation = ANI_HOUGU3;
+				break;
+				
+			case CHARA_ID_RIDER:
+				var i = 20 + timing\2%2;
+				imageId = IMAGEID_HOUGU|i;
+				break;
+				
+			case CHARA_ID_SABER:
+				var i = 2 + timing\5;
+				if ( i<=4 )
+					imageId = IMAGEID_HOUGU|i;
+				else
+					animation = ANI_HOUGU3;
+				break;
+			}
+		};
+		
+		aniFuncList[ ANI_HOUGU3 ] = function
+		{
+			switch( characterId )
+			{
+			case CHARA_ID_ARCHER:
+			case CHARA_ID_CASTER:
+				break;
+			case CHARA_ID_LANCER:
+				imageId = IMAGEID_HOUGU|4;
+				if ( timing < 10 )
+					break;
+				animation = ANI_HOUGU4;
+				break;
+			case CHARA_ID_RIDER:
+				break;
+			case CHARA_ID_SABER:
+				var i = 5 + timing\5;
+				if ( i<=7 )
+					imageId = IMAGEID_HOUGU|i;
+				else
+					animation = ANI_HOUGU4;
+				break;
+			}
+		};
+		
+		aniFuncList[ ANI_HOUGU4 ] = function
+		{
+			switch( characterId )
+			{
+			case CHARA_ID_ARCHER:
+			case CHARA_ID_CASTER:
+				break;
+			case CHARA_ID_LANCER:
+				imageId = IMAGEID_HOUGU|5;
+				break;
+			case CHARA_ID_RIDER:
+				break;
+			case CHARA_ID_SABER:
+				imageId = IMAGEID_HOUGU|7;
+				break;
+			}
+		};
+		
+		aniFuncList[ ANI_HOUGU_DEFENSE ] = function
+		{
+			if ( timing==0 )
+				stop();
+			var i;
+			if( characterId == CHARA_ID_ARCHER )
+				i = timing\15 % 4;
+			else
+				i = timing\15 % 2;
+			imageId = IMAGEID_HOUGU_DEFENSE|i;
+		};
+
+		aniFuncList[ ANI_FIGHT ] = function
+		{
+			if ( timing === 0 )
+				new CIrServantFightEffect(scene,this);
+			var i = timing\ANIWAIT_FIGHT % 3;
+			imageId = IMAGEID_ATTACK|i;
+		};
+		
+		aniFuncList[ ANI_FIGHT ] = function
+		{
+			if ( timing === 0 )
+				new CIrServantFightEffect(scene,this);
+			var i = timing\ANIWAIT_FIGHT % 3;
+			imageId = IMAGEID_ATTACK|i;
+		};
+		
+		aniFuncList[ ANI_DAMAGE ] =
+		aniFuncList[ ANI_KNOCKBACK ] =
+		aniFuncList[ ANI_BLOWN ] = function
+		{
+			var i = ( timing\ANIWAIT_DAMAGE % 2 );
+			imageId = IMAGEID_DAMAGE|i;
+		};
+		
+		aniFuncList[ ANI_DROWNED ] = function
+		{
+			var i = timing\ANIWAIT_DAMAGE % 2;
+			imageId = IMAGEID_DROWNED|i;
+		};
+		
+		aniFuncList[ ANI_DEAD ] = function
+		{
+			priority = PRIORITY_SHADOW_UP;
+			imageId = IMAGEID_DOWN|0;
+		};
+		
+		aniFuncList[ ANI_JUMP ] = function
+		{
+			if ( timing==0 )
+				sound( SE_JUMP );
+			switch( timing\ANIWAIT_JUMP )
+			{
+			case 0: imageId=IMAGEID_JUMP|0; break;
+			case 1: animation=ANI_JUMPING; break;
+			}
+		};
+
+		aniFuncList[ ANI_JUMPING ] = function
+		{
+			imageId = IMAGEID_JUMP|1;
+		};
+		
+		aniFuncList[ ANI_LANDING ] = function
+		{
+			if ( timing==0 )
+			{
+				// 変更点051003 プレイヤ以外の着地音も鳴るようにした
+				//if ( isPlayer )
+					sound( SE_LANDING );
+				stop();
+			}
+			switch( timing\ANIWAIT_着地 )
+			{
+			case 0: imageId=IMAGEID_LANDING|0; break;
+			case 1: imageId=IMAGEID_LANDING|1; break;
+			case 2: animation=ANI_STAND; break;
+			}
+		};
+		
+		aniFuncList[ ANI_HANG ] = function
+		{
+			var i = ( timing\5 % 2 );
+			imageId = IMAGEID_HANG|i;
+		};
+		
+		aniFuncList[ ANI_HANG_PINCH ] = function
+		{
+			var i = ( timing\8 % 2 );
+			imageId = IMAGEID_HANG_PINCH|i;
+		};
+		
+		aniFuncList[ ANI_DROWN ] = function
+		{
+			var i = ( timing\ANIWAIT_溺れ % 2 );
+			imageId = IMAGEID_DROWN|i;
+		};
+		
+		aniFuncList[ ANI_DEFENSE_MOVE ] = function
+		{
+			var i = ( timing\ANIWAIT_WALK % 2 );
+			imageId = IMAGEID_DEFENSE_MOVE|i;
+		};
+		aniFuncList[ ANI_DEFENSE_STAND ] = function
+		{
+			var i = timing\ANIWAIT_STAND % 2;
+			imageId = IMAGEID_DEFENSE_STAND|i;
+		};
+		aniFuncList[ ANI_SHIELD ] = function
+		{
+			var i = timing\8 % 2;
+			imageId = IMAGEID_SHIELD|i;
+		};
+		aniFuncList[ ANI_登る ] = function
+		{
+			if ( timing === 0 )
+				stop();
+			var i = timing\ANIWAIT_登る %2;
+			imageId = IMAGEID_CLIMB|i;
+		};
+		aniFuncList[ ANI_食事 ] = function
+		{
+			if ( timing === 0 )
+				stop();
+			switch( timing\ANIWAIT_EAT %4 )
+			{
+			case 0: imageId=IMAGEID_EAT|0; direction=MUKI_RIGHT; break;
+			case 1: imageId=IMAGEID_EAT|1; direction=MUKI_RIGHT; break;
+			case 2: imageId=IMAGEID_EAT|0; direction=MUKI_LEFT; break;
+			case 3: imageId=IMAGEID_EAT|1; direction=MUKI_LEFT; break;
+			}
+		};
+		aniFuncList[ ANI_麻痺 ] =
+		aniFuncList[ ANI_しゃがみ ] = function
+		{
+			if ( timing==0 )
+				stop();
+			imageId=IMAGEID_CROUCH|0;
+		};
+	}
+	
+	function doAnimation( ani=void )
+	{
+		if ( ani === void )
+			ani = animation;
+		var func = aniFuncList[ ani ];
+		if ( func )
+			func();
+		else
+			imageId = void;
+	}
+	
+	
+	var imageFileNumbers;
+	function initImageFileInfo()
+	{
+		imageFileNumbers = [];
+		imageFileNumbers[IMAGEID_STAND]			= 0;
+		imageFileNumbers[IMAGEID_WIN]			= 100;
+		imageFileNumbers[IMAGEID_DAMAGE]		= 200;
+		imageFileNumbers[IMAGEID_DROWN] 		= 300;
+		imageFileNumbers[IMAGEID_DOWN]			= 400;
+		imageFileNumbers[IMAGEID_WALK]			= 500;
+		imageFileNumbers[IMAGEID_RUN]			= 600;
+		imageFileNumbers[IMAGEID_HANG]			= 700;
+		imageFileNumbers[IMAGEID_HANG_PINCH]	= 800;
+		imageFileNumbers[IMAGEID_HOUGU]			= 900;
+		imageFileNumbers[IMAGEID_ATTACK]		= 1000;
+		imageFileNumbers[IMAGEID_JUMP]			= 1100;
+		imageFileNumbers[IMAGEID_LANDING]		= 1102;
+		imageFileNumbers[IMAGEID_DEFENSE_MOVE]	= 1200;
+		imageFileNumbers[IMAGEID_CROUCH]		= 1300;
+		imageFileNumbers[IMAGEID_SHIELD]		= 1400;
+		imageFileNumbers[IMAGEID_EAT]			= 1500;
+		imageFileNumbers[IMAGEID_CLIMB]			= 1600;
+		imageFileNumbers[IMAGEID_DROWNED]		= 1700;
+		imageFileNumbers[IMAGEID_DEFENSE_STAND] = 1800;
+		imageFileNumbers[IMAGEID_ENDINGSTAND]	= 1900;
+		imageFileNumbers[IMAGEID_HOUGU_DEFENSE] = 2000;
+	}
+	var 位置を修正する = false;
+	var __imageinfo = %[];
+	var __hitRect = %[ left:DEF_HITRECT_SX, top:DEF_HITRECT_SY, right:DEF_HITRECT_EX, bottom:DEF_HITRECT_EY ];
+	function getImageFileInfo()
+	{
+		if ( INFO == void )
+			return void;
+		if ( imageId === void )
+			return void;
+		// ファイル番号
+		var num;
+		var i = imageId & IMAGEID_INDEXMASK;
+		var type  = imageId & IMAGEID_TYPEMASK;
+		num = imageFileNumbers[type]+i;
+		// オフセット
+		var cx = INFO.IMAGECENTER_X;
+		var cy = INFO.IMAGECENTER_Y;
+		
+		if ( type==IMAGEID_HOUGU && characterId==CHARA_ID_LANCER )
+			switch( i )
+			{
+			case 0:
+			case 1:
+			case 2:
+			case 3: cx=108; cy=99; break;
+			case 4:
+			case 5: cx=57; cy=99; break;
+			}
+		if ( type==IMAGEID_HOUGU_DEFENSE )
+			switch( characterId )
+			{
+			case CHARA_ID_ARCHER:
+				cx = 34;
+				cy = 110;
+				break;
+			case CHARA_ID_LANCER:
+				cx = 38;
+				cy = 102;
+				break;
+			case CHARA_ID_RIDER:
+				cx = 35;
+				cy = 102;
+				break;
+			}
+		if ( type==IMAGEID_ENDINGSTAND && 位置を修正する )
+			switch( characterId )
+			{
+			case CHARA_ID_ARCHER:
+				cx = 38;
+				cy = 114;
+				break;
+			case CHARA_ID_LANCER:
+				cx = 56;
+				cy = 110;
+				break;
+			case CHARA_ID_RIDER:
+				cx = 42;
+				cy = 100;
+				break;
+			case CHARA_ID_SABER:
+				cx = 34;
+				cy = 134;
+				break;
+			}
+		
+		// 情報をセットし、それを返す
+		with( __imageinfo )
+		{
+			.filename = INFO.IMAGEFILENAME+"%04d".sprintf(num);
+			.mirror = (direction==MUKI_LEFT) ? true : false;
+			.centerX = cx;
+			.centerY = cy;
+			.adapt = true;
+			.hitRect = __hitRect;
+		}
+		return __imageinfo;
+	}
+	
+	
+	function servantSpeed()
+	{
+		if ( condition == CONDITION_RAPID )
+			return INFO.MOVESPEED*2;
+		else
+			return INFO.MOVESPEED;
+	}
+	
+	function doUpdateCom()
+	{
+		itemflag = false;
+		if ( houguEventProcessing )
+			return;
+		super.doUpdateCom(...);
+		switch ( animation )
+		{
+		case ANI_STAND:
+			mp += INFO.MP_CURE_SPEED;
+			if ( hp>0 && timing>INFO.HP_CURE_DELAY )
+				hp += INFO.HP_CURE_SPEED;
+			break;
+		case ANI_MOVE:
+		case ANI_JUMP:
+			mp += INFO.MP_CURE_SPEED;
+			break;
+		case ANI_BLOWN:
+			if ( CheckValid(emoObj) )
+				emoObj.enabled = false;
+			break;
+		}
+		//
+		switch( condition )
+		{
+		case CONDITION_CONFUSE:
+			if ( ! CheckValid(emoObj) )
+				emoObj = new CIrEmotion(scene,this);
+			emoObj.animation = ANI_EMOTION_CONFUSE;
+			break;
+		case CONDITION_PARALYZE:
+			if ( ! CheckValid(emoObj) )
+				emoObj = new CIrEmotion(scene,this);
+			emoObj.animation = ANI_EMOTION_PARALYZE;
+			break;
+		case CONDITION_RAPID:
+			if ( ! CheckValid(emoObj) )
+				emoObj = new CIrEmotion(scene,this);
+			emoObj.animation = ANI_EMOTION_RAPID;
+			break;
+		case CONDITION_NODAMAGE:
+			if ( ! CheckValid(emoObj) )
+				emoObj = new CIrEmotion(scene,this);
+			emoObj.animation = ANI_EMOTION_NODAMAGE;
+			break;
+		default:
+			if ( CheckValid( emoObj ) )
+				emoObj.enabled = false;
+			break;
+		}
+	}
+	
+	var INFO;
+	var __characterId;
+	
+	property characterId
+	{
+		getter()
+		{
+			return __characterId;
+		}
+		setter(value)
+		{
+			__characterId = value;
+			switch( value )
+			{
+			case CHARA_ID_ARCHER: INFO=ARCHER; break;
+			case CHARA_ID_CASTER: INFO=CASTER; break;
+			case CHARA_ID_LANCER: INFO=LANCER; break;
+			case CHARA_ID_SABER: INFO=SABER; break;
+			case CHARA_ID_RIDER: INFO=RIDER; break;
+			case CHARA_ID_RIN: INFO=RIN; break;
+			case CHARA_ID_SAKURA: INFO=SAKURA; break;
+			case CHARA_ID_SHIROU: INFO=SHIROU; break;
+			default:
+				INFO=void;
+				break;
+			}
+		}
+	}	
+	
+	var __status = STATUS_PLAYING;
+	property status
+	{
+		getter(){ return __status; }
+	}
+	
+	function onFailed()
+	{
+		if ( isPlayer )
+			scene.updateTotalTime();
+		var i;
+		rank = 4;
+		for ( i=0; i<scene.players.count; i++ )
+			if ( scene.players[i] != this )
+				if ( scene.players[i].status == STATUS_FAILED )
+					rank--;
+		__status = STATUS_FAILED;
+		scene.updateServantRank();
+		condition = CONDITION_NORMAL;
+	}
+	
+	function onSucceeded()
+	{
+		// プレイヤがゴールした場合はシステムタイマーをとめる
+		if ( isPlayer )
+			scene.gameTimerStop();
+		// 
+		var i;
+		rank = 0;
+		for ( i=0; i<scene.players.count; i++ )
+			if ( scene.players[i] != this )
+				if ( scene.players[i].status == STATUS_SUCCEEDED )
+					rank++;
+		__status = STATUS_SUCCEEDED;
+		clearTime = scene.gameTimerTime();
+		scene.updateServantRank();
+		condition = CONDITION_NORMAL;
+		visible = true;
+	}
+	
+	function onRestart()
+	{
+		stop();
+		hp = hpMax;
+		mp = mpMax;
+		__status = STATUS_PLAYING;
+	}
+}
+
+
+
+class CIrGameOver extends CIriyaObject
+{
+var		prn_num;
+var		page_cycle,prn_time;
+var		anime_end;
+	function CIrGameOver( _scene, _parent )
+	{
+		for (prn_num=0;  ;  prn_num++) {
+			if (isImageFile(make_file_name(prn_num))  ==  false)
+				break;
+		}
+		page_cycle = 1;
+		prn_time   = page_cycle;
+		imageId = 0;
+		anime_end = false;
+		super.CIriyaObject( ... );
+		type = "CIrGameOver";
+		x = 0;
+		y = 0;
+		origin = ORIGIN_WINDOWCENTER;
+		priority = PRIORITY_SYSTEM;
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+
+	function make_file_name( page )
+	{
+		return ( "ir_sys_gover%02d".sprintf(page) );
+	}
+
+	function onAnimation()
+	{
+		prn_time -= 1;
+		if (prn_time  >  0)
+			return;
+
+		if (imageId  <  (prn_num-1)) {
+			imageId += 1;
+			prn_time = page_cycle;
+		} else {
+			anime_end = true;
+			prn_time = 65535;
+		}
+		return;
+	}
+	function checkAnimeEnd()
+	{
+		return ( anime_end );
+	}
+
+	function getImageFileInfo()
+	{
+		var info = %[];
+		info.filename = make_file_name( imageId );
+		info.mirror = false;
+		info.centerX = 256;
+		info.centerY = 160;
+		info.adapt = true;
+		return info;
+	}
+}
+
+class CIrGoal extends CIriyaObject
+{
+	function CIrGoal( _scene, _parent )
+	{
+		super.CIriyaObject( ... );
+		type = "CIrGoal";
+		x = 0;
+		y = 0;
+		origin = ORIGIN_WINDOWCENTER;
+		priority = PRIORITY_SYSTEM;
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+
+	function onAnimation()
+	{
+		var w = ANIWAIT_GOAL;
+		if ( TITLE_FULLANIMATION )
+		{
+			if ( timing\w <= 32 )
+				imageId= timing \ w;
+			else
+				enabled = false;
+		}
+		else
+		{
+			switch( animation )
+			{
+			case 0:
+				imageId = 18;
+				if ( timing<30 )
+					break;
+				fadeOut(15);
+				animation = 1;
+				break;
+			case 1:
+				if ( fadeProcessing )
+					break;
+				enabled = false;
+				break;
+			}
+		}				
+	}
+	
+	function getImageFileInfo()
+	{
+		var info = %[];
+		info.filename = "ir_sys_goal%02d".sprintf(imageId);
+		info.mirror = false;
+		info.centerX = 256;
+		info.centerY = 160;
+		info.adapt = true;
+		return info;
+	}
+}
+
+
+
+
+
+class CIrRetire extends CIriyaObject
+{
+	var timeover;
+
+	function CIrRetire( _scene, _parent, _timeover=false )
+	{
+		super.CIriyaObject( ... );
+		type = "CIrRetire";
+		x = 0;
+		y = 0;
+		origin = ORIGIN_WINDOWCENTER;
+		priority = PRIORITY_SYSTEM;
+		animation = 0;
+		timeover = _timeover;
+		syssound( SE_RETIRE );
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	function onAnimation()
+	{
+		var w = ANIWAIT_RETIRE; 
+		if ( TITLE_FULLANIMATION )
+		{
+			switch( animation )
+			{
+			case 0:
+				imageId = timing\w;
+				if ( imageId==18 )
+					animation = 1;
+				break;
+			case 1:
+				if ( timing > 30 )
+					animation = 2;
+				break;
+			case 2:
+				imageId = timing\w+18;
+				if ( imageId==32 )
+					animation = 3;
+				break;
+			case 3:
+				enabled = false;
+				break;
+			}
+		}
+		else
+		{
+			switch( animation )
+			{
+			case 0:
+				imageId = 18;
+				if ( timing<30 )
+					break;
+				fadeOut(15);
+				animation = 1;
+				break;
+			case 1:
+				if ( fadeProcessing )
+					break;
+				enabled = false;
+				break;
+			}
+		}
+	}
+	
+	function getImageFileInfo()
+	{
+		var info = %[];
+		if( timeover )
+		{
+			info.filename = "ir_sys_timeover%02d".sprintf(imageId);
+			info.centerX = 256;
+			info.centerY = 136;
+		}
+		else
+		{
+			info.filename = "ir_sys_retire%02d".sprintf(imageId);
+			info.centerX = 256;
+			info.centerY = 160;
+		}
+		info.mirror = false;
+		info.adapt = true;
+		return info;
+	}
+}
+
+
+
+
+
+class CIrCongratulations extends CIriyaObject
+{
+	function CIrCongratulations( _scene, _parent )
+	{
+		super.CIriyaObject( ... );
+		type = "CIrCongratulations";
+		x = 0;
+		y = 0;
+		origin = ORIGIN_WINDOWCENTER;
+		priority = PRIORITY_SYSTEM;
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	function onAnimation()
+	{
+		var w = ANIWAIT_CONGRATULATIONS;
+		if ( TITLE_FULLANIMATION )
+		{
+			if ( timing\w <= 32 )
+				imageId= timing \ w;
+			else
+				enabled = false;
+		}
+		else
+		{
+			switch( animation )
+			{
+			case 0:
+				imageId = 10;
+				if ( timing < 40 )
+					break;
+				fadeOut(20);
+				animation = 1;
+				break;
+			case 1:
+				if ( fadeProcessing )
+					break;
+				enabled = false;
+				break;
+			}		
+		}
+	}
+	
+	function getImageFileInfo()
+	{
+		var info = %[];
+		info.filename = "ir_sys_congra%02d".sprintf( imageId );
+		info.mirror = false;
+		info.centerX = 320;
+		info.centerY = 160;
+		info.adapt = true;
+		return info;
+	}
+}
+
+
+
+
+
+class CIrReadygo extends CIriyaObject
+{
+	function CIrReadygo( _scene, _parent )
+	{
+		super.CIriyaObject( ... );
+		type		= "CIrReadygo";
+		x			= 0;
+		y			= 0;
+		origin		= ORIGIN_WINDOWCENTER;
+		priority	= PRIORITY_SYSTEM;
+		animation	= 0;
+		visible		= false;
+	}
+
+	function finalize()
+	{
+		super.finalize(...);
+	}
+
+	function show()
+	{
+		visible = true;
+		animation = 1;
+	}
+
+	function onAnimation()
+	{
+		var i;
+		if ( TITLE_FULLANIMATION )
+		{
+			switch( animation )
+			{
+			case 1:
+				i = timing;
+				if ( i<=14 )
+					imageId = i;
+				else
+					animation = 2;
+				break;
+			case 2:
+				i = timing\5 %2;
+				if ( timing<30 )
+				{
+					imageId = 15 + i;
+					break;
+				}
+				animation = 3;
+				syssound( SE_GO );
+				break;
+					
+			case 3:
+				i = timing;
+				if ( i <= 23 )
+					imageId = 100+i;
+				else
+					enabled = false;
+				break;
+			}
+		}
+		else
+		{
+			switch( animation )
+			{
+			case 1:
+				imageId = 15;
+				if ( timing < 15 )
+					break;
+				fadeOut(30);
+				animation = 2;
+				break;
+			case 2:
+				if ( fadeProcessing )
+					break;
+				animation = 3;
+				syssound( SE_GO );
+				break;
+			case 3:
+				if ( timing==0 )
+				{
+					imageId = 113;
+					fadeOut(24);
+				}
+				if ( fadeProcessing )
+					break;
+				enabled = false;
+			}				
+		}
+	}
+	
+	function getImageFileInfo()
+	{
+		var info = %[];
+		info.filename = "ir_sys_readygo%04d".sprintf(imageId);
+		info.mirror = false;
+		info.centerX = 256;
+		info.centerY = 160;
+		info.adapt = true;
+		return info;
+	}
+}
+
+
+
+
+
+class CIrStatusGauge extends CIriyaObject
+{
+	var defaultAlpha = 255;
+	var info = %[];
+	
+	function CIrStatusGauge( _scene, _parent )
+	{
+		super.CIriyaObject( ... );
+		type = "CIrStatusGauge";
+		origin = ORIGIN_PARENT;
+		priority= PRIORITY_PLAYER+10;
+		x = 0;
+		y = 0;
+		z = 130;
+		info.centerX = 0;
+		info.centerY = 0;
+		info.adapt = true;
+		info.mirror = false;
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	var 非表示アニメ = [
+		ANI_DEAD, ANI_DROWNED, ANI_BLOWN, ANI_SHIELD, ANI_GOAL, ANI_イベント待機,
+		ANI_イベント移動,ANI_KNOCKBACK, ANI_崖_落下, ANI_MOVETOGOAL, ANI_復帰, ANI_復帰２, ANI_場外,
+		ANI_HOUGU, ANI_HOUGU2, ANI_HOUGU3, ANI_HOUGU4, ANI_勝利, ANI_FIGHT
+	];
+	
+	function doUpdateCom()
+	{
+		super.doUpdateCom(...);
+		// 指定されたアニメが始まったときにフェードアウトし、
+		// それ以外のアニメのときは常に表示するように設定する
+		
+		// ※ちょっとトリッキーなので注意
+		// 	毎フレーム fadeOut 命令を行うと、不透明度が毎回リセットされるため、
+		//	常に不透明度255で表示されるようになる。
+		//	非表示アニメになっている場合は、fadeOutが更新されないため、
+ 		//	最後に実行された fadeOut 命令に従って、ステータスゲージは消えていく
+ 		if ( 非表示アニメ.find(parent.animation) == -1 )
+			fadeOut( 10 );
+	}
+	
+	var oldhp, oldmp;
+	function onDraw()
+	{
+		if( oldhp!=parent.hp || oldmp!=parent.mp )
+		{
+			oldhp = parent.hp;
+			oldmp = parent.mp;
+	
+			var empty= images.get( getImageFileInfo(0) );
+			layer.assignImages( empty );
+			layer.setSize( empty.width, empty.height );
+			var full = images.get( getImageFileInfo(1) );
+			// HP
+			layer.copyRect( 
+				20,		// dx
+				2, 		// dy
+				full, 	// src
+				20,		// sx
+				2,		// sy
+				44 * (parent.hp) / parent.hpMax,	// sw
+				5 		// sh
+			);
+			// MP
+			layer.copyRect( 
+				20,		// dx
+				12, 	// dy
+				full, 	// src
+				20,		// sx
+				12,		// sy
+				44 * (parent.mp) / parent.mpMax,	// sw
+				5 		// sh
+			);
+		}
+		//
+		layer.opacity = __fadeInfo.alpha/255*defaultAlpha;
+		return true;
+	}
+	
+	function getImageFileInfo( _index )
+	{
+		info.filename = "ir_sys_gauge%02d".sprintf( _index );
+		return info;
+	}
+}
+
+
+class CIrMouseCursor extends CIriyaObject
+{
+	function CIrMouseCursor( _scene, _parent )
+	{
+		super.CIriyaObject( ... );
+		origin = ORIGIN_WINDOW;
+		priority = PRIORITY_MOUSECURSOR;
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	function onAnimation()
+	{
+	
+	}
+	
+	function getImageFileInfo()
+	{
+		var info = %[];
+		info.filename = "ir_sys_cursor%02d".sprintf(imageId);
+		info.mirror = false;
+		info.adapt = true;
+		info.centerX = 32;
+		info.centerY = 32;
+		return info;
+	}
+}
+
+
+
+class CIrDestinationCursor extends CIriyaObject
+{
+
+	function CIrDestinationCursor( _scene, _parent )
+	{
+		super.CIriyaObject( ... );
+		type = "CIrDestinationCursor";
+		priority = PRIORITY_GROUNDOBJ+100;
+		animation = false; // 消しておく
+	}
+
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	function onAnimation()
+	{
+		switch( animation )
+		{
+		case true:
+			switch( timing%16 )
+			{
+			case  0: imageId=0; break;
+			case  1: imageId=1; break;
+			case  2: imageId=2; break;
+			case  3: imageId=3; break;
+			case  4: imageId=4; break;
+			case  5: imageId=5; break;
+			case  6: imageId=6; break;
+			case  7: imageId=7; break;
+			case  8: imageId=8; break;
+			case  9: imageId=7; break;
+			case 10: imageId=6; break;
+			case 11: imageId=5; break;
+			case 12: imageId=4; break;
+			case 13: imageId=3; break;
+			case 14: imageId=2; break;
+			case 15: imageId=1; break;
+			}
+			if ( timing==0 )
+				fadeIn(0);
+			if ( parent.animation != ANI_MOVE )
+				animation = false;
+			break;
+		
+		case false:
+			if ( timing==0 )
+				fadeOut(10);
+			break;
+		}
+	}
+	
+	function change( new_x, new_y )
+	{
+		x = new_x;
+		y = new_y;
+		timing = 0;
+		animation = true;
+	}
+	
+	function getImageFileInfo()
+	{
+		var info = %[];
+		info.filename = "ir_sys_cursor%02d".sprintf(imageId);
+		info.mirror = false;
+		info.centerX = 48;
+		info.centerY = 42;
+		info.adapt = true;
+		return info;
+	}
+}
+
+
+
+
+
+
+
+
+class CIrFightButton extends CIriyaObject
+{
+	function CIrFightButton( _scene, _parent )
+	{
+		super.CIriyaObject( ... );
+		type = "CIrFightButton";
+		origin = ORIGIN_WINDOW;
+		x = 660;
+		y = 420;
+		priority = PRIORITY_GAMESYSTEM;
+		enabled = CREATE_BUTTON;
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	function onAnimation()
+	{
+		switch( animation )
+		{
+		case ANI_BUTTON_FIGHT:
+			switch( timing\ANIWAIT_ボタン連打 % 2 )
+			{
+			case 0: imageId=0; break;
+			case 1: imageId=1; break;
+			}
+			break;
+			
+		case ANI_BUTTON_EAT:
+			switch( timing\ANIWAIT_ボタン連打 % 2 )
+			{
+			case 0: imageId=2; break;
+			case 1: imageId=3; break;
+			}
+			break;
+			
+		case ANI_BUTTON_登る:
+			switch( timing\ANIWAIT_ボタン連打 % 2 )
+			{
+			case 0: imageId=4; break;
+			case 1: imageId=5; break;
+			}
+			break;
+		
+		case ANI_BUTTON_HIDE:
+			if ( timing == 0 )
+				fadeOut(15);
+			if ( timing == 15 )
+				enabled = false;
+			break;
+		}
+	}
+	
+	function onDraw()
+	{
+		if ( FIGHT_BUTTON_ANIMATION )
+		{
+			var source = images.get( imageInfo );
+			var scale = 1.5+Math.sin( degToRad(timing*20) )*0.2;
+			layer.width = source.width*scale;
+			layer.height = source.height*scale;
+			layer.stretchCopy(0, 0, layer.width, layer.height, source, 0, 0, source.width, source.height);
+			imageCenterX = layer.width/2;
+			imageCenterY = layer.height/2;
+			return true;
+		}
+		return false;
+	}
+	
+	function getImageFileInfo()
+	{
+		var info = %[];
+		info.filename = "ir_sys_defeat_fuji%02d".sprintf(imageId);
+		info.mirror = false;
+		info.centerX = 96;
+		info.centerY = 112;
+		info.adapt = true;
+		return info;
+	}
+}
+
+
+
+
+
+
+
+class CIrFightGauge extends CIriyaObject
+{
+	var value;
+	
+	function CIrFightGauge( _scene, _parent )
+	{
+		super.CIriyaObject( ... );
+		type = "CIrFightGauge";
+		origin = ORIGIN_PARENT;
+		z = 100;
+		priority= PRIORITY_GAMESYSTEM;
+	}
+
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	function onDraw()
+	{
+		var source = images.get( getImageFileInfo() );
+		layer.setSize( source.width, 48 );
+		layer.copyRect( 0, 0, source, 0, 0, source.width, source.height );
+		var w = 31+50+value/FIGHT_GAUGE_RANGE*50;
+		layer.copyRect( 0, 0, source, 0, 48, w, 48 );
+		return true;
+	}
+	
+	function getImageFileInfo()
+	{
+		var info = %[];
+		info.filename = "ir_sys_defeat00";
+		info.mirror = false;
+		info.centerX = 0;
+		info.centerY = 0;
+		info.adapt = false;
+		return info;
+	}
+}
+	
+
+
+
+
+class CIrHitEffect extends CIriyaObject
+{
+	var info = %[];
+	function CIrHitEffect( _scene, _parent )
+	{
+		super.CIriyaObject( ... );
+		type = "CIrHitEffect";
+		x = parent.x+randomRange(-20, 20);
+		y = parent.y;
+		z = parent.z+randomRange(30, 50);
+		priority = PRIORITY_PLAYER;
+		enabled = CREATE_HIT_EFFECT;
+		info.centerX = 127;
+		info.centerY = 127;
+		info.mirror = false;
+		info.adapt = true;
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	function onAnimation()
+	{
+		var i = timing\ANIWAIT_HIT;
+		if ( i <=5 )
+			imageId = 5;
+		else
+			enabled = false;
+	}
+
+	function getImageFileInfo()
+	{
+		info.filename = "ir_eff_hit%02d".sprintf(imageId);
+		return info;
+	}
+}
+
+
+
+class CIrShadow extends CIriyaObject
+{
+	var zSync;
+	
+	function CIrShadow( _scene, _parent, _zsync=false )
+	{
+		super.CIriyaObject( ... );
+		type = "CIrShadow";
+		priority = PRIORITY_SHADOW;
+		type = OBJTYPE_SHADOW;
+		enabled = CREATE_SHADOW;
+		zSync = _zsync;
+	}
+
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	function onAnimation()
+	{
+		if ( SHADOW_ANIMATION )
+			imageId = ( timing\16 % 2 );
+		else
+			imageId = 0;
+	}
+
+	function doUpdateCom()
+	{
+		x = parent.x;
+		y = parent.y;
+		if ( zSync )
+			z = parent.z;
+		else
+			z = 0;
+		super.doUpdateCom();
+ 	}
+
+	function getImageFileInfo()
+	{
+		var info = %[];
+		info.filename = "ir_eff_shadow%02d".sprintf(imageId);
+		info.mirror = false;
+		info.centerX = 37;
+		info.centerY = 16;
+		info.adapt = true;
+		return info;
+	}
+}
+
+
+
+
+class CIrSmoke extends CIriyaObject
+{
+	function CIrSmoke( _scene, _parent )
+	{
+		super.CIriyaObject( ... );
+		type = "CIrSmoke";
+		x = parent.x;
+		y = parent.y;
+		priority = PRIORITY_PLAYER;
+		enabled = CREATE_SMOKE;
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	function onAnimation()
+	{
+		if ( timing\2 <= 26 )
+			imageId = timing \ 2;
+		else
+			enabled = false;
+	}
+
+	function getImageFileInfo()
+	{
+		var info = %[];
+		info.filename = "ir_eff_smoke%02d".sprintf(imageId);
+		info.mirror = false;
+		info.centerX = 127;
+		info.centerY = 90;
+		info.adapt = true;
+		return info;
+	}
+}
+
+
+class CIrFightLaser extends CIriyaObject
+{
+	function CIrFightLaser( _scene, _parent )
+	{
+		super.CIriyaObject(...);
+		priority = PRIORITY_PLAYER+10;
+	}
+	
+	function onAnimation()
+	{
+		var w = 5;
+		switch( timing\w )
+		{
+		case 0: imageId=0; break;
+		case 1: imageId=1; break;
+		case 2: imageId=2; break;
+		case 3: imageId=3; break;
+		case 4: imageId=4; break;
+		case 5: imageId=5; break;
+		case 6: imageId=6; break;
+		case 7: enabled=false; break;
+		}
+	}
+	
+	function getImageFileInfo()
+	{
+		var info=%[];
+		info.filename = "ir_eff_spark%02d".sprintf(imageId);
+		info.mirror = false;
+		info.adapt = true;
+		info.centerX = 31;
+		info.centerY = 31;
+		return info;
+	}
+}
+
+
+class CIrFight extends CIriyaObject
+{
+	var playerR;
+	var playerRx;
+	var playerRy;
+	var playerL;
+	var playerLx;
+	var playerLy;
+	var fightGauge;
+	var playerServant;
+	var nonPlayerServant;
+	var onBattleEnd;
+	var onBattleAbort;
+	
+	function CIrFight( _scene, _parent, player1, player2 )
+	{
+		super.CIriyaObject( ... );
+		type = "CIrFight";
+		animation = 0;
+		player1.stop();
+		player2.stop();
+		// サーバントの立ち位置（左右）を決定
+		if ( player1.x < player2.x )
+		{
+			playerL = player1;
+			playerR = player2;
+		}
+		else
+		{
+			playerL = player2;
+			playerR = player1;
+		}
+		//
+		var meanX = (playerL.x + playerR.x)/2;
+		var meanY = (playerL.y + playerR.y)/2;
+		with( playerL )
+		{
+			.x = meanX - 32;
+			.y = meanY;
+			.z = 0;
+		}
+		with( playerR )
+		{
+			.x = meanX + 32;
+			.y = meanY;
+			.z = 0;
+		}
+		// 小競り合い管理用のアニメを生成
+		x = meanX;
+		y = meanY;
+		priority= PRIORITY_GAMESYSTEM;
+		playerL = playerL;
+		playerLx= playerL.x;
+		playerLy= playerL.y;
+		playerR = playerR;
+		playerRx= playerR.x;
+		playerRy= playerR.y;
+		visible = false;
+		fightGauge = void;
+		if ( player1.isPlayer )
+		{
+			playerServant = player1;
+			nonPlayerServant = player2;
+		}
+		else if ( player2.isPlayer )
+		{
+			playerServant = player2;
+			nonPlayerServant = player1;
+		}
+		else
+		{
+			playerServant = void;
+			nonPlayerServant = void;
+		}
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	// 小競り合い中のキー入力
+	// battle.fightGauge はプレイヤを含む小競り合い時のみ表示されるシーソーゲージで、
+	// マイナス値だとNPCが有利に、プラス値だとPCが有利になる
+	// ダメージ値は、小競り合い終了時のゲージ値の絶対値をもとに計算される
+	function updateKeyInput()
+	{
+		if ( fightGauge == void )
+			return;
+		// リセット
+		if ( timing==0 )
+			fightGauge.value = 0;
+		// プレイヤが入力したらゲージをプラス側に増やし、COMが入力したらマイナス側に増やす
+		if ( scene.input.left == 0 )
+			fightGauge.value += playerServant.INFO.FIGHT_GAUGE_VAL;
+		if ( random32(8)==0 )
+			fightGauge.value -= nonPlayerServant.INFO.FIGHT_GAUGE_VAL;
+		// 範囲外チェック
+			fightGauge.value = round( -FIGHT_GAUGE_RANGE, fightGauge.value, FIGHT_GAUGE_RANGE );
+	}	
+	
+	function showHitEffect()
+	{
+		with( new CIrHitEffect(scene,this) )
+		{
+			.images = this.images;
+		}
+	}
+	
+	
+	function knockback()
+	{
+		var dis;
+		var tan;
+		showHitEffect();
+		dis = random32()%20+10;
+		tan	= (random32()%10-5)/20;
+		with(playerL)
+		{
+			.motionDestX = playerLx - dis;
+			.motionDestY = playerLy - dis*tan;
+			.motionDestZ = 0;
+			.motionLength = 10;
+			.motionType = MOTIONTYPE_SCHEDULED_SIN_RETURN;
+			.motionStart();
+		}
+		with(playerR)
+		{
+			.motionDestX = playerRx + dis;
+			.motionDestY = playerRy + dis*tan;
+			.motionDestZ = 0;
+			.motionLength = 10;
+			.motionType = MOTIONTYPE_SCHEDULED_SIN_RETURN;
+			.motionStart();
+		}
+	}
+	
+	function knockback2()
+	{
+		var dis;
+		var tan;
+		showHitEffect();
+		dis = random32(40)+20;
+		tan	= (random32(10)-5)/5;
+		with(playerL)
+		{
+			.motionDestX = playerLx - dis;
+			.motionDestY = playerLy - dis*tan;
+			.motionDestZ = 0;
+			.motionLength = 10;
+			.motionType = MOTIONTYPE_SCHEDULED_SIN;
+			.motionStart();
+		}
+		with(playerR)
+		{
+			.motionDestX = playerRx + dis;
+			.motionDestY = playerRy + dis*tan;
+			.motionDestZ = 0;
+			.motionLength = 10;
+			.motionType = MOTIONTYPE_SCHEDULED_SIN;
+			.motionStart();
+		}
+	}
+	
+	function isFightAni(ani)
+	{
+		if( ani==ANI_FIGHT || ani==ANI_FIGHT_READY )
+			return true;
+		else
+			return false;
+	}
+	
+	function endcheck()
+	{
+		// 二人とも戦闘アニメの場合のみ処理を続行する
+		if( isFightAni(playerL.animation) && isFightAni(playerR.animation) )
+		{
+			if ( timing>=FIGHT_TIME_LENGTH ) 
+				end();
+		}
+		else
+		{
+			// 外部要因によりサーバントのアニメが変更されている場合は小競り合いを中断する
+			abort();
+		}
+	}
+	
+	// 小競り合いの最初（目からビーム）
+	function ready()
+	{
+		sound( SE_READY );
+		playerL.x = playerLx-10;
+		playerL.animation = ANI_FIGHT_READY;
+		playerL.direction = MUKI_RIGHT;
+		playerR.x = playerRx+10;
+		playerR.animation = ANI_FIGHT_READY;
+		playerR.direction = MUKI_LEFT;
+		with( new CIrFightLaser(scene,this) )
+		{
+			.x = x;
+			.y = y;
+			.z = 60;
+		}
+	}
+	
+	// 小競り合い開始
+	function fight()
+	{
+		sound( SE_FIGHT, false );
+		playerL.animation = ANI_FIGHT;
+		playerR.animation = ANI_FIGHT;
+		// プレイヤを含む小競り合いの場合
+		if ( playerServant )
+		{
+			// ボタン連打指示
+			with( new CIrFightButton(scene, this) )
+				.animation = ANI_BUTTON_FIGHT;
+			// ゲージ
+			fightGauge = new CIrFightGauge(scene, this);
+		}
+	}
+	
+	function showSmoke()
+	{
+		with( new CIrSmoke(scene, this) )
+			.images = this.images;
+	}
+		
+	function onAnimation()
+	{
+		switch( animation )
+		{
+		case 0:
+			switch( timing )
+			{
+			case 0: 
+				ready();
+				break;
+			case 15:
+				animation=1;
+				break;
+			}
+			break;
+			
+		case 1:
+			// 小競り合い中に弾き飛ばされる動きの設定
+			switch ( timing )
+			{
+			case 0:
+				fight();
+				break;
+			case 20:
+				knockback();
+				showSmoke();
+				break;
+			case 30:
+				knockback();
+				break;
+			case 40:
+				knockback();
+				break;
+			case 50:
+				knockback();
+				break;
+			case 60:
+				knockback();
+				break;
+			case 70:
+				knockback2();
+				break;
+			}
+			updateKeyInput();
+			break;
+		}
+		endcheck();
+	}
+	
+	
+	function end()
+	{
+		with( playerL )
+		{
+			.stop();
+			.animation = ANI_STAND;
+			.direction = MUKI_RIGHT;
+		}
+		with( playerR )
+		{
+			.stop();
+			.animation = ANI_STAND;
+			.direction = MUKI_LEFT;
+		}
+		with( getBattleResult() )
+		{
+			// ダメージ計算
+			.loser.hpDamage( .damage );
+			if( .loser.hp==0 )
+			{
+				.loser.トドメをさされた = .winner;
+			}
+			
+			// 得点
+			.loser.scoreInc( 得点_小競り合いに負けた );
+			.winner.scoreInc( 得点_小競り合いに勝った );
+
+			// 小競り合い終了イベントの発動
+			if ( onBattleEnd )
+				onBattleEnd( .winner, .loser );
+		}
+		// 小競り合いオブジェクトを無効化
+		enabled = false;
+	}
+
+	// 小競り合いの中断
+	function abort()
+	{
+		with( playerL )
+			if ( .animation==ANI_FIGHT || .animation==ANI_FIGHT_READY )
+			{
+				.stop();
+				.animation = ANI_STAND;
+				.direction = MUKI_RIGHT;
+				.x = this.x;
+				.y = this.y;
+				.z = 0;
+			}
+		with( playerR )
+			if ( .animation==ANI_FIGHT || .animation==ANI_FIGHT_READY )
+			{
+				.stop();
+				.animation = ANI_STAND;
+				.direction = MUKI_LEFT;
+				.x = this.x;
+				.y = this.y;
+				.z = 0;
+			}
+		if ( onBattleAbort )
+			onBattleAbort( this );
+		// 小競り合いオブジェクトを無効化
+		enabled = false;
+	}
+
+
+
+	// 小競り合いの結果を得る
+	function getBattleResult()
+	{
+		// プレイヤを含む小競り合いの場合
+		if ( fightGauge )
+		{
+			if ( fightGauge.value >= 0 )
+				return %[
+					winner: playerServant,
+					loser:	nonPlayerServant,
+					damage:	Math.abs(fightGauge.value)*playerServant.INFO.FIGHT_DAMAGE_SCALE*プレイヤが小競り合いで与えるダメージの倍率補正
+				];
+			else
+				return %[
+					winner: nonPlayerServant,
+					loser:	playerServant,
+					damage:	Math.abs(fightGauge.value)*nonPlayerServant.INFO.FIGHT_DAMAGE_SCALE
+				];
+		}
+		// プレイヤを含まない小競り合いの場合
+		if ( random32(2) == 0 )
+			return %[
+				winner: playerR,
+				loser:	playerL,
+				damage:	random32(50)*playerR.INFO.FIGHT_DAMAGE_SCALE
+			];
+		else
+			return %[
+				winner: playerL,
+				loser:	playerR,
+				damage:	random32(50)*playerL.INFO.FIGHT_DAMAGE_SCALE
+			];
+		dm("getBattleResult: ここには到達しないはず");
+	}
+}
+
+
+
+
+
+
+class CIrBall extends CIriyaObject
+{
+	var 重力加速度		= -0.2;
+	var ボール当たってから消えるまでの時間 = FRAME_PER_SEC;
+	var shadow;
+	var onHit;
+	var info = %[];
+	
+	function CIrBall( _scene, _parent )
+	{
+		super.CIriyaObject( ... );
+		type = OBJTYPE_BALL;
+		accelZ = 重力加速度;
+		priority = PRIORITY_PLAYER; // 優先度はサーバントと同じにしておく
+		animation = 0;
+		shadow = scene.addShadow(this);
+		info.mirror = false;
+		info.centerX = 16;
+		info.centerY = 16;
+		info.hitRect = %[left:-10, top:-10, right:10, bottom:10];
+		info.adapt = true;
+	}
+
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	function onAnimation()
+	{
+		switch( animation )
+		{
+		case 0:
+			// 弾が当たった場合の処理
+			var list = findHitServants(HITTEST_ONSCREEN);
+			if ( list.count>0 )
+			{
+				doHit( list[0] );
+				animation = 1;
+			}
+			break;
+			
+		case 1:
+			if ( timing == 0 )
+			{
+				fadeOut(ボール当たってから消えるまでの時間);
+			}
+			if ( timing >= ボール当たってから消えるまでの時間 )
+				enabled = false;
+			break;
+		}
+	}
+	
+	function onMoved()
+	{
+		if ( z < 0 )
+		{
+			z = 0;
+			speedZ *= -0.8;
+			if ( STAGE3_BOUNCEEFF )
+				with( new CIrBallBounceEffect( scene, scene.etcRootObj ) )
+				{
+					.x = x;
+					.y = y;
+					.z = 0;
+					.images = images;
+				}
+		}
+		if ( outOfScreen(100) )
+			enabled = false;
+	}
+	
+	// target に当たったときの動作を行う
+	function doHit( target )
+	{
+		if ( onHit )
+			onHit( this, target );
+		var speed = hypot(speedX, speedY);
+		speedX = randomRange(-2,2);
+		speedY = randomRange(-2,2);
+		speedZ = -speed*1.5;
+	}
+	
+	function getImageFileInfo()
+	{
+		info.filename = "ir_obj_ball00";
+		return info;
+	}
+}
+
+
+
+
+class CIrShot extends CIriyaObject
+{
+	var onHit;
+	var info = %[];
+
+	function CIrShot( _scene, _parent )
+	{
+		super.CIriyaObject( ... );
+		type = OBJTYPE_SHOT;
+		priority = PRIORITY_PLAYER+10; // 優先度はサーバントと同じにしておく
+		animation = 0;
+		info.centerX = 15;
+		info.centerY = 15;
+		info.hitRect = %[left:-8, top:-8, right:8, bottom:8];
+		info.adapt = true;
+		info.mirror = false;
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	function onAnimation()
+	{
+		switch( animation )
+		{
+		case 0:
+			imageId = timing\4 % 2;
+			// 弾が当たった場合の処理
+			if ( timing%3==0 ) // 当たり判定のチェックは数フレームに一回ぐらいでよい
+			{
+				var list = findHitServants(HITTEST_ONSCREEN);
+				if ( list.count > 0 )
+				{
+					doHit( list[0] );
+					animation = 1;
+				}
+			}
+			break;
+		case 1:
+			var i = timing\4 + 2;
+			if ( i <= 4 )
+				imageId = i;
+			else
+				enabled = false;
+			break;
+		}			
+	}
+
+	function onMoved()
+	{
+		if ( outOfScreen() )
+			enabled = false;
+	}
+	
+	function doHit( target )
+	{
+		if ( onHit )
+			onHit( this, target );
+		enabled = false;	
+	}
+	
+	function getImageFileInfo()
+	{
+		info.filename = "ir_obj_shot%02d".sprintf(imageId);
+		return info;
+	}
+}
+
+
+
+
+
+
+class CIrEmotion extends CIriyaObject
+{
+	function CIrEmotion( _scene, _parent )
+	{
+		super.CIriyaObject( ... );
+		type = "CIrEmotion";
+		priority = PRIORITY_PLAYER+10;
+		origin = ORIGIN_PARENT;
+		direction = MUKI_LEFT;
+	}
+		
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	function onAnimation()
+	{
+		switch( animation )
+		{
+		case ANI_EMOTION_HAPPY:
+			imageId = "happy";
+			switch( timing )
+			{
+			case 0: fadeIn(10); break;
+			case 60:fadeOut(10); break;
+			case 70:enabled=false; break;
+			}
+			break;
+			
+		case ANI_EMOTION_SILENCE:
+			imageId = "silence";
+			switch( timing )
+			{
+			case 0: fadeIn(10); break;
+			case 60:fadeOut(10); break;
+			case 70:enabled=false; break;
+			}
+			break;
+			
+		case ANI_EMOTION_ANGER:
+			imageId = "anger";
+			switch( timing )
+			{
+			case 0: fadeIn(10); break;
+			case 60:fadeOut(10); break;
+			case 70:enabled=false; break;
+			}
+			break;
+		case ANI_EMOTION_SWEAT:
+			imageId = "sweat";
+			switch( timing )
+			{
+			case 0: fadeIn(10); break;
+			case 60:fadeOut(10); break;
+			case 70:enabled=false; break;
+			}
+			break;
+		case ANI_EMOTION_EXCLAMATION:
+		{
+			if( timing==0 ) fadeOut(0);
+			if( timing==1 ) fadeIn(10);
+			var w = 4;
+			switch( timing\w )
+			{
+			case 0: imageId="exc00"; break;
+			case 1: imageId="exc01"; break;
+			case 2: imageId="exc02"; break;
+			case 3: imageId="exc03"; break;
+			case 4: imageId="exc02"; break;
+			case 5: imageId="exc03"; break;
+			case 6: fadeOut(10); break;
+			default:
+				if ( fadeProcessing==false )
+					enabled=false;
+				break;
+			}
+			break;
+		}
+		case ANI_EMOTION_EXCLAMATION2:
+			imageId = "exc10";
+			switch( timing )
+			{
+			case 0: fadeIn(10); break;
+			case 60:fadeOut(10); break;
+			case 70:enabled=false; break;
+			}
+			break;
+		
+		case ANI_EMOTION_CONFUSE:
+			imageId = "confuse";
+			break;
+			
+		case ANI_EMOTION_PARALYZE:
+			imageId = "paralyze";
+			break;
+			
+		case ANI_EMOTION_NODAMAGE:
+			imageId = "nodamage";
+			break;
+			
+		case ANI_EMOTION_RAPID:
+			imageId = "rapid";
+			break;
+			
+		default:
+			dm( "unknown animation. in CIrEmotion.onAnimation : ", animation );
+			break;
+		}
+	}
+	
+	
+	var _width;
+	var _height;
+	var _opacity;
+	function onDraw(obj, info)
+	{
+		var isNotConditionEmo = ! (animation&ANI_EMOTION_CONDITION);
+		var img = images.get(info);
+		if ( timing<FRAME_PER_SEC*2 || isNotConditionEmo )
+		{
+			layer.assign(img);
+			layer.setSize( layer.imageWidth, layer.imageHeight );
+			//layer.opacity = 255;
+			_width = layer.width;
+			_height = layer.height;
+			_opacity = 255;
+		}
+		else
+		{
+			layer.fill( 0 );
+			var W = img.width/2;
+			var H = img.height/2;
+			var O = 127;
+			_width   = _width  + (W-_width )*0.8;
+			_height  = _height + (H-_height)*0.8;
+			_opacity = _opacity+ (O-_opacity)*0.8;
+			var _y = parent.isPlayer ? 0 : (img.height-_height)/2;
+			layer.stretchCopy(
+				(img.width-_width)/2, _y, _width, _height, img, 0, 0, img.width, img.height
+			);
+			layer.opacity = _opacity;
+		}
+	}
+	
+	function getImageFileInfo( ani )
+	{
+		switch( ani )
+		{
+		case ANI_EMOTION_HAPPY:			imageId="happy"; break;
+		case ANI_EMOTION_SILENCE:		imageId="silence"; break;
+		case ANI_EMOTION_ANGER:			imageId="anger"; break;
+		case ANI_EMOTION_SWEAT:			imageId="sweat"; break;
+		case ANI_EMOTION_EXCLAMATION:	imageId="exc02"; break;
+		case ANI_EMOTION_EXCLAMATION2:	imageId="exc10"; break;
+		case ANI_EMOTION_CONFUSE:		imageId="confuse"; break;
+		case ANI_EMOTION_PARALYZE:		imageId="paralyze"; break;
+		case ANI_EMOTION_NODAMAGE:		imageId="nodamage"; break;
+		case ANI_EMOTION_RAPID:			imageId="rapid"; break;
+		}
+	
+		var name;
+		var cx;
+		var cy;
+		switch( imageId )
+		{
+		case "silence":		name="emo00"; cx=51; cy=104; break;
+		case "happy":		name="emo10"; cx=51; cy=104; break;
+		case "exc00": 		name="emo20"; cx=84; cy=140; break;
+		case "exc01": 		name="emo21"; cx=84; cy=140; break;
+		case "exc02": 		name="emo22"; cx=84; cy=140; break;
+		case "exc03": 		name="emo23"; cx=84; cy=140; break;
+		case "exc10":		name="emo50"; cx=60; cy=140; break;
+		case "exc11":		name="emo51"; cx=60; cy=140; break;
+		case "anger":		name="emo30"; cx=51; cy=104; break;
+		case "sweat":		name="emo40"; cx=51; cy=104; break;
+		case "confuse":		name="para00"; cx=87; cy=204; break;
+		case "paralyze":	name="para01"; cx=87; cy=204; break;
+		case "rapid":		name="para02"; cx=87; cy=204; break;
+		case "nodamage":	name="para03"; cx=87; cy=204; break;
+		default:
+			return void;
+		}
+		var info = %[];
+		info.filename = "ir_emo_"+name;
+		info.mirror = (direction==MUKI_RIGHT);
+		info.adapt = true;
+		info.centerX = cx;
+		info.centerY = cy;
+		return info;
+	}
+}
+
+
+
+
+class CIrHimei extends CIriyaObject
+{
+	var characterId;
+	
+	function CIrHimei( _scene, _parent )
+	{
+		super.CIriyaObject( ... );
+		type = "CIrHimei";
+		x = parent.x;
+		y = parent.y-60;
+		characterId = parent.characterId;
+		imageId = "悲鳴";
+		speedX = parent.speedX / 10 + randomRange(-10,10)/5;
+		speedY = -8 + randomRange(-10,10)/5;
+		priority = PRIORITY_PLAYER;
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	function onAnimation()
+	{
+		switch( timing )
+		{
+		case 0:
+			fadeOut(60);
+			break;
+		case 60:
+			enabled = false;
+			break;
+		}
+	}
+	
+	function getImageFileInfo()
+	{
+		var info = %[];
+		switch( characterId )
+		{
+		case CHARA_ID_CASTER:info.filename="ir_eff_himei00"; break;
+		case CHARA_ID_LANCER:info.filename="ir_eff_himei01"; break;
+		case CHARA_ID_ARCHER:info.filename="ir_eff_himei01"; break;
+		case CHARA_ID_RIDER: info.filename="ir_eff_himei00"; break;
+		case CHARA_ID_SABER: info.filename="ir_eff_himei00"; break;
+		default:
+			return void;
+		}
+		info.mirror = false;
+		info.adapt = true;
+		info.centerX = 16;
+		info.centerY = 16;
+		return info;
+	}
+}
+
+
+
+
+
+class CIrMissile extends CIriyaObject
+{
+	var onHit;
+	
+	function CIrMissile( _scene, _parent )
+	{
+		super.CIriyaObject( ... );
+		type = "CIrMissile";
+		priority = PRIORITY_MISSILE;
+		speedX = -random32(5)-5;
+		speedY = 0;
+		accelX = -0.3;
+	}
+
+	function finalize()
+	{
+		super.finalize( ... );
+	}
+
+	function onAnimation()
+	{
+		imageId = timing\5 % 2;		
+		var list = findHitServants(HITTEST_ONSCREEN);
+		if ( list.count>0 )
+			doHit( list[0] );
+		if ( getLayerPos().x < -200 )//if ( outOfScreen() )
+			enabled = false;
+	}
+	
+	function doHit( target )
+	{
+		if ( onHit )
+			if ( ! onHit( this, target ) )
+				return;
+		with( new CIrBomEffect(scene,scene.etcRootObj) )
+		{
+			.x = x;
+			.y = y;
+			.z = z;
+		}		
+		enabled = false;
+	}
+	
+	function getImageFileInfo()
+	{
+		var info = %[];
+		info.filename = "ir_obj_missile00_%03d".sprintf(imageId);
+		info.mirror = false;
+		info.adapt = true;
+		info.centerX = 30;
+		info.centerY = 23;
+		info.hitRect = %[left:-20,top:-20,right:40,bottom:20];
+		return info;
+	}
+}
+
+
+
+
+class CIrBackground extends CIriyaObject
+{
+	var filename;
+	var clipRect;
+	var adapt;
+	var mirror;
+	
+	function CIrBackground( _scene, _parent )
+	{
+		super.CIriyaObject( ... );
+		type = "CIrBackground";
+		priority = PRIORITY_BACKGROUND;
+		imageId = "背景";
+		filename = "";
+		adapt = false;
+		mirror = false;
+		allowAnimationWhileUsingHougu = true;
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	function getImageFileInfo()
+	{
+		var info = %[];
+		info.filename = filename;
+		info.mirror = mirror;
+		info.adapt = adapt;
+		info.centerX = __imageCenterX;
+		info.centerY = __imageCenterY;
+		info.clipRect = clipRect;
+		return info;
+	}
+}
+
+
+
+class CIrWaterEffect extends CIriyaObject
+{
+	function CIrWaterEffect( _scene, _parent )
+	{
+		super.CIriyaObject(...);
+		type = "CIrWaterEffect";
+		priority = PRIORITY_PLAYER+10;
+		x = parent.x;
+		y = parent.y;
+		z = parent.z;
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	function onAnimation()
+	{
+		var w = 4;
+		if( timing\w < 5 )
+			imageId = 10+timing\w;
+		else
+			enabled = false;
+	}
+	
+	function getImageFileInfo()
+	{
+		var info = %[];
+		info.filename = "ir_eff_water%02d".sprintf(imageId);
+		info.mirror = false;
+		info.adapt = true;
+		info.centerX = 46;
+		info.centerY = 79;
+		return info;
+	}
+}
+
+
+
+class CIrMudEffect extends CIriyaObject
+{
+	function CIrMudEffect( _scene, _parent )
+	{
+		super.CIriyaObject(...);
+		type = "CIrMudEffect";
+		priority = PRIORITY_PLAYER+10;
+		x = parent.x-10;
+		y = parent.y;
+		z = parent.z-20;
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	function onAnimation()
+	{
+		var w = 4;
+		if( timing\w < 4 )
+			imageId = timing\w;
+		else
+			enabled = false;
+	}
+	
+	function getImageFileInfo()
+	{
+		var info = %[];
+		info.filename = "ir_eff_mud%02d".sprintf(imageId);
+		info.mirror = false;
+		info.adapt = true;
+		info.centerX = 46;
+		info.centerY = 79;
+		return info;
+	}
+}
+
+
+class CIrBomEffect extends CIriyaObject
+{
+	function CIrBomEffect( _scene, _parent )
+	{
+		super.CIriyaObject(...);
+		type = "CIrBomEffect";
+		priority = PRIORITY_PLAYER+10;
+		x = parent.x;
+		y = parent.y;
+		z = parent.z;
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	function onAnimation()
+	{
+		if( timing==0 )
+			sound( SE_MISSILE_EXPLOSION );
+
+		var w = 4;
+		if( timing\w < 8 )
+			imageId = timing\w;
+		else
+			enabled = false;
+	}
+	
+	function getImageFileInfo()
+	{
+		var info = %[];
+		info.filename = "ir_eff_bom00%02d".sprintf(imageId);
+		info.mirror = false;
+		info.adapt = true;
+		info.centerX = 64;
+		info.centerY = 64;
+		return info;
+	}
+}
+
+
+class CIrShotHitEffect extends CIriyaObject
+{
+	var info = %[];
+	function CIrShotHitEffect( _scene, _parent )
+	{
+		super.CIriyaObject( ... );
+		enabled = ENABLE_SHOTHITEFF;
+		animation = 0;
+		info.mirror = false;
+		info.adapt = true;
+		info.centerX = 47;
+		info.centerY = 47;
+		x = _parent.x;
+		y = _parent.y;
+		z = _parent.z;
+		priority = _parent.priority+10;
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	function onAnimation()
+	{
+		imageId = timing\4 % 2;
+		switch( animation )
+		{
+		case 0:
+			if ( timing > 10 )
+				animation = 1;
+			break;
+		case 1:
+			fadeOut(10);
+			animation = 2;
+			break;
+		case 2:
+			if ( !fadeProcessing )
+				enabled = false;
+			break;
+		}
+	}
+	
+	function getImageFileInfo()
+	{
+		info.filename = "ir_eff_hit%02d".sprintf(10+imageId);
+		return info;
+	}
+}
+
+class CIrBallBounceEffect extends CIriyaObject
+{
+	var info = %[];
+	
+	function CIrBallBounceEffect( _scene, _parent )
+	{
+		super.CIriyaObject( ... );
+		priority = PRIORITY_GROUNDOBJ;
+		info.centerX = 48;
+		info.centerY = 24;
+		info.mirror = false;
+		info.adapt = true;
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	function onAnimation()
+	{
+		var i = timing \ 5;
+		if ( i <= 2 )
+			imageId = i;
+		else
+			enabled = false;
+	}
+	
+	function getImageFileInfo()
+	{
+		info.filename = "ir_eff_bounce%02d".sprintf(imageId);
+		return info;
+	}
+}
+
+
+class CIrWinner extends CIriyaObject
+{
+	var looplength;
+	function CIrWinner( _scene, _parent, _looplength=15 )
+	{
+		super.CIriyaObject( ... );
+		priority = PRIORITY_PLAYER_TOP;
+		x = parent.x;
+		y = parent.y;
+		z = parent.z;
+		looplength = _looplength;
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	function onAnimation()
+	{
+		var i;
+		switch( animation )
+		{
+		case 0:
+			i = timing\2;
+			if ( i<=8 )
+				imageId = i;
+			else
+				animation = 1;
+			break;
+		case 1:
+			imageId = 9+timing\2%10;
+			if ( timing < looplength )
+				break;
+			fadeOut(10);
+			animation = 2;
+			break;
+		case 2:
+			if ( fadeProcessing )
+				break;
+			enabled = false;
+			break;	
+		}
+	}
+	
+	function getImageFileInfo()
+	{
+		var info = %[];
+		info.filename = "ir_sys_win%02d".sprintf(imageId);
+		info.adapt = false;
+		info.mirror = false;
+		info.centerX = 64;
+		info.centerY = 156;
+		return info;
+	}
+}
+
+
+
+class CIrBattleCursor extends CIriyaObject
+{
+	var info = %[];
+	var minisize;
+	var ofs;
+	function CIrBattleCursor( _scene, _parent, _minisize=false )
+	{
+		super.CIriyaObject(...);
+		origin = ORIGIN_WINDOW;
+		priority = PRIORITY_GAMESYSTEM;
+		minisize = _minisize;
+		ofs = minisize ? 0 : 10;
+		info.mirror = false;
+		info.adapt = true;
+		info.centerX = minisize ? 24 : 32;
+		info.centerY = minisize ? 20 : 32;
+		info.hitRect = %[left:0, top:0, right:0, bottom:0];
+		allowAnimationWhileUsingHougu = true;
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	function onAnimation()
+	{
+		imageId = timing\8 % 2;	
+	}
+	
+	function getImageFileInfo()
+	{
+		info.filename = "ir_sys_battle%02d".sprintf(ofs+imageId);
+		return info;
+	}
+}
+
+
+
+class CIrDecorativePaperBall extends CIriyaObject
+{
+	function CIrDecorativePaperBall( _scene, _parent )
+	{
+		super.CIriyaObject( ... );
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	function onAnimation()
+	{
+		var i, w=2;
+		switch( animation )
+		{
+		case 0:
+			i = timing\w;
+			if ( i<=6 )
+				imageId = i;
+			else
+				animation  =1;
+			break;
+		case 1:
+			i = 7 + timing\w%10;
+			imageId = i;
+			if ( timing < 60 )
+				break;
+			//fadeOut(10);
+			//animation = 2;
+			break;
+		case 2:
+			i = 7 + timing\w%10;
+			imageId = i;
+			if ( fadeProcessing )
+				break;
+			enabled = false;
+			break;
+		}
+	}
+	
+	function getImageFileInfo()
+	{
+		var info = %[];
+		info.filename = "ir_sys_seikai%02d".sprintf(imageId);
+		info.adapt = false;
+		info.mirror = false;
+		info.centerX = 72;
+		info.centerY = 190;
+		return info;
+	}
+}
+
+
+class CIrItem extends CIriyaObject
+{
+	var onHit;
+	var info = %[];
+	var typeid;
+	
+	function CIrItem( _scene, _parent, _iteminfo )
+	{
+		super.CIriyaObject(...);
+		allowAnimationWhileUsingHougu = true;
+		type = OBJTYPE_ITEM;
+		info.adapt = true;
+		info.mirror = false;
+		if( _iteminfo )
+		{
+			// アイテムの出現確率に従い、レアアイテムかトラップかを決める
+			if( random32(1000) < 1000*_iteminfo.確率 )
+				typeid = _iteminfo.id;
+			else
+			{
+				// はずれの場合、爆発か、からっぽかを決める
+				if( random32(1000) < 1000*ハズレ宝箱が爆発する確率 )
+					typeid = ITEM_はずれ;
+				else
+					typeid = ITEM_スカ;
+			}
+			// 宝箱の画像を設定する
+			info.filename = "ir_obj_tresure00";
+			info.centerX = 33;
+			info.centerY = 45;
+			info.clipRect = void;		
+			priority = PRIORITY_GROUNDOBJ;
+		}
+		else
+		{
+			typeid = randomRange( ITEM_通常, ITEM_通常_終了-1 );
+			switch( typeid ) 
+			{
+			case ITEM_ケーキ:		info.clipRect=%[left:  1,top:  1,width:48,height:48]; break;
+			case ITEM_パフェ:		info.clipRect=%[left: 51,top:  1,width:48,height:48]; break;
+			case ITEM_リンゴ:		info.clipRect=%[left:101,top:  1,width:48,height:48]; break;
+			case ITEM_ミカン:		info.clipRect=%[left:151,top:  1,width:48,height:48]; break;
+			case ITEM_サンドイッチ:	info.clipRect=%[left:201,top:  1,width:48,height:48]; break;
+			case ITEM_バーガー:		info.clipRect=%[left:  1,top: 51,width:48,height:48]; break;
+			case ITEM_スープ:		info.clipRect=%[left: 51,top: 51,width:48,height:48]; break;
+			case ITEM_ようかん:		info.clipRect=%[left:101,top: 51,width:48,height:48]; break;
+			case ITEM_パン:			info.clipRect=%[left:151,top: 51,width:48,height:48]; break;
+			case ITEM_おにぎり:		info.clipRect=%[left:201,top: 51,width:48,height:48]; break;
+			case ITEM_たいやき:		info.clipRect=%[left:  1,top:101,width:64,height:64]; break;
+			case ITEM_ハンバーグ:	info.clipRect=%[left: 67,top:101,width:64,height:64]; break;
+			case ITEM_麻婆豆腐:		info.clipRect=%[left:133,top:101,width:64,height:64]; break;
+			case ITEM_焼魚定食:		info.clipRect=%[left:199,top:101,width:86,height:64]; break;
+			default:
+				dm("■アイテム番号がおかしい in CIrItem::CIrItem");
+			}
+			info.filename = "ir_obj_food";
+			info.centerX = info.clipRect.width \2;
+			info.centerY = info.clipRect.height\4*3;
+			priority = PRIORITY_ITEM;
+		}
+		// 当たり判定
+		info.hitRect = %[left:-20,top:-30,right:20,bottom:30];
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	var obj;
+	
+	function onAnimation()
+	{
+		switch( animation )
+		{
+		case 0:
+			var list = findHitServants(HITTEST_ONFIELD);
+			var i;
+			for ( i=0; i<list.count; i++ )
+				if ( doHit(list[i]) )
+					break;
+			break;
+		// 通常アイテムをゲット
+		case 1:
+			fadeOut(5);
+			animation = 2;
+			break;
+		case 2:
+			if ( fadeProcessing )
+				break;
+			enabled = false;
+			break;
+		// 宝箱をゲット	
+		case 10:
+			scene.gameTimerStop(); // タイマーをとめておく
+			scene.houguEventProcessing = true; // 宝具処理中のフラグを立てておく
+			obj = new CIrBackground( scene, this );
+			obj.filename = "ir_obj_tresure01";
+			obj.priority = PRIORITY_PLAYER+50;
+			obj.x = x;
+			obj.y = y;
+			obj.imageCenterX = 84;
+			obj.imageCenterY = 155;
+			obj.fadeIn(15);
+			fadeOut(15);
+			animation = 11;
+			break;
+		case 11:
+			if ( obj.fadeProcessing )
+				break;
+			animation = 12;
+			break;
+		case 12:
+			if( timing < 10 )
+				break;
+			scene.itemPromptObj.show( typeid );
+			animation = 13;
+			break;
+		case 13:
+			if ( CheckValid(scene.itemPromptObj) && scene.itemPromptObj.active )
+			{
+				break;
+			}
+			obj.fadeOut(10);
+			animation = 14;
+			break;
+		case 14:
+			if( timing < 10 )
+				break;
+			scene.gameTimerStart(); // タイマーを開始する
+			scene.houguEventProcessing = false; // 宝具処理中のフラグを解除
+			obj.enabled = false;
+			enabled = false;
+			break;
+		}
+	}
+	
+	var アイテムを取れないアニメ = [
+		ANI_DEAD, ANI_DROWNED, ANI_BLOWN, ANI_SHIELD, ANI_GOAL, ANI_イベント待機,
+		ANI_イベント移動,ANI_KNOCKBACK, ANI_崖_落下, ANI_MOVETOGOAL, ANI_復帰, ANI_復帰２,
+		ANI_HOUGU, ANI_HOUGU2, ANI_HOUGU3, ANI_HOUGU4, ANI_勝利, ANI_FIGHT, ANI_FIGHT_READY
+	];
+	
+	function doHit( servant )
+	{
+		// 万が一宝具使用中の場合は、アイテムイベントは発生しない
+		if ( scene.houguEventProcessing )
+			return false;
+		// サーバントが特定のアニメをしている最中は、アイテムを取れない
+		if ( アイテムを取れないアニメ.find(servant.animation) >=0 )
+			return false;
+		// 同フレームに複数のアイテムを取れないようにするためのフラグをチェックする
+		if ( servant.itemflag )
+			return false;
+		servant.itemflag = true;
+		// アイテムまたはハズレの場合の処理
+		if ( onHit )
+			onHit(this,servant);
+		// 通常アイテムの場合は普通に処理する
+		if ( 通常アイテム？(typeid) )
+		{
+			servant.sound( SE_GETITEM );
+			servant.scoreInc( 得点_アイテム取得 );
+			animation = 1;
+			return true;
+		}
+		// レアアイテム（プレイヤのみ取得可能）
+		if( レアアイテム？(typeid) && servant.isPlayer )
+		{
+			parentLayer.playerGetItem( typeid );
+			servant.sound( SE_OPENBOX );
+			servant.scoreInc( 得点_レアアイテム取得 );
+			animation = 10;
+			return true;
+		}
+		// スカの場合（プレイヤのみ取得可能）
+		if( typeid==ITEM_スカ && servant.isPlayer )
+		{
+			servant.sound( SE_OPENBOX );
+			servant.scoreInc( 得点_宝箱は空だった );
+			animation = 10;
+			return true;
+		}
+		// 通常アイテムでもレアアイテムでもない場合は、ただ消えるだけ
+		animation = 1;
+		return true;
+	}
+	
+	function getImageFileInfo()
+	{
+		return info;
+	}
+}
+
+
+
+
+
+
+class CIrTextbox extends CIriyaObject
+{
+	var FONT_HEIGHT = 28;
+	var FONT_FACE = "ＭＳ ゴシック";
+	var ANI_SHOW = "ANI_SHOW";
+	var ANI_WRITE = "ANI_WRITE";
+	var ANI_CLOSE = "ANI_CLOSE";
+	var skipflag;
+	var startPosX;
+	var startPosY;
+	var isFirst;
+	var writeDone;
+	var cursor;
+	var showcursor;
+	
+	function CIrTextbox( _scene, _parent )
+	{
+		super.CIriyaObject(...);
+		type = "TextBox";
+		origin = ORIGIN_WINDOW;
+		priority = PRIORITY_SYSTEM;
+		visible = false;
+		x = 0;
+		y = 400;
+		skipflag = false;
+		setTextStartPos(20,20);
+		images = _scene.systemImages;
+		writeDone = false;
+		showcursor = false;
+		// クリック待ちカーソル
+		with( cursor = new CIrTextCursor(scene,this) )
+		{
+			.images = this.images;
+			.visible = false;
+		}
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	function show()
+	{
+		animation = ANI_SHOW;
+		isFirst = true;
+	}
+	
+	function close()
+	{
+		animation = ANI_CLOSE;
+	}
+	
+	function setTextStartPos( _x, _y )
+	{
+		charx = startPosX = _x;
+		chary = startPosY = _y;
+	}
+	
+	function write( _showcursor=false )
+	{
+		animation = ANI_WRITE;
+		skipflag = false;
+		writeDone = false;
+		cursor.visible = false;
+		charindex = 0;
+		lineindex = 0;
+		isFirst = true;
+		charx = startPosX;
+		chary = startPosY;
+		showcursor = _showcursor;
+	}
+	
+	function skip()
+	{
+		skipflag = true;
+	}
+
+	function onAnimation()
+	{
+		switch( animation )
+		{
+		case ANI_SHOW:
+			if ( timing==0 )
+			{
+				layer.setSize( 800, 180 );
+				//layer.fill(0x88000000);
+				layer.font.height = FONT_HEIGHT;
+				layer.font.face = FONT_FACE;
+				visible = true;
+			}
+			break;
+					
+		case ANI_CLOSE:
+			if ( timing == 0 )
+				fadeOut(15);
+			break;
+		}
+	}
+
+	var lineindex; // 何行目を描画中？
+	var charindex; // 何文字目を描画中？
+	var charx; // 文字をどこに書く？
+	var chary;
+	// 文字を描画する. 描画が完了したら true を返す
+	function draw_char( char )
+	{
+		if( ! skipflag )
+			syssound( SE_TEXT_TYPING );
+		//layer.drawBorderText( charx, chary, char, , , 1 );
+		layer.drawText( charx, chary, char, 0xFFFFFF, 255, true );
+		charx += layer.font.getEscWidthX(char);
+		return true;
+	}
+	
+	function onDraw()
+	{
+		// 描画モードでなければ何もしない
+		switch( animation )
+		{
+		case ANI_SHOW:
+			forceUpdate = true;
+			return false;// デフォルトの描画を行う
+		case ANI_CLOSE:
+			return true;// デフォルトの描画を行わない
+		}
+		// 既に書き終わっていたら何もしない
+		if ( writeDone )
+			return true;
+
+		do{
+			drawText();
+		} while( skipflag && !writeDone );
+		return true;
+	}
+
+	function drawText()
+	{
+		// コントロール文字の解析
+		while ( lineindex<strings.count && strings[lineindex].indexOf("#") == 0 )
+		{
+			var line = strings[lineindex];
+			var pos = line.indexOf( " " );
+			lineindex++;
+			switch( line.substring(0,pos) )
+			{
+			case "#fontsize":
+				layer.font.height = line.substring(pos+1);
+				break;
+			case "#fontface":
+				layer.font.face = line.substring(pos+1);
+				break;
+			case "#left":
+				charx = startPosX = (int)line.substring(pos+1);
+				break;
+			case "#top":
+				chary = startPosY = (int)line.substring(pos+1);
+				break;
+			}
+		}		
+		// 描画文字のインデックス値が範囲外ならなにもしない
+		if ( lineindex >= strings.count )
+		{
+			if ( showcursor )
+			{
+				cursor.visible = true;
+				cursor.timing = 0;
+			}
+			writeDone = true;
+			return true;
+		}
+		// 最初の文字を書く前にテキストボックスを描画
+		if ( isFirst )
+		{
+			layer.assign( images.get(getImageFileInfo()) );
+			isFirst = false;
+		}
+		// 文字を描画する
+		var c = strings[lineindex][charindex];
+		if ( ! draw_char(c) )
+			return true;
+		// １文字の描画が終了した場合、文字インデックスを１つ進める
+		charindex++;
+		if ( charindex < strings[lineindex].length )
+			return true;
+		// 改行
+		lineindex++;
+		charindex=0;
+		charx = startPosX;
+		chary += layer.font.getEscHeightY(c)+5;
+		return true;
+	}
+	
+	function getImageFileInfo()
+	{
+		var info = %[];
+		info.filename = "ir_sys_textbox";
+		info.mirror = false;
+		info.adapt = true;
+		info.centerX = 0;
+		info.centerY = 0;
+		return info;
+	}
+}
+
+
+class CIrTextCursor extends CIriyaObject
+{
+	function CIrTextCursor( _scene, _parent )
+	{
+		super.CIriyaObject( ... );
+		origin = ORIGIN_PARENT;
+		priority = PRIORITY_SYSTEM+10;
+		x = 740;
+		y = 120;
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	function onAnimation()
+	{
+		if ( timing%20==0 )
+			fadeOut(20);
+	}
+	
+	function getImageFileInfo()
+	{
+		var info = %[];
+		info.filename = "ir_sys_textcursor";
+		info.mirror = false;
+		info.adapt = true;
+		info.centerX = 32;
+		info.centerY = 32;
+		return info;
+	}
+}
+
+
+
+
+
+
+function GetEmotionSet( emoscene, master, servant )
+{
+	switch( master )
+	{
+	case CHARA_ID_SHIROU:
+		switch( emoscene )
+		{
+		case EMOSCENE_SELECT:
+			switch( servant )
+			{
+			case CHARA_ID_SABER:	return %[master:ANI_EMOTION_HAPPY, servant:ANI_EMOTION_HAPPY];
+			case CHARA_ID_ARCHER:	return %[master:ANI_EMOTION_ANGER, servant:ANI_EMOTION_ANGER];
+			case CHARA_ID_CASTER:	return %[master:ANI_EMOTION_HAPPY, servant:ANI_EMOTION_SILENCE];
+			case CHARA_ID_LANCER:	return %[master:ANI_EMOTION_HAPPY, servant:ANI_EMOTION_HAPPY];
+			case CHARA_ID_RIDER:	return %[master:ANI_EMOTION_HAPPY, servant:ANI_EMOTION_SILENCE];
+			}
+			break;
+		case EMOSCENE_QUIZ_FAIL:
+			switch( servant )
+			{
+			case CHARA_ID_SABER:	return %[master:ANI_EMOTION_SWEAT, servant:ANI_EMOTION_SWEAT];
+			case CHARA_ID_ARCHER:	return %[master:ANI_EMOTION_ANGER, servant:ANI_EMOTION_HAPPY];
+			case CHARA_ID_CASTER:	return %[master:ANI_EMOTION_SILENCE, servant:ANI_EMOTION_HAPPY];
+			case CHARA_ID_LANCER:	return %[master:ANI_EMOTION_SWEAT, servant:ANI_EMOTION_SWEAT];
+			case CHARA_ID_RIDER:	return %[master:ANI_EMOTION_SWEAT, servant:ANI_EMOTION_SILENCE];
+			}
+			break;
+		case EMOSCENE_QUIZ_SUCCESS:
+			switch( servant )
+			{
+			case CHARA_ID_SABER:	return %[master:ANI_EMOTION_HAPPY, servant:ANI_EMOTION_HAPPY];
+			case CHARA_ID_ARCHER:	return %[master:ANI_EMOTION_HAPPY, servant:ANI_EMOTION_ANGER];
+			case CHARA_ID_CASTER:	return %[master:ANI_EMOTION_HAPPY, servant:ANI_EMOTION_SILENCE];
+			case CHARA_ID_LANCER:	return %[master:ANI_EMOTION_HAPPY, servant:ANI_EMOTION_HAPPY];
+			case CHARA_ID_RIDER:	return %[master:ANI_EMOTION_HAPPY, servant:ANI_EMOTION_HAPPY];
+			}
+			break;
+		}
+		break;
+
+	case CHARA_ID_SAKURA:
+		switch( emoscene )
+		{
+		case EMOSCENE_SELECT:
+			switch( servant )
+			{
+			case CHARA_ID_SABER:	return %[master:ANI_EMOTION_SILENCE, servant:ANI_EMOTION_HAPPY];
+			case CHARA_ID_ARCHER:	return %[master:ANI_EMOTION_SWEAT, servant:ANI_EMOTION_SILENCE];
+			case CHARA_ID_CASTER:	return %[master:ANI_EMOTION_SWEAT, servant:ANI_EMOTION_SILENCE];
+			case CHARA_ID_LANCER:	return %[master:ANI_EMOTION_SWEAT, servant:ANI_EMOTION_SILENCE];
+			case CHARA_ID_RIDER:	return %[master:ANI_EMOTION_HAPPY, servant:ANI_EMOTION_HAPPY];
+			}
+			break;
+		case EMOSCENE_QUIZ_FAIL:
+			switch( servant )
+			{
+			case CHARA_ID_SABER:	return %[master:ANI_EMOTION_SWEAT, servant:ANI_EMOTION_SWEAT];
+			case CHARA_ID_ARCHER:	return %[master:ANI_EMOTION_SWEAT, servant:ANI_EMOTION_SWEAT];
+			case CHARA_ID_CASTER:	return %[master:ANI_EMOTION_SWEAT, servant:ANI_EMOTION_SILENCE];
+			case CHARA_ID_LANCER:	return %[master:ANI_EMOTION_SWEAT, servant:ANI_EMOTION_SWEAT];
+			case CHARA_ID_RIDER:	return %[master:ANI_EMOTION_SWEAT, servant:ANI_EMOTION_SWEAT];
+			}
+			break;
+		case EMOSCENE_QUIZ_SUCCESS:
+			switch( servant )
+			{
+			case CHARA_ID_SABER:	return %[master:ANI_EMOTION_HAPPY, servant:ANI_EMOTION_HAPPY];
+			case CHARA_ID_ARCHER:	return %[master:ANI_EMOTION_HAPPY, servant:ANI_EMOTION_HAPPY];
+			case CHARA_ID_CASTER:	return %[master:ANI_EMOTION_HAPPY, servant:ANI_EMOTION_SILENCE];
+			case CHARA_ID_LANCER:	return %[master:ANI_EMOTION_HAPPY, servant:ANI_EMOTION_HAPPY];
+			case CHARA_ID_RIDER:	return %[master:ANI_EMOTION_HAPPY, servant:ANI_EMOTION_HAPPY];
+			}
+			break;
+		}
+		break;
+
+	case CHARA_ID_RIN:
+		switch( emoscene )
+		{
+		case EMOSCENE_SELECT:
+			switch( servant )
+			{
+			case CHARA_ID_SABER:	return %[master:ANI_EMOTION_HAPPY, servant:ANI_EMOTION_HAPPY];
+			case CHARA_ID_ARCHER:	return %[master:ANI_EMOTION_HAPPY, servant:ANI_EMOTION_HAPPY];
+			case CHARA_ID_CASTER:	return %[master:ANI_EMOTION_ANGER, servant:ANI_EMOTION_ANGER];
+			case CHARA_ID_LANCER:	return %[master:ANI_EMOTION_SWEAT, servant:ANI_EMOTION_HAPPY];
+			case CHARA_ID_RIDER:	return %[master:ANI_EMOTION_HAPPY, servant:ANI_EMOTION_SILENCE];
+			}
+			break;
+		case EMOSCENE_QUIZ_FAIL:
+			switch( servant )
+			{
+			case CHARA_ID_SABER:	return %[master:ANI_EMOTION_SWEAT, servant:ANI_EMOTION_SWEAT];
+			case CHARA_ID_ARCHER:	return %[master:ANI_EMOTION_ANGER, servant:ANI_EMOTION_HAPPY];
+			case CHARA_ID_CASTER:	return %[master:ANI_EMOTION_ANGER, servant:ANI_EMOTION_HAPPY];
+			case CHARA_ID_LANCER:	return %[master:ANI_EMOTION_ANGER, servant:ANI_EMOTION_HAPPY];
+			case CHARA_ID_RIDER:	return %[master:ANI_EMOTION_SWEAT, servant:ANI_EMOTION_SWEAT];
+			}
+			break;
+		case EMOSCENE_QUIZ_SUCCESS:
+			switch( servant )
+			{
+			case CHARA_ID_SABER:	return %[master:ANI_EMOTION_HAPPY, servant:ANI_EMOTION_HAPPY];
+			case CHARA_ID_ARCHER:	return %[master:ANI_EMOTION_HAPPY, servant:ANI_EMOTION_HAPPY];
+			case CHARA_ID_CASTER:	return %[master:ANI_EMOTION_HAPPY, servant:ANI_EMOTION_SILENCE];
+			case CHARA_ID_LANCER:	return %[master:ANI_EMOTION_HAPPY, servant:ANI_EMOTION_HAPPY];
+			case CHARA_ID_RIDER:	return %[master:ANI_EMOTION_HAPPY, servant:ANI_EMOTION_HAPPY];
+			}
+			break;
+		}
+		break;
+	}
+	dm( "対応するエモーションの組み合わせが見つからない" );
+	return void;
+}
+
+
+
+
+class CIrNeko extends CIriyaObject
+{
+	function CIrNeko( _scene, _parent, _id )
+	{
+		super.CIriyaObject( ... );
+		priority = PRIORITY_PLAYER;
+		if( _id >= 0 )
+			animation = _id;
+		else
+		{
+			var randomtable = [
+				0,0,0,0,
+				1,1,1,1,
+				2,
+				3,
+				4,4,4,4,4,
+				5,5,5,5,5
+			];
+			animation = randomtable[ random32( randomtable.count ) ];
+		}
+	}
+	
+	function onAnimation()
+	{	
+		switch( animation )
+		{
+		case 0:
+			imageId = 0;
+			break;
+		case 1:
+			imageId = 1;
+			break;	
+		case 2:
+			imageId = 2;
+			break;	
+		case 3:
+			imageId = 3;
+			break;	
+		case 4:
+			imageId = 4+timing\4%2;
+			if( direction==MUKI_RIGHT )
+				x += 2;
+			else
+				x -= 2;
+			if( random32(60)==0 )
+				if( direction==MUKI_RIGHT )
+					direction = MUKI_LEFT;
+				else
+					direction = MUKI_RIGHT;
+			break;	
+		case 5:
+			imageId = 6+timing\4%2;
+			if( direction==MUKI_RIGHT )
+				x += 3;
+			else
+				x -= 3;
+			if( random32(60)==0 )
+				if( direction==MUKI_RIGHT )
+					direction = MUKI_LEFT;
+				else
+					direction = MUKI_RIGHT;
+			break;	
+		}
+	}
+	
+	function getImageFileInfo()
+	{
+		var info = %[];
+		info.filename = "ir_dojo_neko_%03d".sprintf(imageId);
+		info.mirror = (direction==MUKI_RIGHT);
+		info.centerX = 11;
+		info.centerY = 20;
+		info.adapt = true;
+		return info;
+	}
+}
+
+
+
+
+class CIrItemPrompt extends CIriyaObject
+{
+	var active;
+	var itemname;
+	var srcX, srcY;
+
+	function CIrItemPrompt( _scene, _parent )
+	{
+		super.CIriyaObject( ... );
+		priority = PRIORITY_INFO_OBJ;
+		origin = ORIGIN_WINDOWCENTER;
+		active = false;
+		animation = 0;
+		fadeOut(0);
+		allowAnimationWhileUsingHougu = true;
+		layer.font.height = 28;
+		layer.font.face = "ＭＳ ゴシック";
+	}
+	
+	var BorderWidth = 15;		// テキストと、枠の境界線との隙間
+	var ItemImageSize = 80;		// レアアイテムの表示サイズ（正方形）
+	var LineMargin = 10;		// 行と行の間
+	var LineHeight = 0;			// １行あたりの高さ（＝フォントの高さ＋行の隙間）
+	var TextLeft = 0;			// メッセージの左端座標
+	var hazure;					// ハズレアイテムかどうか
+	var text = [];				// 表示するメッセージ（文字列配列）
+	
+	function show( itemtype )
+	{
+		hazure = false;
+		animation = 1;
+		timing = 0;
+		active = true;
+		switch( itemtype )
+		{
+		case ITEM_スカ: 					hazure=true; srcX=0; srcY=0; text=["宝箱を開けた","…しかし紙切れが入っているだけだった"]; break;
+		case ITEM_レア_カリバーン:			srcX= 76; srcY=124; text=["コレクションアイテム", "　［カリバーン］をゲットした"]; break;
+		case ITEM_レア_凛のペンダント:		srcX=196; srcY=124; text=["コレクションアイテム", "　［凛のペンダント］をゲットした"]; break;
+		case ITEM_レア_偽臣の書:			srcX=316; srcY=124; text=["コレクションアイテム", "　［偽臣の書］をゲットした"]; break;
+		case ITEM_レア_天の杯:				srcX=436; srcY=124; text=["コレクションアイテム", "　［天の杯］をゲットした"]; break;
+		case ITEM_レア_ジャプニカ暗殺帖:	srcX=556; srcY=124; text=["コレクションアイテム", "　［ジャプニカ暗殺帖］をゲットした"]; break;
+
+		case ITEM_レア_セイバーのぬいぐるみ:srcX=136; srcY=224; text=["コレクションアイテム", "　［セイバーのぬいぐるみ］", "をゲットした"]; break;
+		case ITEM_レア_セイバーの茶碗:		srcX=256; srcY=224; text=["コレクションアイテム", "　［セイバーの茶碗］をゲットした"]; break;
+		case ITEM_レア_ライダーの眼鏡:		srcX=376; srcY=224; text=["コレクションアイテム", "　［ライダーの眼鏡］をゲットした"]; break;
+		case ITEM_レア_キャスターのコイン:	srcX=496; srcY=224; text=["コレクションアイテム", "　［キャスターのコイン］"]; break;
+		case ITEM_レア_キャスターの指輪:	srcX=616; srcY=224; text=["コレクションアイテム", "　［キャスターの指輪］"]; break;
+
+		case ITEM_レア_エクスカリバー:		srcX= 76; srcY=324;	text=["コレクションアイテム", "　［エクスカリバー］をゲットした"]; break;
+		case ITEM_レア_金ぴか耳飾り:		srcX=196; srcY=324; text=["コレクションアイテム", "　［金ぴか耳飾り］をゲットした"]; break;
+		case ITEM_レア_ランサーの釣竿:		srcX=316; srcY=324; text=["コレクションアイテム", "　［ランサーの釣竿］をゲットした"]; break;
+		case ITEM_レア_アーチャーのスリッパ:srcX=436; srcY=324; text=["コレクションアイテム", "　［アーチャーのスリッパ］", "をゲットした"]; break;
+		case ITEM_レア_アーチャーのお玉:	srcX=556; srcY=324; text=["コレクションアイテム", "　［アーチャーのお玉］をゲットした"]; break;
+
+		case ITEM_レア_タイガーストラップ:	srcX=136; srcY=424; text=["コレクションアイテム", "　［タイガーストラップ］をゲットした"]; break;
+		case ITEM_レア_メイド服:			srcX=256; srcY=424; text=["コレクションアイテム", "　［メイド服］をゲットした"]; break;
+		case ITEM_レア_掛け軸:				srcX=376; srcY=424; text=["コレクションアイテム", "　［掛け軸］をゲットした"]; break;
+		case ITEM_レア_おいしいネコ缶:		srcX=496; srcY=424; text=["コレクションアイテム", "　［ビーフ２０００］をゲットした"]; break;
+		case ITEM_レア_泰山のレンゲ:		srcX=616; srcY=424; text=["コレクションアイテム", "　［泰山のレンゲ］をゲットした"]; break;
+		default:
+			text = ["????"];
+			break;
+		}		
+		// メッセージ描画に必要な領域を得る
+		var textwidth=0;
+		var textheight=0;
+		var i;
+		for ( i=0; i<text.count; i++ )
+			textwidth = max( textwidth, layer.font.getTextWidth( text[i] ) );
+		LineHeight = layer.font.getTextHeight( "A" )+LineMargin;
+		TextLeft = BorderWidth+ItemImageSize+20;
+		layer.width = TextLeft+textwidth+BorderWidth;
+		layer.height = BorderWidth*2 + max( ItemImageSize, LineHeight*text.count );
+	}
+	
+	function onAnimation()
+	{
+		switch( animation )
+		{
+		case 0:
+			break;
+		case 1:
+			fadeIn(10);
+			animation = 2;
+			break;
+		case 2:
+			if ( scene.input.left==0 )
+			{
+				animation = 4;
+				break;
+			}
+			if ( fadeProcessing )
+				break;
+			animation = 3;
+			break;
+		case 3:
+			if ( scene.input.left==0 )
+			{
+				animation = 4;
+				break;
+			}
+			if ( timing < 60 )
+				break;
+			animation = 4;
+			break;
+		case 4:
+			fadeOut(10);
+			animation = 5;
+			break;
+		case 5:
+			if( fadeProcessing )
+				break;
+			animation = 6;
+			break;
+		case 6:
+			animation = 0;
+			active = false;
+			break;
+		}
+	}
+	
+	function onDraw()
+	{
+		var buf = images.get( getImageFileInfo() );
+		layer.fill(0xFF000000);
+		layer.copyRect( BorderWidth, (layer.height-ItemImageSize)\2, buf, srcX, srcY, ItemImageSize, ItemImageSize );
+		var i;
+		for ( i=0; i<text.count; i++ )
+			layer.drawText( TextLeft, BorderWidth+i*LineHeight, text[i], 0xFFFFFF, 255, true );
+		return true;
+	}
+
+	function getImageFileInfo()
+	{
+		var info = %[];
+		if( hazure )
+			info.filename = "ir_item_suka";
+		else
+			info.filename = "ir_collection01_00";
+		info.mirror = false;
+		info.centerX = layer.width\2;
+		info.centerY = layer.height\2-40;
+		info.adapt = false;
+		return info;
+	}
+}
+
+
+
+class CIrScoreEmotion extends CIriyaObject
+{
+	var DIGIT_W = 8;
+	var DIGIT_H = 16;
+	var score;
+	var keta;
+	var layerWidth = DIGIT_W*8;
+	
+	function CIrScoreEmotion( _scene, _parent, _score )
+	{
+		super.CIriyaObject( ... );
+		priority = PRIORITY_PLAYER_TOP;
+		score = _score;
+		keta = 1;
+		if( score>=10    ) keta++;
+		if( score>=100   ) keta++;
+		if( score>=1000  ) keta++;
+		if( score>=10000 ) keta++;
+		if( score>=100000) keta++;
+		animation = 0;
+		x = _parent.x;
+		y = _parent.y;
+		z = _parent.z+80;
+		speedZ = 3;
+		allowAnimationWhileUsingHougu = true;
+	}
+
+	function drawDigit( img, digit )
+	{
+		layer.copyRect( text_x, 0, img, DIGIT_W*digit, 0, DIGIT_W, DIGIT_H );
+		text_x += DIGIT_W;
+	}
+	
+	function onAnimation()
+	{
+		switch( animation )
+		{
+		case 0:
+			if( timing<10 )
+				break;
+			animation = 1;
+			break;
+
+		case 1:
+			fadeOut(10);
+			animation = 2;
+			break;
+			
+		case 2:
+			if( fadeProcessing )
+				break;
+			enabled = false;
+			break;
+		}	
+	}
+	
+	var text_x;
+	function onDraw()
+	{
+		var w = DIGIT_W*keta;
+		var img = images.get( getImageFileInfo() );
+		layer.setSize( layerWidth, 16 );
+		layer.fill( 0 );
+		text_x = (layerWidth-w)/2;
+		// digit
+		img = images.get( getImageFileInfo() );
+		if( score>=100000	) drawDigit( img, score\100000%10 );
+		if( score>=10000	) drawDigit( img, score\10000 %10 );
+		if( score>=1000		) drawDigit( img, score\1000  %10 );
+		if( score>=100		) drawDigit( img, score\100   %10 );
+		if( score>=10		) drawDigit( img, score\10    %10 );
+		if( score>=1		) drawDigit( img, score       %10 );
+		return true;
+	}
+		
+	function getImageFileInfo()
+	{
+		var info = %[];
+		
+		info.filename = "ir_score_font";
+		info.centerX = layerWidth/2;
+		info.centerY = 0;
+		info.mirror = false;
+		info.adapt = true;
+		return info;
+	}
+}
+
+
+class CIrScore extends CIriyaObject
+{
+	var score;
+	var printscore;
+	var tim;
+	
+	function CIrScore( _scene, _parent )
+	{
+		super.CIriyaObject( ... );
+		priority = PRIORITY_INFO_OBJ;
+		origin = ORIGIN_WINDOW;
+		x = 5;
+		y = 5;
+		score = 0;
+		printscore = 0;
+	}
+	
+	var SCORE_X = 0;
+	var SCORE_Y = 0;
+	var SCORE_W = 80;
+	var DIGIT_W = 32;
+	var DIGIT_H = 32;
+	var DIGIT_OFS = 96;
+	var DIGIT_MARGIN = -5;
+	var text_x;
+	
+	function drawDigit( img, digit )
+	{
+		layer.copyRect( text_x, SCORE_Y, img, DIGIT_OFS+DIGIT_W*digit, 0, DIGIT_W, DIGIT_H );
+		text_x += DIGIT_W+DIGIT_MARGIN;
+	}
+	
+	function drawScore( img )
+	{
+		layer.copyRect( text_x, SCORE_Y, img, 0, 0, SCORE_W, DIGIT_H );
+		text_x += SCORE_W;
+	}
+
+	function onDraw()
+	{
+		if( scene && scene._menuObj )
+			y = scene._menuObj.GetStageTimePosY();
+		tim++;
+		var d;
+		if( printscore<score )
+		{
+			d = (score-printscore)\5;
+			if( d<1 ) d=1;
+			printscore+=d;
+			if( printscore>score )
+				printscore=score;
+		}
+		if( printscore>score )
+		{
+			d = (score-printscore)\5;
+			if( d>-1 ) d=-1;
+			printscore+=d;
+			if( printscore<score )
+				printscore=score;
+		}
+		var i = printscore\15 % 2;
+		var w = SCORE_W+DIGIT_W*8;
+		var img = images.get( getImageFileInfo(false) );
+		layer.setSize( w, 32 );
+		layer.fill( 0 );
+		text_x = (layer.width-w)/2;
+		// "score"
+		drawScore( img );
+		// digit
+		img = images.get( getImageFileInfo(true) );
+		drawDigit( img, printscore\10000000%10 );
+		drawDigit( img, printscore\1000000 %10 );
+		drawDigit( img, printscore\100000%10 );
+		drawDigit( img, printscore\10000 %10 );
+		drawDigit( img, printscore\1000  %10 );
+		drawDigit( img, printscore\100   %10 );
+		drawDigit( img, printscore\10    %10 );
+		drawDigit( img, printscore       %10 );
+		return true;
+	}
+		
+	function getImageFileInfo( digit=false )
+	{
+		var info = %[];
+		
+		if ( digit )
+			info.filename = "ir_info_time";
+		else
+			info.filename = "ir_info_score";
+		info.centerX = 0;
+		info.centerY = 0;
+		info.mirror = false;
+		info.adapt = true;
+		return info;
+	}
+}
+
+
+
+class CIrScoreEx extends CIrScore
+{
+var		parWin,parLayer;
+	function CIrScoreEx( _scene, _pr_win, _pr_layer )
+	{
+		parWin   = _pr_win;
+		parLayer = _pr_layer;
+		super.CIrScore( void, void );
+
+		if (CheckValid(layer)  ==  true)
+			invalidate layer;
+		layer = new CSpriteLayer( parWin, parLayer );
+		__images = new CImageBuffer( parWin, parLayer );
+		__usingDefaultImageBuffer = false;
+	}
+	function finalize()
+	{
+		EasyObjectInvalidate( __images );
+		__images = void;
+		super.finalize();
+	}
+
+	function Print()
+	{
+		layer.visible = true;
+		return;
+	}
+	function SetBasePosition( _x, _y )
+	{
+//		layer.visible = true;
+		layer.left = _x;
+		layer.top  = _y;
+		return;
+	}
+	function SetPrintScore( _score )
+	{
+		printscore = score = _score;
+		return;
+	}
+	function SetPriority( _prio )
+	{
+		layer.setPriority( _prio );
+		return;
+	}
+}
+
+
+
+class CIrDemo extends CIriyaObject
+{
+	function CIrDemo( _scene, _parent )
+	{
+		super.CIriyaObject( ... );
+		priority = PRIORITY_SYSTEM_FADE;//PRIORITY_INFO_OBJ;
+		origin = ORIGIN_WINDOWCENTER;
+		x = 270;
+		y = 210;
+		animation = 1;
+		allowAnimationWhileUsingHougu = true;
+	}
+	
+	function onAnimation()
+	{
+		switch( animation )
+		{
+		case 0:
+			if( timing<20 )
+				break;
+			fadeOut(20);
+			animation = 1;
+			break;
+		case 1:
+			if ( fadeProcessing )
+				break;
+			fadeIn(20);
+			animation = 2;
+			break;
+		case 2:
+			if ( fadeProcessing )
+				break;
+			animation = 0;
+			break;
+		}
+	}
+	
+	function getImageFileInfo()
+	{
+		var info = %[];
+		info.filename = "ir_sys_demo";
+		info.centerX = 128;
+		info.centerY = 40;
+		info.mirror = false;
+		info.adapt = true;
+		return info;
+	}
+}
+
+
+
+
+
+
+
+class CIrCannonFire extends CIriyaObject
+{
+	function CIrCannonFire( _scene, _parent )
+	{
+		super.CIriyaObject( ... );
+		priority = PRIORITY_PLAYER;
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+
+	function onAnimation()
+	{
+		var w = 2;
+		var p = timing\w;
+		if ( p <=7 )
+			imageId = p;
+		else
+			enabled = false;
+	}
+
+	function getImageFileInfo()
+	{
+		var info = %[];
+		info.filename = "ir_eff_bom01%02d".sprintf(imageId);
+		info.mirror = false;
+		info.adapt = true;
+		info.centerX = 68;
+		info.centerY = 64;
+		return info;
+	}
+}
+
+

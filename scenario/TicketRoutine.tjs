@@ -1,0 +1,462 @@
+/*-----------------------------------------------------------------------------/
+/	Copyright (C) TYPE-MOON All Rights Reserved.
+/		チケットルーチン集
+/-----------------------------------------------------------------------------*/
+@if(__TICKETROUTINE__==0)
+@set(__TICKETROUTINE__=1)
+
+var CurrentTicketNo	= void;	//	現在のチケット番号
+var MaxTickets	= 3;		//	最大チケット枚数
+var TicketFileName	= "ticket";
+var CurrentTicketFile;		//	現在使用中のチケットファイル
+var MaxTicketBackup	= 14;	//	チケットファイルのバックアップ数(サイズなどとの兼ね合いから調整する)
+//var isUpdatedTicketData;	//	チケットデータが更新されたか？
+var lastTicketTick;			//	ゲーム開始時刻(このチケットで)
+var TicketThumbnailSize	= [ 128, 96 ];
+var normalBookMarkBase	= 320;	//	通常＋クイック分
+
+{
+	sf.playTime			= [] if sf.playTime === void;			//	プレイ時間
+	sf.lastPlayDatetime	= [] if sf.lastPlayDatetime === void;	//	最後にプレイした日時
+	sf.gameDate			= [] if sf.gameDate === void;			//	ゲーム中の日付
+	sf.gameTimezone		= [] if sf.gameTimezone === void;		//	ゲーム内の時間帯
+	sf.ticketComment	= [] if sf.ticketComment === void;		//	チケットのコメント
+//	sf.sceneCount		= [] if sf.sceneCount === void;			//	既読シーン数
+//	sf.anotherMap		= [] if sf.anotherMap === void;			//	裏マップを見れるか
+}
+
+//	チケットファイルの削除
+function deleteTicketFile(num)
+{
+	//	バックアップファイルも含めて削除
+	Plugins.link("util.dll");
+	DeleteFile(getTicketFileNameAtNum(num));
+	for(var i=.MaxTicketBackup; i>0; i--)
+		DeleteFile(getTicketFileNameAtNum(num, i));
+
+	//	通常のセーブデータも削除
+	kag.eraseBookMark(getTicketNo2BookMarkNo(num));
+	Plugins.unlink("util.dll");
+
+	//	システム変数から削除
+	.sf.playTime[num]			= 0;
+	.sf.lastPlayDatetime[num]	= void;
+	.sf.gameDate[num]			= void;
+	.sf.gameTimezone[num]		= void;
+	.sf.ticketComment[num]		= void;
+	.sf.lastPlayTicketNo		= void;
+
+	CurrentTicketNo	= void;
+}
+
+//	周回で使用するチケットごとの情報をリセットする
+function resetTicket(num = CurrentTicketNo)
+{
+	tf.gameDate	= void;
+}
+
+//	チケットファイル名の取得
+function getTicketFileNameAtNum(num = CurrentTicketNo, bno)
+{
+	if(bno != void)
+		return kag.saveDataLocation + "/backup/" + TicketFileName + num + "-" + "%02d".sprintf(bno) + ".bmp";
+	else
+		return kag.saveDataLocation + "/" + TicketFileName + num + ".bmp";
+}
+
+//	使用可能なチケットファイル名を取得
+function getUsefulTicketFileNameAtNum(num = CurrentTicketNo)
+{
+	var	fname	= getTicketFileNameAtNum(num);
+	if(Storages.isExistentStorage(fname))
+		return fname;
+
+	for(var i=1; i<=MaxTicketBackup; i++)
+	{
+		fname	= getTicketFileNameAtNum(num, i);
+		if(Storages.isExistentStorage(fname))
+			return fname;
+	}
+	return "";	//	存在しない
+}
+
+//	チケットに対応するしおりの番号
+function getTicketNo2BookMarkNo(num = CurrentTicketNo)
+{
+	return normalBookMarkBase * num;
+}
+
+//	チケットに対応するしおりを削除(ルート終了時)
+function eraseTicketBookMark(num = CurrentTicketNo)
+{
+	kag.eraseBookMark(getTicketNo2BookMarkNo(num));
+	return true;
+}
+
+//	チケットファイルの読み込み( =ゲームの開始)
+function loadTicketFile(num = CurrentTicketNo, temporary = false)
+{
+//	dm("load ticket file: "+num+"("+Scripts.getTraceString()+")");
+	var	tf;
+	var	fn	= getTicketFileNameAtNum(num);
+	var	tfn	= fn;
+	for(var i=0; i<MaxTicketBackup; i++)
+	{
+//		dm("load ticket: "+fn);
+		try
+		{
+			if(Storages.isExistentStorage(fn))
+			{
+				tf	= Scripts.evalStorage(fn, kag.saveDataMode+"o"+getTicketThumbnailFileSize());
+				break;	//	ファイルの読み込みに成功したら、抜けることができる
+			}
+		}
+		catch(e)
+		{
+			dm(@"\"${fn}\"を開けませんでした。(${e.message})");
+		}
+
+		//	一つ前のファイルを試す
+		fn	= getTicketFileNameAtNum(num, i+1);
+	}
+	//	このチケットでの初回
+	tf	= %[] if tf == void;
+	if(tf.playStartTime === void)
+	{
+		tf.playStartTime	= System.getTickCount();	//	このチケットでプレイを開始した時刻
+		//	遠坂神社は最初から見ることが可能
+		tf['開運遠坂神社']	= 0;
+		tf['開運遠坂神社_update']	= System.getTickCount();
+		tf.pocketMoney	= 500;	//	初期の所持金
+		for(var i=1; i<=5; i++)
+			tf["wp-スペシャル"+i]	= 1;	//	一部の壁紙は最初から見れる
+		tf["choicedAlter"]	= %[];
+		var	selected	= [
+			"街編・1日目-02-0",	//	学校へ行くのを「やめる」は最初から選択済み
+			"街・特別編-01-2",	//	特別編「他の約束を選ぶ」
+			"街・特別編-03-2",
+			"街・特別編-16-2",
+			"街・特別編-17-2",
+			"街・特別編-00-0",	//	特別編の各キャラクター
+			"街・特別編-00-1",
+			"街・特別編-00-2",
+			"街・特別編-00-3",
+			"街・特別編-00-4",	//	特別編「やめる」
+			"街・特別編-23-0",	//	特別編「一人で」「誰かと」
+			"街・特別編-23-1",
+		];
+		for(var i=0; i<selected.count && selected[i] != void; i++)
+			tf.choicedAlter["trail_"+selected[i]]	= 1;
+		var	passed	= [
+			"街・特別編-00",	//	街特別編の既読とするブロック
+			"街・特別編-01",
+			"街・特別編-03",
+			"街・特別編-16",
+			"街・特別編-17",
+			"街・特別編-23",
+			"街・特別編-24",
+		];
+		for(var i=0; i<passed.count && passed[i] != void; i++)
+			tf["trail_"+passed[i]]	= 1;
+	}
+
+	//	temporary == true : 一時的に読み込んだだけ
+	if(temporary)
+	{
+		return tf;
+	}
+	else
+	{
+		//	グローバルへ読み込む。また、その他処理などを実行
+		global.tf	= tf;
+		lastTicketTick	= System.getTickCount();
+		CurrentTicketNo	= num;
+		CurrentTicketFile	= tfn;
+	}
+}
+
+//	サムネール画像のファイルサイズ
+function getTicketThumbnailFileSize()
+{
+	return (((TicketThumbnailSize[0] * 3 + 3) >> 2) << 2) * TicketThumbnailSize[1] + 54;
+}
+
+//	現在の状況を記録したチケットファイルの作成
+function makeTicketFile(fname = CurrentTicketFile)
+{
+	dm("make ticket file: "+fname);
+	try
+	{
+		//	サムネールを作成
+		var tmp	= new Layer(kag, kag.primaryLayer);
+		tmp.setImageSize(TicketThumbnailSize[0], TicketThumbnailSize[1]);
+		var lastfile;
+		if(fname == CurrentTicketFile)
+			lastfile	= getTicketFileNameAtNum(, 1);
+		try
+		{
+			if(kag.snapshotLayer != void && kag.canStore())
+			{
+				//	スナップショットから作成
+				Plugins.link("resize.dll");
+				AreaAverageReducation(kag.snapshotLayer, tmp);
+				Plugins.unlink("resize.dll");
+			}
+			else if(lastfile != "" && Storages.isExistentStorage(lastfile))
+			{
+				//	現在の画像を読み込む
+				tmp.loadImages(lastfile);
+			}
+			else
+				throw new Exception("now printing.");
+		}
+		catch(e)
+		{
+			var text;
+			if(fname == CurrentTicketFile)
+				text	= "Now Printing.";
+			else
+				text	= "Exception occured.";
+			//	「Now Printing.」で作成
+			with(tmp)
+			{
+				.fillRect(0, 0, .imageWidth, .imageHeight, 0xFF000000);
+				.font.height	= 10;
+				var fw = .font.getTextWidth(text), fh = .font.getTextHeight(text);
+				.drawText((.imageWidth - fw)>>1, (.imageHeight - fh)>>1, text, 0xFFFF00);
+			}
+		}
+
+		//	サムネールを保存
+		tmp.saveLayerImage(fname, "bmp24");
+
+		//	現在のデータを保存
+		try
+		{
+			var mode = kag.saveDataMode;
+			mode += "o" + getTicketThumbnailFileSize(); // モード文字列に 書き込みオフセットを指定
+			(Dictionary.saveStruct incontextof tf)(fname, mode);	//	サムネールの分、オフセットを与える
+//			throw new Exception("例外発生");
+		}
+		catch(e)
+		{
+			//	このときの、tfキーリストを作成
+//			saveTicketFlagKeyList("failed");
+
+			//	データの保存に失敗したので、画像データだけのファイルは破棄する(破棄しないと、バックアップが利用できなくなるので)
+			Plugins.link("util.dll");
+			DeleteFile(fname);
+			Plugins.unlink("util.dll");
+			throw e;
+		}
+	}
+	catch(e)
+	{
+		dm("例外が発生したため、データを保存できませんでした。"+e.message);
+		return false;
+	}
+//	saveTicketFlagKeyList();
+	return true;
+}
+/*
+//	時間をファイル名にして、キーリストを保存する
+function saveTicketFlagKeyList(str)
+{
+	var	keys	= [], lines	= [];
+	var	tmp = [];
+	try
+	{
+		tmp.assign(tf);
+		keys.add(["tf", tmp]);
+		for(var i = 0; i<keys.count; i++)
+		{
+			var	name	= keys[i][0];
+			if(keys[i][1] != void)
+			{
+				tmp	= keys[i][1];
+				for(var i = 0; i<tmp.count; i += 2)
+				{
+					if(typeof tmp[i+1] == "Object")
+					{
+						if(tmp[i+1] instanceof "Array")
+							keys.add([name+"."+tmp[i], void, tmp[i+1]]);
+						else
+						{
+							var	values	= [];
+							values.assign(tmp[i+1]);
+							keys.add([name+"."+tmp[i], values]);
+						}
+					}
+					else
+						lines.add(name+"."+tmp[i]+" = "+tmp[i+1]);
+				}
+			}
+			else
+			{
+				tmp	= keys[i][2];
+				for(var i = 0; i<tmp.count; i++)
+				{
+					if(typeof tmp[i] == "Object")
+					{
+						if(tmp[i] instanceof "Array")
+							keys.add([name+"."+i, void, tmp[i]]);
+						else
+						{
+							var	values	= [];
+							values.assign(tmp[i]);
+							keys.add([name+"."+i, values]);
+						}
+					}
+					else
+						lines.add(name+"."+i+" = "+tmp[i]);
+				}
+			}
+		}
+	}
+	catch(e)
+	{
+		var	date;
+		with(new Date())
+			date	= .getTime();
+		lines.save("keylist-"+date+str+".txt");
+	}
+
+	var	date;
+	with(new Date())
+		date	= .getTime();
+	lines.save("keylist-"+date+str+".txt");
+}
+*/
+//	チケットファイルの保存
+function saveTicketFile()
+{
+	dm("save ticket file: "+.CurrentTicketNo);
+
+	//	システム変数へ保存する情報
+	Plugins.link("util.dll");
+	.sf.playTime[.CurrentTicketNo]	+= System.getTickCount() - lastTicketTick;	//	プレイ時間
+	lastTicketTick	= System.getTickCount();
+	with(new Date())
+		global.sf.lastPlayDatetime[global.CurrentTicketNo]	= [ .getYear(), .getMonth()+1, .getDate(), .getHours(), .getMinutes(), .getSeconds() ];
+	.sf.gameDate[CurrentTicketNo]	= .tf.gameDate;	//	ゲーム中での日にち
+	.sf.lastPlayTicketNo			= .CurrentTicketNo;
+
+	//	データがないか、更新されていなければ
+	if(.tf == void)
+		return;		//	保存する必要なし
+
+	try
+	{
+		//	バックアップディレクトリが存在しなければ作成する
+		var dir	= kag.saveDataLocation + "/backup/";
+		CreateDirectory(dir) if !ExistDirectory(dir);
+
+		//	古いファイルをバックアップ
+		var exist = Storages.isExistentStorage;
+		var nfunc = function(num)
+		{
+			return getTicketFileNameAtNum(, num);
+		};
+		if(exist(nfunc(.MaxTicketBackup)))
+			DeleteFile(nfunc(.MaxTicketBackup));	//	一番古いものを削除
+		for(var i=.MaxTicketBackup-1; i>0; i--)
+			MoveFile(nfunc(i), nfunc(i+1)) if exist(nfunc(i));	//	一つずつずらす
+		MoveFile(.CurrentTicketFile, nfunc(1));	//	現在のデータをバックアップへ
+	}
+	catch(e)
+	{
+		dm("チケットファイルのバックアップに失敗しました。");
+	}
+	Plugins.unlink("util.dll");
+
+	//	5回を限度にセーブができるか試す
+	var cnt	= 5;
+	for(; cnt > 0; cnt--)
+	{
+		if(makeTicketFile())
+			return true;
+	}
+	throw new Exception("状態の保存に失敗しました。\nチケットファイルが保存可能かどうか、確認してください。");
+	return false;
+}
+
+//	チケットデータ設定
+//	force = true で、設定時に保存する
+function setTicketValue(key, value, force=true)
+{
+	.tf[key]	= value;
+	isUpdatedTicketData	= true;
+	saveTicketFile() if force;
+}
+function addTicketValue(key, value, force=true)
+{
+	.tf[key]	+= value;
+	isUpdatedTicketData	= true;
+	saveTicketFile() if force;
+}
+
+//	状態の保存(ゲーム終了時や、タイトルメニューへ戻るときなど)
+function saveCurrentStatus()
+{
+	if(CurrentTicketNo === void)
+		return;
+
+	//	進行状態を保存する
+	dm("save current status: "+CurrentTicketNo+" / canstore = "+kag.canStore());
+	if(kag.canStore())
+		kag.saveBookMark(getTicketNo2BookMarkNo(CurrentTicketNo));
+
+	//	チケット情報を保存する
+	saveTicketFile();
+}
+
+//	チケットの有無
+function isExistentTicket(no)
+{
+	return getUsefulTicketFileNameAtNum(no) != "";	//	ファイル名が見つかるかどうか
+}
+
+//	チケットをコピーする
+function copyTicketFile(src, dest)
+{
+	//	コピー元が存在するか？
+	var	srcfile	= getUsefulTicketFileNameAtNum(src);
+	if(srcfile == "")
+		return "コピー元が存在しません。";
+
+	//	コピー先が空いているか？
+	if(isExistentTicket(dest))
+		return "コピー先が空ではありません。";
+	
+	//	コピー実行
+	deleteTicketFile(dest);		//	念のため、元からある(かもしれない)バックアップファイル等を削除
+	CopyFile(srcfile, getTicketFileNameAtNum(dest));	//	チケットファイル
+
+	//	セーブポイントのデータもコピー
+	srcfile	= kag.getBookMarkFileNameAtNum(getTicketNo2BookMarkNo(src));
+	dm("copy save point: "+srcfile);
+	if(Storages.isExistentStorage(srcfile))
+	{
+		var	destfile	= kag.getBookMarkFileNameAtNum(getTicketNo2BookMarkNo(dest));
+		dm("to "+destfile);
+		CopyFile(srcfile, destfile);
+	}
+
+	//	プレイ時間なども
+	with(global.sf)
+	{
+		.playTime[dest]			= .playTime[src];
+		.lastPlayDatetime[dest]	= .lastPlayDatetime[src];
+		.gameDate[dest]			= .gameDate[src];
+		.gameTimezone[dest]		= .gameTimezone[src];
+		.ticketComment[dest]	= .ticketComment[src];
+	}
+	
+
+	//	キャッシュされたファイルを破棄する
+	System.doCompact();
+
+	return "";	//	コピー終了
+}
+
+@endif

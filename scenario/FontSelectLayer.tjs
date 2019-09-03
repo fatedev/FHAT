@@ -1,0 +1,711 @@
+/*-----------------------------------------------------------------------------
+/	Copyright (C) TYPE-MOON All Rights Reserved.
+/		フォント選択レイヤー(ウィンドウの選択も)
+/----------------------------------------------------------------------------*/
+@if(__FONTSELECTLAYER_DEFINED__==0)
+@set(__FONTSELECTLAYER_DEFINED__=1)
+
+//	0: テキストウィンドウを選択しない / 1: テキストウィンドウを選択する / 2: テキストウィンドウの濃度を調整する
+@set(__SELECT_TEXTWINDOW__=2)
+
+Scripts.execStorage("ExButtonLayer.tjs");
+
+class FontSelectLayer extends FadeLayer
+{
+	var area	= %[
+		left:12,
+		top:45,
+		width:260,
+		height:296
+	];
+	var twarea	= %[
+		left:302,
+		top:45,
+		width:182,
+		height:296
+	];
+	var fontheight	= 27;
+	var spacing		= 3;
+	var bgcolor		= 0xFF1A2224;
+	var textcolor	= 0xFF000000;
+	var selectcolor	= 0xFF789FA4;
+	var oncolor		= 0xFFFF9CBF;
+	var othercolor	= 0x80000000;
+	var nonstandard	= "(凛"+($0x00DF)+")";
+
+	var buttons;
+	var buttondata	= [
+		[ 1, "bold",	"fnt_checkbtn",		"表示文字を太字にします。",			 23, 364 ],
+		[ 1, "rubybold","fnt_checkbtn",		"ルビ文字を太字にします。",			150, 364 ],
+@if(__SELECT_TEXTWINDOW__==1||__SELECT_TEXTWINDOW__==2)
+		[ 3, "ok",		"fnt_okbtn",		"フォントを変更します。",			297, 387 ],
+		[ 3, "cancel",	"fnt_cancelbtn",	"フォントの変更を取り消します。",	402, 387 ],
+@endif
+@if(__SELECT_TEXTWINDOW__==0)
+		[ 3, "ok",		"fnt_okbtn",		"フォントを変更します。",			 85, 387 ],
+		[ 3, "cancel",	"fnt_cancelbtn",	"フォントの変更を取り消します。",	190, 387 ],
+@endif
+	];
+	var scrimgs	= [
+		"",
+		"",
+		"",
+		"scroll_slidertop4fnt",
+		"scroll_slider4fnt",
+		"scroll_sliderbottom4fnt"
+	];
+	var scrimgs2	= [
+		"",
+		"",
+		"",
+		"scroll_slidertop4opac",
+		"scroll_slider4opac",
+		"scroll_sliderbottom4opac"
+	];
+
+	var	textwindowdatas	= [
+	//	ファイル名('tw_'なし)	条件フラグ(sf)
+		[ "default",	[] ],	//	そのときの状態に合わせる
+		[ "ノーマル",	[] ],
+		[ "チェック1",	[] ],
+		[ "チェック2",	[] ]
+	];
+	var	twexts	= %['.png'=>true, '.tlg'=>true, '.eri'=>true];	//	使える拡張子
+
+	var fonts;		//	フォント一覧
+	var fontlabels;	//	フォントリストの表示文字列
+	var textWindows;		//	ウィンドウ一覧
+	var textWindowConsist;	//	ウィンドウの由来(0: 登録/1: ユーザー)
+
+	var bold;
+	var rubybold;
+
+	var dl, dt, dw, dh;		//	ダイアログの座標、サイズ
+
+	var	fontlist;		//	リストレイヤー
+	var	windowlist;
+
+	var showed;
+@if(__SELECT_TEXTWINDOW__==2)
+	var	messageframe, messageline;
+	var	opacbar, opacvalue, opacnum;
+	var	currentOpacity;		//	仮のウィンドウ濃度
+@endif
+
+	function FontSelectLayer(win, par)
+	{
+		.fs	= this;
+		super.FadeLayer(...);
+		name	= "フォント選択";
+		setPos(0, 0);
+		setSize(win.scWidth, win.scHeight);
+		var layer;
+		with(layer = new global.Layer(win, this))
+		{
+@if(__SELECT_TEXTWINDOW__==2)
+			.loadImages("fnt_bg_with_opac");
+@endif
+@if(__SELECT_TEXTWINDOW__==1)
+			.loadImages("fnt_bg");
+@endif
+@if(__SELECT_TEXTWINDOW__==0)
+			.loadImages("fnt_bg_without_tw");
+@endif
+			dw	= .imageWidth;
+			dh	= .imageHeight;
+			dl = (width-dw)>>1;
+			dt = (height-dh)>>1;
+
+			//	周りを半透明に
+			var oddout = 5;
+			fillRect(0, 0, width, dt+oddout, othercolor);
+			fillRect(0, dt+oddout, dl+oddout, height-dt, othercolor);
+			fillRect(dl+dw-oddout, dt+oddout, width-(dl+dw), height-dt, othercolor);
+			fillRect(dl+oddout, dt+dh-oddout, dw-oddout, height-(dt+dh), othercolor);
+
+			//	ダイアログ背景を転送
+			operateRect(dl, dt, layer, 0, 0, dw, dh);
+		}
+		invalidate layer;
+		font.height	= fontheight;
+		area.left	+= dl;
+		area.top	+= dt;
+		twarea.left	+= dl;
+		twarea.top	+= dt;
+
+		//	使用可能なフォントの一覧を取得
+		Plugins.link("util.dll");
+		fonts	= [];
+		var start = System.getTickCount();
+		enumFont(win, fonts);
+		dm("フォント("+fonts.count+"ヶ)の列挙に "+(System.getTickCount()-start)+"msかかりました。");
+		fontlabels	= [];
+		for(var i=0; i<fonts.count; i++)
+			fontlabels[i]	= nonstandard+fonts[i];
+		Plugins.unlink("util.dll");
+
+		//	フォントリスト
+		fontlist	= new global.FontSelectListLayer(win, this, area.left, area.top,
+			area.width, area.height, 275+dl, 42+dt, 302, fontheight*1.5, fontlabels, fonts);
+		fontlist.hint	= "フォントを選択できます。\n括弧内の文字が表示できないフォントはゲームに支障の出る恐れがあります。";
+
+@if(__SELECT_TEXTWINDOW__==2)
+		//	現在のテキストウィンドウを模造
+		var	tw	= 205, th	= 265;
+		var	cur	= kag.fore.messages[0];
+		var	fg	= cur.frameGraphic;
+		var	mftop	= cur.top;
+		fg	= "tw_昼パート(通常)" if fg == "";
+		currentOpacity	= sf.messageFrameOpacity === void ? 255 : sf.messageFrameOpacity;
+		currentOpacity	= currentOpacity / 255 * 100;
+		with(messageframe = new global.Layer(win, this))
+		{
+			if(fg != "")
+			{
+				.loadImages(fg);
+				.imageWidth	= tw if .imageWidth > tw;
+				.imageHeight= th if .imageHeight > th;
+				.setSizeToImageSize();
+			}
+			else
+			{
+				.face = dfAuto;
+				.setImageSize(tw, th);
+				.setSizeToImageSize();
+				.fillRect(0, 0, tw, th, (cur.frameOpacity << 24) + cur.frameColor);
+			}
+			.opacity	= currentOpacity;
+			mftop	= th - .height - 8 if mftop > th - .height;
+			.setPos(dl+294, dt+43+mftop);
+			.hitThreshold	= 256;
+			.visible	= true;
+		}
+
+		//	現在の背景をコピー
+		var	lastface	= face;
+		face	= dfMain;
+		holdAlpha	= true;
+		copyRect(dl+294, dt+43, kag.fore.base, 0, 0, tw, th);
+		face	= lastface;
+
+		//	文字を書いておくレイヤー
+		var	history	= kag.historyLayer.data[kag.historyLayer.dataPos];
+		if(history == void || history.count < 1)
+		{
+			history	= [
+				"",
+				"",
+				"　　 ウィンドウ濃度",
+				"　　 変更のテスト用",
+				"　　 文字を表示して",
+			];
+		}
+		with(messageline = new global.Layer(win, this))
+		{
+			.setPos(messageframe.left, messageframe.top);
+			.setImageSize(messageframe.width, messageframe.height);
+			.setSizeToImageSize();
+			.fillRect(0, 0, .width, .height, 0x00000000);
+
+			with(cur)
+			{
+				var	font	= messageline.font;
+				font.face	= .defaultFace;
+				font.angle	= 0;
+				font.bold	= .defaultBold;
+				font.height	= .fontSize;
+
+				var	x, y;
+				if(.vertical)
+				{
+					x	= .imageWidth - .marginR - .lineSpacing;
+					y	= .marginT;
+				}
+				else
+				{
+					x	= .marginL;
+					y	= .marginT + .lineSpacing;
+				}
+
+				for(var i=0; i<history.count; i++)
+				{
+					if(.edge)
+						messageline.drawText(x, y, history[i], .chColor, 255, .antialiased, .edgeEmphasis, .edgeColor, .edgeExtent, 0, 0);
+					else if(.shadow)
+						messageline.drawText(x, y, history[i], .chColor, 255, .antialiased, 255, .shadowColor, 0, 2, 2);
+					else
+						messageline.drawText(x, y, history[i], .chColor, 255, .antialiased);
+
+					if(.vertical)
+						x	-= .lineSize + .lineSpacing;
+					else
+						y	+= .lineSize + .lineSpacing;
+				}
+			}
+			.hitThreshold	= 256;
+			.visible	= true;
+		}
+
+		//	濃度を変更させるスクロールバー
+		with(opacbar = new ScrollBarLayer(win, this, 206, 1, 1, false, scrimgs2, 14))
+		{
+			.setPos(dl + 294, dt + 330);
+			.total	= 110;
+			.hitType= htMask;
+			.hitThreshold	= 0;
+			.area	= 10;
+			.moving	= 1;
+			.target	= this;
+		}
+
+		//	濃度を数値表示
+		with(opacnum = new global.Layer(win, this))
+		{
+			.loadImages("fnt_opacnum");
+			.setSize(.imageWidth \ 10, .imageHeight);
+		}
+		with(opacvalue = new global.Layer(win, this))
+		{
+			.setSize(21, 11);
+			.setPos(dl + 386, dt + 314);
+			.numlayer	= opacnum;
+			.drawValue	= function(value)
+			{
+				//	数値を更新
+				fillRect(0, 0, width, height, 0x00000000);
+				var	rank	= 100;
+				var	l		= 0;
+				var	zero	= false;
+				while(rank > 0)
+				{
+					var	no	= int(value \ rank);
+					if(no > 0)
+						zero	= true;
+	dm(@"${rank}: ${no} (${zero})");
+					if(zero || rank == 1)
+						copyRect(l, 0, numlayer, numlayer.width * no, 0, numlayer.width, numlayer.height);
+					value	%= rank;
+					rank	\= 10;
+					l	+= numlayer.width;
+				}
+			} incontextof opacvalue;
+//			.drawValue(currentOpacity);
+			.opacity	= 255;
+			.visible	= true;
+		}
+		if(opacbar.current == currentOpacity)
+			opacvalue.drawValue(currentOpacity);	//	opacbar.current == currentOpacity のとき、onScrollが飛ばないので
+		else
+			opacbar.current	= currentOpacity;
+
+@endif
+@if(__SELECT_TEXTWINDOW__==1)
+		//	登録済みテキストウィンドウ
+		textWindows	= [];
+		textWindowConsist	= [];
+		var twds = textwindowdatas, twd;
+		for(var i=0; i<twds.count; i++)
+		{
+			var fns = twds[i][1];
+			var flag = true;
+			for(var j=0; j<fns.count; j++)
+				flag &= (sf[fns[j]]!=0);
+			if(flag)
+			{
+				textWindows.add(twds[i][0]);
+				textWindowConsist.add(0);
+			}
+		}
+
+		//	ユーザー定義の選択可能なテキストウィンドウの一覧を取得
+		Plugins.link("dirlist.dll");
+		var	files	= getDirList(System.exePath);
+		for(var j=0; j<files.count; j++)
+		{
+			var file	= files[j];
+			//	"tw_"で始まり、twextsに含まれる拡張子を持つファイルがテキストウィンドウとなる。
+			if(file.substr(0, 3) == "tw_" && twexts[Storages.extractStorageExt(file)])
+			{
+				textWindows.add(Storages.chopStorageExt(file.substr(3)));
+				textWindowConsist.add(1);
+			}
+		}
+		Plugins.unlink("dirlist.dll");
+
+		windowlist	= new global.FontSelectListLayer(win, this, twarea.left, twarea.top,
+			twarea.width, twarea.height, 487+dl, 42+dt, 302, fontheight*1.5, textWindows);
+		windowlist.hint	= "ゲーム中で使用するメッセージウィンドウを選択できます。\n文字の見やすさ、画像の見やすさなどで選んでください。";
+@endif
+		//	ボタン類
+		buttons	= createButtons(win, this, buttondata);
+		var btn = buttons;
+		while(btn!=void)
+		{
+			btn.left	+= dl;
+			btn.top		+= dt;
+			btn	= btn.bros;
+		}
+
+		//	初期値を設定
+		var setting	= parent.getFontSetting();
+		buttons.get("bold").on() if(bold = font.bold = setting.bold);
+		buttons.get("rubybold").on() if(rubybold = setting.rubybold);
+		var i	= 0;
+		if(setting.fontface!==void)
+		{
+			for(i=fonts.count-1; i>=0; i--)
+			{
+				if(fonts[i] == setting.fontface)
+					break;
+			}
+		}
+		with(fontlist)
+			.encaseItem(.current = .lastonitem = i);
+
+@if(__SELECT_TEXTWINDOW__==1)
+		var	textwindow	= Storages.chopStorageExt(parent.getTextWindowSetting());
+		textwindow	= Storages.extractStorageName(textwindow);	//	ユーザー定義はパスで入ってる
+		textwindow	= textwindow.substr(3);	//	'tw_'を抜く
+		for(i=textWindows.count-1; i>=0; i--)
+		{
+			if(textWindows[i] == textwindow)
+				break;
+		}
+		with(windowlist)
+			.encaseItem(.current = .lastonitem = i);
+@endif
+
+		focusable	= false;
+	}
+
+	function finalize()
+	{
+@if(__SELECT_TEXTWINDOW__==2)
+		release(messageframe);
+		release(messageline);
+		release(opacvalue);
+		release(opacnum);
+@endif
+		release(fontlist);
+		release(buttons);
+		super.finalize(...);
+	}
+
+	function show()
+	{
+		if(!showed)
+		{
+			showed	= true;
+			super.show(...);
+			opacity	= 1;
+			setMode();
+			focus();
+		}
+	}
+
+	function hide(time, accel)
+	{
+		if(showed)
+		{
+			showed	= false;
+			removeMode();
+			focusable	= false;
+
+			//	フォント変更ボタンにフォーカスをあわせる
+			var it = parent.items;
+			var i=0;
+			while(it[i].id!="changeFont" && i<it.count)	i++;
+			it[i].focus() if i<it.count;
+
+			super.hide(time, accel, onClosed);
+		}
+	}
+
+	function onMouseDown(x, y, button, shift)
+	{
+		if(button==mbRight)
+		{
+			hide();	//	キャンセル
+		}
+	}
+
+	function onButtonDown(btn)
+	{
+		switch(btn.id)
+		{
+		case "ok":
+			parent.setFontSetting(fonts[fontlist.current], bold, rubybold);	//	フォントを設定
+
+@if(__SELECT_TEXTWINDOW__==2)
+			//	ウィンドウ濃度を設定
+			sf.messageFrameOpacity	= messageframe.opacity;
+@endif
+@if(__SELECT_TEXTWINDOW__==1)
+			//	テキストウィンドウを設定
+			var	path	= "tw_"+textWindows[windowlist.current];
+			if(textWindows[windowlist.current] == "default")
+				path	= "tw_夜パート(通常)";
+
+			//	ユーザー定義ならパス追加
+			path	= System.exePath+path if textWindowConsist[windowlist.current];
+			parent.setTextWindowSetting(path);	//	テキストウィンドウを設定
+@endif
+		case "cancel":
+			hide();
+			break;
+
+		case "bold":
+			bold	= true;
+			fontlist.draw();
+			break;
+		case "rubybold":
+			rubybold= true;
+			break;
+		}
+	}
+
+	function onButtonUp(btn)
+	{
+		switch(btn.id)
+		{
+		case "bold":
+			bold	= false;
+			fontlist.draw();
+			break;
+		case "rubybold":
+			rubybold= false;
+			break;
+		}
+	}
+
+	function onClosed()
+	{
+		invalidate this;
+	}
+
+@if(__SELECT_TEXTWINDOW__==2)
+	function onScroll()
+	{
+		currentOpacity	= opacbar.current;
+		opacvalue.drawValue(currentOpacity);
+		messageframe.opacity	= int(currentOpacity * 2.55 + 0.5);
+//		dm("messageframe.opacity = "+messageframe.opacity);
+	}
+@endif
+}
+
+Scripts.execStorage("ScrollBarLayer.tjs");
+class FontSelectListLayer extends Layer
+{
+	var	items;	//	表示する文字列の配列
+	var	fonts;	//	itemsに一対一に対応したフォント名の配列か、ただのフォント名
+
+	var _current;	//	選択している文字列の番号
+	var _onitem;	//	マウスが乗っている文字列の番号
+	var lastonitem;
+
+	var	bar;	//	スクロールバー
+
+	function FontSelectListLayer(win, par, l, t, w, h, sl, st, sh, mv, items, fonts="MS UI Gothic")
+	{
+		super.Layer(win, par);
+		setSize(w, h);
+		setPos(l, t);
+		fillRect(0, 0, w, h, par.bgcolor);
+		visible		= true;
+		font.height	= par.fontheight;
+
+		this.items	= items;
+		this.fonts	= fonts;
+
+		with(bar = new ScrollBarLayer(win, par, sh, 2, 3,, par.scrimgs, 14))
+		{
+			.setPos(sl, st);
+			.total	= items.count * (par.fontheight+par.spacing) + par.spacing * 2;
+			.hitType	= htMask;
+			.hitThreshold	= 0;
+			.area	= sh;
+			.moving	= mv;
+			.target	= this;
+		}
+		focusable	= true;
+	}
+
+	function finalize()
+	{
+		release(bar);
+		super.finalize(...);
+	}
+
+	function draw()
+	{
+		var par	= parent;
+		var	spc	= par.spacing, fh = par.fontheight;
+		var	l	= 0;
+		var	t	= -bar.current+spc;
+		var	msg	= window.current;
+		var	tc	= par.textcolor;
+
+		//	リスト描画
+		fillRect(0, 0, width, height, par.bgcolor);
+		font.bold	= par.bold;
+		for(var i=0; i<items.count; i++)
+		{
+			if(t>-fh)
+			{
+				//	選択中の項目であれば
+				if(i == current)
+					fillRect(l, t, width, fh, par.selectcolor);
+
+				//	マウスが乗っかっている項目であれば
+				if(i === onitem)
+				{
+					var onc = par.oncolor;
+					fillRect(l, t, width, 1, onc);
+					fillRect(l, t+1, 1, fh-1, onc);
+					fillRect(l+1, t+fh-1, width-1, 1, onc);
+					fillRect(l+width-1, t+1, 1, fh-2, onc);
+				}
+
+				font.face	= typeof fonts == "Object" ? fonts[i] : fonts;
+				with(msg)
+				{
+					if(.edge)
+						drawText(l+spc, t, items[i], tc, 255, .antialiased,
+							.edgeEmphasis, .edgeColor, .edgeExtent, 0, 0);
+					else if(.shadow)
+						drawText(l+spc, t, items[i], tc, 255, .antialiased,
+							255, .shadowColor, 0, 2, 2);
+					else
+						drawText(l+spc, t, items[i], tc, 255, .antialiased);
+				}
+			}
+			t	+= fh + spc;
+			if(t>=height)
+				break;
+		}
+	}
+
+	function onMouseEnter()
+	{
+		focus();
+	}
+
+	function onFocus()
+	{
+		onitem	= lastonitem if lastonitem!==void;
+	}
+
+	function onBlur()
+	{
+		lastonitem	= onitem;
+		onitem	= void;
+	}
+
+	function onMouseMove(x, y)
+	{
+		y	+= bar.current;
+		with(parent)
+			y	\= .fontheight + .spacing;
+		onitem	= y;
+	}
+
+	function onMouseDown(x, y, button, shift)
+	{
+		if(button == mbLeft)
+		{
+			if(onitem>=0 && onitem<items.count)
+				current	= onitem;
+		}
+		else
+			parent.onMouseDown(...);
+	}
+
+	function onMouseWheel()
+	{
+		dm("on mouse wheel");
+		bar.onMouseWheel(...);
+	}
+
+	function onScroll()
+	{
+		draw();
+	}
+
+	function onKeyDown(key, shift)
+	{
+		switch(key)
+		{
+		case VK_UP:
+			onitem--;
+			encaseItem(onitem);
+			return;
+		case VK_DOWN:
+			onitem++;
+			encaseItem(onitem);
+			return;
+		case VK_RETURN:
+		case VK_SPACE:
+			current	= onitem;
+			return;
+		case VK_ESCAPE:
+		case VK_HOME:
+		case VK_BACK:
+		case VK_DELETE:
+			parent.onMouseDown(0, 0, mbRight);
+			return;
+		}
+		super.onKeyDown(key, shift, true);
+	}
+
+	//	指定アイテムがリスト内に入るようスクロールバーを移動させる
+	function encaseItem(no)
+	{
+		var fh = font.height, spc = parent.spacing;
+		var	t = no * (fh + spc) - bar.current + spc;
+
+		if(t<0)
+			bar.current	+= t;
+		else if(t+fh+spc>height)
+			bar.current	-= height - (t+fh+spc);
+		draw();
+	}
+
+	property current
+	{
+		setter(c)
+		{
+			if(c !== _current)
+			{
+				if(c<0 || c>=items.count)	return;
+				_current	= c;
+				draw();
+			}
+		}
+		getter	{ return _current; }
+	}
+
+	property onitem
+	{
+		setter(c)
+		{
+			if(c !== _onitem)
+			{
+				if(c<0 || c>=items.count)	return;
+				_onitem	= c;
+				draw();
+			}
+		}
+		getter	{ return _onitem; }
+	}
+
+	property currentItem
+	{
+		getter	{ return items[current]; }
+	}
+}
+
+/*----------------------------------------------------------------------------/
+/	
+/----------------------------------------------------------------------------*/
+@endif

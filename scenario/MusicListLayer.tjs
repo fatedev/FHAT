@@ -1,0 +1,298 @@
+/*-----------------------------------------------------------------------------
+/	Copyright (C) TYPE-MOON All Rights Reserved.
+/		サウンドテストで使用する音楽一覧
+/----------------------------------------------------------------------------*/
+@if(__MUSICLISTLAYER_DEFINED__==0)
+@set(__MUSICLISTLAYER_DEFINED__=1)
+
+Scripts.execStorage("SimpleScrollBarLayer.tjs");
+
+class MusicListLayer extends FadeLayer
+{
+	var _current;	//	現在指している項目
+	var _files;
+
+	var _entered;	//	マウスの乗っかっている項目
+
+	var bar;
+
+	var textcolor	= [ rgb(160,160,160), 0xFFFFFF ];
+	var bgcolor		= [ rgba(139,44,115,0), rgba(197,73,168,128) ];	//	非選択状態, 選択状態
+	var septcolor	= rgba(177,52,125,128);					//	分割線
+	var shadowcolor	= [ rgba(193,25,76,255), rgba(238,123,156,255) ];		//	(文字の影)非選択状態, 選択状態
+
+	var lineHeight	= 26;
+	var lineSpacing	= 3;
+
+	var fontHeight	= [ 21, 9 ];
+	var	fontFace	= "ＭＳ Ｐ明朝";
+
+	var onclick, onenter;
+
+	function MusicListLayer(win, par, files, l, t, w, h, bl)
+	{
+		super.FadeLayer(win, par);
+		name	= "音楽リストレイヤー";
+		_current	= _entered	= -1;
+
+		setSize(w, h);
+		setPos(l, t);
+		focusable	= true;
+
+		with(bar = new global.SimpleScrollBarLayer(win, par, 14, h-1))
+		{
+			.setPos(bl, t);
+			.hitType	= htMask;
+			.hitThreshold	=0;
+			.target		= this;
+
+			this.files	= files;
+			.area	= h;
+			.current	= 0;
+			.moving	= 72;
+			draw();
+
+			.visible	= visible	= true;
+		}
+		hitThreshold= 0;
+		opacity		= 255;
+	}
+
+	function finalize()
+	{
+		release(bar);
+		super.finalize(...);
+	}
+
+	function draw()
+	{
+		var count	= files.count;
+		var ls = lineSpacing;
+		for(var i=0; i<count; i++)
+			drawLine(i);
+		var t	= count*(ls+lineHeight) - bar.current;
+		fillRect(0, t, width, ls, septcolor);
+		fillRect(0, t + ls, width, height - ls, bgcolor[0]);
+	}
+
+	function drawLine(no=0)
+	{
+		var sel = no==current;
+		var w = width, h = height;
+		var ls = lineSpacing, lh = lineHeight;
+		var t = no*(ls+lh) - bar.current;
+		var fh = fontHeight;
+		var tc = textcolor, shadow = shadowcolor;
+//		dm(@"draw: ${no}, ${fs}");
+
+		font.face	= fontFace;
+		if(t>-ls && t<h)
+		{
+			fillRect(0, t, w, ls, septcolor);
+		}
+		t += ls;
+		if(t>-lh && t<h)
+		{
+			fillRect(0, t, w, lh, bgcolor[no==entered && focused]);
+
+			if(files[no] != void)
+			{
+				var fs = files[no];
+				font.height	= fh[0];
+				var st;
+				if((st = fs[1].indexOf("("))>0)
+				{
+					//	()の間のみ小さいフォントで描画
+					var str = fs[1].substr(0, st);
+					drawText(3, t+1, str, tc[sel],,, 1024, shadow[sel], 1);
+					var w = font.getTextWidth(str);
+					var h = font.getTextHeight(str);
+					str = fs[1].substr(st);
+					font.height	= fh[0] * 3/4;
+					h	= (h - font.getTextHeight(str));
+					drawText(3+w, t+h, str, tc[sel],,, 1024, shadow[sel], 1);
+				}
+				else
+				{
+					//	一定のサイズでフォント描画
+					drawText(3, t+1, fs[1], tc[sel],,, 1024, shadow[sel], 1);
+				}
+
+				if(fs[2]!="")
+				{
+					font.height	= fh[1];
+					drawText(16, t+fh[0]+3, fs[2], tc[sel],,, 1024, shadow[sel], 1);
+				}
+			}
+		}
+	}
+
+	function adjustBarPosition(no)
+	{
+//		dm("adjust");
+		var ls=lineSpacing, lh=lineHeight;
+		var t = no*(ls+lh)+ls;
+		if(t<bar.current)
+			bar.current	= t;
+		else if(t>=bar.current+height-lh)
+			bar.current	= t - (height-lh);
+	}
+
+	function enter(no)
+	{
+		if(no >= 0 && no < files.count)
+		{
+			current = entered = no;
+			onenter(current) if onenter!=void;
+		}
+	}
+
+	function onFocus()
+	{
+		drawLine(entered);
+	}
+
+	function onBlur()
+	{
+		drawLine(entered);
+	}
+
+	function onMouseEnter()
+	{
+		super.onMouseEnter(...);
+//		window.focusedLayer	= parent;
+		focus();
+	}
+
+	function onMouseDown(x, y, button, shift)
+	{
+		if(button==mbLeft)
+		{
+			if(current == entered)
+				onclick(current) if onclick!=void;
+			else
+				enter(entered);
+		}
+		else if(button==mbRight)
+			parent.onMouseDown(...);
+	}
+
+	function onMouseUp(x, y, button, shift)
+	{
+		if(button==mbRight)
+			parent.onMouseUp(...);
+	}
+
+	function onMouseMove(x, y)
+	{
+		var t	= y + bar.current - lineSpacing;
+		var pos	= t \ (lineSpacing + lineHeight);
+//		dm("pos: "+pos+" ("+x+", "+y+")");
+		if(pos < 0)
+			pos	= 0;
+		else if(pos >= files.count)
+			pos	= files.count - 1;
+		entered	= pos;
+//		dm("entered: "+entered+"("+files.count+")");
+	}
+
+	function onMouseWheel()
+	{
+		bar.onMouseWheel(...);
+	}
+
+	function onKeyDown(key, shift)
+	{
+		switch(key)
+		{
+		case VK_UP:
+			entered--;
+			return;
+		case VK_DOWN:
+			entered++;
+			return;
+		case VK_RETURN:
+		case VK_SPACE:
+			if(current == entered)
+				onclick(current) if(onclick != void);
+			else
+				enter(entered);
+			return;
+		case VK_BACK:
+		case VK_DELETE:
+		case VK_HOME:
+			parent.closeThis();
+			return;
+		}
+		super.onKeyDown(key, shift, true);
+	}
+
+	function onJoyStick(trig)
+	{
+		if(trig & jsUp)				onKeyDown(VK_UP);
+		else if(trig & jsDown)		onKeyDown(VK_DOWN);
+		else if(trig & jsTrigger1)	onKeyDown(VK_RETURN);
+		else
+			super.onJoyStick(trig, true);
+	}
+
+	function onScroll(cur)
+	{
+		draw();
+	}
+
+	property current
+	{
+		setter(c)
+		{
+			if(c!==current)
+			{
+				var lc = current;
+				_current	= c;
+				drawLine(lc);
+				drawLine(c);
+				adjustBarPosition(c);
+			}
+		}
+		getter	{ return _current; }
+	}
+
+	property entered
+	{
+		setter(e)
+		{
+			if(e!==entered)
+			{
+				var le = entered;
+				if(e<0)
+					e	= files.count - 1;
+				else if(e>=files.count)
+					e	= 0;
+				_entered	= e;
+				drawLine(le);
+				drawLine(e);
+				adjustBarPosition(e);
+			}
+		}
+		getter	{ return _entered; }
+	}
+
+	property files
+	{
+		setter(f)
+		{
+			dm("change files: "+_files+" to "+f);
+			_files	= f;
+			bar.total	= f.count * (lineHeight + lineSpacing) + lineSpacing;
+			bar.area	= height;
+			bar.current	= 0;
+			current		= -1;
+		}
+		getter	{ return _files; }
+	}
+}
+
+/*----------------------------------------------------------------------------/
+/	
+/----------------------------------------------------------------------------*/
+@endif

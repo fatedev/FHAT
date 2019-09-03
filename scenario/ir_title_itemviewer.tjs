@@ -1,0 +1,866 @@
+
+
+class CIriyaItemViewCursor
+{
+var		parWin,parLayer;
+
+	function CIriyaItemViewCursor( _pr_win, _pr_layer )
+	{
+		parWin   = _pr_win;
+		parLayer = _pr_layer;
+
+		init_buffer();
+	}
+	function finalize()
+	{
+		Release();
+	}
+
+	var		MAX_CURSOR_PAGE		=3;
+	var		CURSOR_ANIME_CYCLE	=3;
+	var		CURSOR_SIZE_W		=80;
+	var		CURSOR_SIZE_H		=80;
+
+
+	var		cursor;
+	var		anime_flag;
+	var		_anime_time;
+	var		anime_page;
+
+	function init_buffer()
+	{
+		anime_flag = false;
+		_anime_time = 0;
+		anime_page  = 0;
+
+		cursor = void;
+		return;
+	}
+	function Release()
+	{
+		if (CheckValid(cursor)  ==  true) {
+			EasyReleaseLayer( cursor );
+			cursor = void;
+		}
+		return;
+	}
+
+
+
+	function Init( _prn_layer_offset )
+	{
+
+		cursor = EasyCreateLayerObject( parWin,parLayer, "ir_item_view_cursor", clNone, false, 0,0, 0 );
+		cursor.setPriority( _prn_layer_offset );
+		cursor.setUV( 0,0 );
+		cursor.setSize( CURSOR_SIZE_W,CURSOR_SIZE_H );
+		return;
+	}
+
+
+	function assign_page_cg_data()
+	{
+		cursor.setUV( anime_page*CURSOR_SIZE_W,0 );
+		return;
+	}
+
+
+	function Print( _px, _py )
+	{
+		assign_page_cg_data();
+		cursor.setPos( _px-CURSOR_SIZE_W/2,_py-CURSOR_SIZE_H/2 );
+		cursor.visible = true;
+		return;
+	}
+	function Close()
+	{
+		cursor.visible = false;
+		return;
+	}
+
+
+	function Update()
+	{
+		_anime_time += 1;
+		if (_anime_time  <  CURSOR_ANIME_CYCLE)
+			return;
+		_anime_time = 0;
+		anime_page = (anime_page + 1) % MAX_CURSOR_PAGE;
+		assign_page_cg_data();
+		return;
+	}
+
+}
+
+
+
+var		MAX_IRIYA_ITEM_PAGE_W			=5;		// ページ内アイテム最大幅
+var		MAX_IRIYA_ITEM_PAGE_H			=4;		// ページ内アイテム最大高さ
+
+// アイテムビューアー
+class CIriyaItemViewer
+{
+var		parWin,parLayer;
+
+	function CIriyaItemViewer( _pr_win, _pr_layer )
+	{
+		parWin   = _pr_win;
+		parLayer = _pr_layer;
+
+		init_buffer();
+	}
+	function finalize()
+	{
+		Release();
+	}
+
+
+	var		DEF_FADE_TIME		= FRAME_PER_SEC;
+
+
+	var		MAX_IRIYA_ITEM_PAGE			=1;		// 最大アイテムページ数
+	var		MAX_IRIYA_ITEM_PAGE_IN_NUM	=MAX_IRIYA_ITEM_PAGE_W*MAX_IRIYA_ITEM_PAGE_H;	// ページ内アイテム最大数
+	var		ItemList =
+	[
+		[
+			ITEM_レア_カリバーン,
+			ITEM_レア_凛のペンダント,
+			ITEM_レア_偽臣の書,
+			ITEM_レア_天の杯,
+			ITEM_レア_ジャプニカ暗殺帖,
+
+			ITEM_レア_セイバーのぬいぐるみ,
+			ITEM_レア_セイバーの茶碗,
+			ITEM_レア_ライダーの眼鏡,
+			ITEM_レア_キャスターのコイン,
+			ITEM_レア_キャスターの指輪,
+
+			ITEM_レア_エクスカリバー,
+			ITEM_レア_金ぴか耳飾り,
+			ITEM_レア_ランサーの釣竿,
+			ITEM_レア_アーチャーのスリッパ,
+			ITEM_レア_アーチャーのお玉,
+
+			ITEM_レア_タイガーストラップ,
+			ITEM_レア_メイド服,
+			ITEM_レア_掛け軸,
+			ITEM_レア_おいしいネコ缶,
+			ITEM_レア_泰山のレンゲ,
+		],
+
+	];
+
+	var		ItemTextKey=
+	[
+		[
+			"ITEM_レア_カリバーン:",
+			"ITEM_レア_凛のペンダント:",
+			"ITEM_レア_偽臣の書:",
+			"ITEM_レア_天の杯:",
+			"ITEM_レア_ジャプニカ暗殺帖:",
+
+			"ITEM_レア_セイバーのぬいぐるみ:",
+			"ITEM_レア_セイバーの茶碗:",
+			"ITEM_レア_ライダーの眼鏡:",
+			"ITEM_レア_キャスターのコイン:",
+			"ITEM_レア_キャスターの指輪:",
+
+			"ITEM_レア_エクスカリバー:",
+			"ITEM_レア_金ぴか耳飾り:",
+			"ITEM_レア_ランサーの釣竿:",
+			"ITEM_レア_アーチャーのスリッパ:",
+			"ITEM_レア_アーチャーのお玉:",
+
+			"ITEM_レア_タイガーストラップ:",
+			"ITEM_レア_メイド服:",
+			"ITEM_レア_掛け軸:",
+			"ITEM_レア_ビーフ２０００:",
+			"ITEM_レア_泰山のレンゲ:",
+		],
+	];
+
+
+
+	// NoDataの表示情報
+	var		PRN_ITEM_BASE_PX		= 76;
+	var		PRN_ITEM_BASE_PY		= 124;
+	var		PRN_ITEM_STEP_W			= 120;
+	var		PRN_ITEM_STEP_H			= 100;
+	var		PRN_ITEM_BASE_SHIFT_W	= 60;
+
+
+	var		PRN_MESSAGE_WIN_PX		= 0;
+	var		PRN_MESSAGE_WIN_PY		= 388;
+
+	var		MESSAGE_WINDOW_SIZE_W	= 800;
+	var		MESSAGE_WINDOW_SIZE_H	= 128;
+	var		MESSAGE_WINDOW_COLOR	= RGBA_MAKE(0,0,0,0);
+
+	var		PRN_MENU_BUTTON_PX		= 612;
+	var		PRN_MENU_BUTTON_PY		= 532;
+
+	var		PRN_PAGE_D_BUTTON_PX	= 256;
+	var		PRN_PAGE_D_BUTTON_PY	= 532;
+	var		PRN_PAGE_U_BUTTON_PX	= 428;
+	var		PRN_PAGE_U_BUTTON_PY	= 532;
+
+
+	var		LAYER_MESSAGE_WIN	= -800;
+	var		LAYER_MESSAGE_WIN_BACK = -801;
+	var		LAYER_MENU_BUTTON	= -900;
+	var		LAYER_CURSOR		= -950;
+	var		LAYER_LOCAL_BACK	=-1000;
+	var		LAYER_LOCAL_BACKb	=-1001;
+
+
+
+
+	var		mode;
+	 		 var	MODE_INIT			= 0;
+	 		 var	MODE_FADE_IN		= 10;
+	 		 var	MODE_FADE_OUT		= 11;
+	 		 var	MODE_SELECT			= 20;
+	 		 var	MODE_MESSAGE_IN		= 30;
+	 		 var	MODE_MESSAGE_PRN	= 31;
+	 		 var	MODE_MESSAGE_OUT	= 32;
+	 		 var	MODE_PAGE_CHANGE	= 40;
+	 		 var	MODE_END			= 100;
+
+
+	var		prn_layer_offset;
+
+	var		prn_base;
+
+	var		bg_cg;
+	var		prn_no_data;
+	var		no_data_cg;
+
+	var		message_window,message_window_back;
+
+	var		btn_menu,btn_page_u,btn_page_d;
+
+	var		item_message;
+	var		txt_draw_base_x,txt_draw_base_y,txt_draw_add_step_y;
+
+	var		prn_cursor;
+
+	var		prn_page;
+
+	function init_buffer()
+	{
+		mode = MODE_INIT;
+
+		prn_layer_offset = 0;
+
+		prn_page = 0;
+
+		prn_base = void;
+		bg_cg = void;
+		no_data_cg = void;
+		prn_no_data = void;
+		message_window = void;
+
+		btn_menu = void;
+		btn_page_u = void;
+		btn_page_d = void;
+
+		prn_cursor = void;
+
+		item_message = void;
+		message_window_back = void;
+		return;
+	}
+	function Release()
+	{
+	var		i,j;
+
+		if (CheckValid(btn_menu)) {
+			EasyObjectInvalidate( btn_menu );
+			btn_menu = void;
+		}
+
+		if (CheckValid(btn_page_u)) {
+			EasyObjectInvalidate( btn_page_u );
+			btn_page_u = void;
+		}
+		if (CheckValid(btn_page_d)) {
+			EasyObjectInvalidate( btn_page_d );
+			btn_page_d = void;
+		}
+
+
+		if (CheckValid(message_window_back)) {
+			EasyReleaseLayer( message_window_back );
+			message_window_back = void;
+		}
+		if (CheckValid(item_message)) {
+			DeleteArrayObject( item_message, 1 );
+			item_message = void;
+		}
+
+
+		if (CheckValid(message_window)) {
+			ReleaseFadeAnime( message_window );
+			EasyReleaseLayer( message_window );
+			message_window = void;
+		}
+
+		if (CheckValid(prn_no_data)) {
+			DeleteArrayObject( prn_no_data, 2 );
+			prn_no_data = void;
+		}
+
+		if (CheckValid(bg_cg)) {
+			for (i=0;  i<bg_cg.count;  i++) {
+				ReleaseFadeAnime( bg_cg[i] );
+				EasyReleaseLayer( bg_cg[i] );
+				bg_cg[i] = void;
+			}
+			EasyObjectInvalidate( bg_cg );
+			bg_cg = void;
+		}
+
+		if (CheckValid(prn_cursor)) {
+			EasyObjectInvalidate( prn_cursor );
+			prn_cursor = void;
+		}
+
+
+		EasyReleaseLayer( no_data_cg );
+		no_data_cg = void;
+
+		ReleaseFadeAnime( prn_base );
+		EasyReleaseLayer( prn_base );
+		prn_base = void;
+		return;
+	}
+
+	function Init()
+	{
+	var		i,j;
+
+		item_message = new Array();
+		item_message.load( "ir_itemlist.txt" );
+
+
+		// ベースレイヤの生成
+		prn_base = new CSpriteLayer( parWin, parLayer );
+		prn_base.layerImageFromFill( 0,0, parLayer.width,parLayer.height, RGBA_MAKE(0,0,0,0), false );
+		prn_base.setGUID( -1 );
+
+		// システムCGの読み込み
+		no_data_cg = EasyCreateLayerObject( parWin,prn_base, "ir_item_view_no_data", clNone, false, 0,0, 0 );
+
+
+		message_window_back = EasyCreateLayerObject( parWin,prn_base, "ir_sys_textbox", clAdapt, false, PRN_MESSAGE_WIN_PX,PRN_MESSAGE_WIN_PY, LAYER_MESSAGE_WIN_BACK );
+
+		with ( message_window = new CSpriteLayer(parWin, prn_base) )
+		{
+			.layerImageFromFill( 0,0, MESSAGE_WINDOW_SIZE_W,MESSAGE_WINDOW_SIZE_H, MESSAGE_WINDOW_COLOR, false );
+			.setPriority( LAYER_MESSAGE_WIN );
+			.setPos( PRN_MESSAGE_WIN_PX,PRN_MESSAGE_WIN_PY );
+			.font.height        = (int)item_message[item_message.find( "font_size:" )+1];
+			.font.face          = item_message[item_message.find( "font_type:" )+1];
+			txt_draw_base_x     = (int)item_message[item_message.find( "draw_off_x:" )+1];
+			txt_draw_base_y     = (int)item_message[item_message.find( "draw_off_y:" )+1];
+			txt_draw_add_step_y = (int)item_message[item_message.find( "draw_step_add_y:" )+1];
+		}
+
+
+		// 背景読み込み
+		bg_cg = new Array();
+		prn_no_data = new Array();
+		for (i=0;  i<MAX_IRIYA_ITEM_PAGE;  i++) {
+			bg_cg[i] = EasyCreateLayerObject( parWin,prn_base, "ir_collection01_%02d".sprintf(i),
+							clNone, true, 0,0, LAYER_LOCAL_BACK+i );
+
+
+			prn_no_data[i] = new Array();
+			for (j=0;  j<MAX_IRIYA_ITEM_PAGE_IN_NUM;  j++) {
+				with ( prn_no_data[i][j] = new CSpriteLayer(parWin, bg_cg[i]) )
+				{
+					.setGUID( j );
+					.assign( no_data_cg );
+					.setSize( no_data_cg.imageWidth, no_data_cg.imageHeight );
+					.setUV( 0, 0 );
+				}
+			}
+
+
+			init_page_item_list( i );
+		}
+
+
+		with (btn_menu = new CIriyaNormalButton(parWin,prn_base))
+		{
+			.Init();
+			.SetLayerPriority( LAYER_MENU_BUTTON );
+			.LoadUnFocusCG( "ir_item_view_button00_00" );
+			.LoadFocusCG( "ir_item_view_button00_01" );
+			.SetLayerPosition( PRN_MENU_BUTTON_PX, PRN_MENU_BUTTON_PY );
+			.SetClickCallbackFunc( push_btn_callback, -2 );
+			.SetCancelCallback( cancel_call_back );
+			.SetFocusSEPlayFile( SE_ITEMVIEWER_MENU_FOCUS );
+		}
+		with (btn_page_d = new CIriyaNormalButton(parWin,prn_base))
+		{
+			.Init();
+			.SetLayerPriority( LAYER_MENU_BUTTON );
+			.LoadUnFocusCG( "ir_item_view_button01_00" );
+			.LoadFocusCG( "ir_item_view_button01_01" );
+			.SetLayerPosition( PRN_PAGE_D_BUTTON_PX, PRN_PAGE_D_BUTTON_PY );
+			.SetClickCallbackFunc( push_page_change_btn_callback, -3 );
+			.SetCancelCallback( cancel_call_back );
+			.SetFocusSEPlayFile( SE_ITEMVIEWER_MENU_FOCUS );
+		}
+		with (btn_page_u = new CIriyaNormalButton(parWin,prn_base))
+		{
+			.Init();
+			.SetLayerPriority( LAYER_MENU_BUTTON );
+			.LoadUnFocusCG( "ir_item_view_button02_00" );
+			.LoadFocusCG( "ir_item_view_button02_01" );
+			.SetLayerPosition( PRN_PAGE_U_BUTTON_PX, PRN_PAGE_U_BUTTON_PY );
+			.SetClickCallbackFunc( push_page_change_btn_callback, -4 );
+			.SetCancelCallback( cancel_call_back );
+			.SetFocusSEPlayFile( SE_ITEMVIEWER_MENU_FOCUS );
+		}
+
+
+		prn_cursor = new CIriyaItemViewCursor( parWin, prn_base );
+		prn_cursor.Init( LAYER_CURSOR );
+
+		SetPriorityOffset( prn_layer_offset );	// ベースCGのレイヤをセット
+		return;
+	}
+
+	function SetPriorityOffset( _offset )
+	{
+		prn_layer_offset = _offset;
+		if (CheckValid(prn_base))
+			prn_base.setPriority( prn_layer_offset );
+		return;
+	}
+
+
+
+	function isPrintPlayerGetItem( _data )
+	{
+		@if (PRN_ALL_ITEM  ==  0)
+		return ( parLayer.checkPlayerGetItem(_data) );
+		@endif
+		@if (PRN_ALL_ITEM  ==  1)
+			return ( true );
+		@endif
+	}
+	// ページ内アイテムが非表示なものは隠す
+	function init_page_item_list( _page_no )
+	{
+	var		i,x,y;
+	var		prn_list;
+	var		no_list;
+	var		no_cg;
+
+		prn_list = ItemList[_page_no];
+		no_cg  = prn_no_data[_page_no];
+
+
+		for (y=0;  y<MAX_IRIYA_ITEM_PAGE_H;  y++) {
+		for (x=0;  x<MAX_IRIYA_ITEM_PAGE_W;  x++) {
+			i = y*MAX_IRIYA_ITEM_PAGE_W + x;
+
+			no_cg[i].setPos(
+					PRN_ITEM_BASE_PX + (x*PRN_ITEM_STEP_W) + (y%2)*PRN_ITEM_BASE_SHIFT_W,
+					PRN_ITEM_BASE_PY + (y*PRN_ITEM_STEP_H) );
+
+			if (isPrintPlayerGetItem(prn_list[i])  ==  true)
+					no_cg[i].opacity = 0;
+			else	no_cg[i].opacity = 255;
+			no_cg[i].visible = true;
+		}}
+		return;
+	}
+
+
+
+	function print_change_page_button()
+	{
+		btn_page_d.SetButtonAlpha(0);
+		btn_page_u.SetButtonAlpha(0);
+		if (MAX_IRIYA_ITEM_PAGE  ==  1)
+			return;
+
+		if (prn_page  >  0) {
+			if (CheckValid(btn_page_d)) {
+				btn_page_d.SetButtonAlpha(255);
+				btn_page_d.Print();
+			}
+		}
+
+		if (prn_page  < (MAX_IRIYA_ITEM_PAGE-1)) {
+			if (CheckValid(btn_page_u)) {
+				btn_page_u.Print();
+				btn_page_u.SetButtonAlpha(255);
+			}
+		}
+		return;
+	}
+
+	function Print()
+	{
+	var		i;
+		prn_page = 0;
+		mode = MODE_INIT;
+
+
+		// ベースCGのCGを表示
+		if (CheckValid(prn_base)) {
+			prn_base.visible = true;
+		}
+
+
+		// アルファ値をリセット＆フェードデータの削除
+		if (CheckValid(bg_cg)) {
+			for (i=0;  i<bg_cg.count;  i++) {
+				ReleaseFadeAnime( bg_cg[i] );
+				bg_cg[i].opacity = 0;
+				bg_cg[i].visible = false;
+			}
+		}
+
+		if (CheckValid(btn_menu))
+			btn_menu.Print();
+		print_change_page_button();
+		return;
+	}
+	function FadeIn()
+	{
+		mode = MODE_FADE_IN;
+
+
+		if (CheckValid(bg_cg)) {
+			if (CheckValid(bg_cg[prn_page])) {
+				bg_cg[prn_page].visible = true;
+				bg_cg[prn_page].opacity = 255;
+			}
+		}
+
+		if (CheckValid(prn_base)) {
+			EasyStartFadeAnime( prn_base, 0, 255, DEF_FADE_TIME );
+			prn_base.visible = true;
+		}
+		return;
+	}
+	function FadeOut()
+	{
+		mode = MODE_FADE_OUT;
+
+		prn_cursor.Close();
+		stop_click();
+		if (CheckValid(prn_base)) {
+			EasyStartFadeAnime( prn_base, 255, 0, DEF_FADE_TIME );
+			prn_base.visible = true;
+		}
+		stopSound( ,, );
+		PlaySE( SE_ITEMVIEWER_MENU_CANCEL );
+		return;
+	}
+
+
+
+	function start_click_item_hit( _page )
+	{
+	var		i;
+		for (i=0;  i<MAX_IRIYA_ITEM_PAGE_IN_NUM;  i++) {
+			with ( prn_no_data[_page][i] )
+			{
+				if (.opacity  ==  0) {
+					.setMouseEnterCallback( item_focus );
+					.setMouseLeaveCallback( item_unfocus );
+					.setMouseDownCallback( back_button_hit );
+					.setHitCheckAlphaLimit( "ALL" );
+				} else {
+					.setMouseEnterCallback( void );
+					.setMouseLeaveCallback( void );
+					.setMouseDownCallback( void );
+					.setHitCheckAlphaLimit( "NONE" );
+				}
+			}
+		}
+		return;
+	}
+	function stop_click_item_hit( _page )
+	{
+	var		i;
+		for (i=0;  i<MAX_IRIYA_ITEM_PAGE_IN_NUM;  i++) {
+			with ( prn_no_data[_page][i] )
+			{
+				.setMouseEnterCallback( void );
+				.setMouseLeaveCallback( void );
+				.setMouseDownCallback( void );
+				.setHitCheckAlphaLimit( "NONE" );
+			}
+		}
+		return;
+	}
+
+
+	function push_btn_callback( _id )
+	{
+		FadeOut();
+		return;
+	}
+	function cancel_call_back()
+	{
+		FadeOut();
+		return;
+	}
+
+
+
+	function push_page_change_btn_callback( _id )
+	{
+		mode = MODE_PAGE_CHANGE;
+		stop_click();
+		prn_cursor.Close();
+
+
+		bg_cg[prn_page].setPriority( LAYER_LOCAL_BACKb );
+
+		switch ( _id )
+		{
+		case -3:
+			if (prn_page  ==  (MAX_IRIYA_ITEM_PAGE-1)) {
+				btn_page_u.Print();
+				btn_page_u.FadeIn( 0, 255, DEF_FADE_TIME );
+			}
+			prn_page -= 1;
+			if (prn_page  ==  0)
+				btn_page_d.FadeIn( 255, 0, DEF_FADE_TIME );
+ 			break;
+		case -4:
+			if (prn_page  ==  0) {
+				btn_page_d.Print();
+				btn_page_d.FadeIn( 0, 255, DEF_FADE_TIME );
+			}
+			prn_page += 1;
+			if (prn_page  ==  (MAX_IRIYA_ITEM_PAGE-1))
+				btn_page_u.FadeIn( 255, 0, DEF_FADE_TIME );
+			break;
+		}
+
+
+		if (CheckValid(bg_cg[prn_page])) {
+			bg_cg[prn_page].setPriority( LAYER_LOCAL_BACK );
+			bg_cg[prn_page].visible = true;
+			bg_cg[prn_page].opacity = 0;
+			EasyStartFadeAnime( bg_cg[prn_page], 0, 255, DEF_FADE_TIME );
+		}
+		return;
+	}
+
+
+
+	function item_focus( _layer )
+	{
+//		PlaySE( SE_ITEMVIEWER_MENU_ITEMFOCUS );
+		if (CheckPlaySESTack(SE_ITEMVIEWER_MENU_ITEMFOCUS)  ==  false)
+			PlaySE( SE_ITEMVIEWER_MENU_ITEMFOCUS, , , , , FOCUS_SE_VOLUME_AVE );
+		with ( _layer )
+		{
+			prn_cursor.Print( .left+.width/2, .top+.height/2 );
+		}
+		return;
+	}
+	function item_unfocus( _layer )
+	{
+		prn_cursor.Close();
+		return;
+	}
+
+
+	// アイテム説明メッセージウィンドウを開く
+	function item_message_in( _mes_page, _mes_no )
+	{
+	var		txt_index;
+	var		draw_x,draw_y;
+		stop_click();
+		mode = MODE_MESSAGE_IN;
+
+		stop_click_item_hit( prn_page );
+
+		PlaySE( SE_ITEMVIEWER_MENU_ITEMSELECT );
+		PlaySE( SE_ITEMVIEWER_MENU_TEXTFADEIN );
+
+		with ( message_window )
+		{
+			.fill( MESSAGE_WINDOW_COLOR );
+
+			draw_x = txt_draw_base_x;
+			draw_y = txt_draw_base_y;
+			txt_index = item_message.find( ItemTextKey[_mes_page][_mes_no] )+1;
+
+			while (item_message[txt_index].substring(0)  !=  "") 
+			{
+				.drawText( draw_x, draw_y, item_message[txt_index], 0xFFFFFF );
+				draw_y += .font.height+txt_draw_add_step_y;
+				txt_index += 1;
+
+			}
+			.visible = true;
+		}
+		message_window_back.visible = true;
+		return;
+	}
+	// アイテム説明メッセージウィンドウを閉じる
+	function item_message_out()
+	{
+		stopSound( SE_ITEMVIEWER_MENU_TEXTFADEIN,, );
+		PlaySE( SE_ITEMVIEWER_MENU_TEXTFADEOUT );
+
+
+		mode = MODE_MESSAGE_OUT;
+		stop_click();
+		return;
+	}
+
+	function back_button_hit( _layer, _x,_y, _button,_shift )
+	{
+		if (message_window.visible  ==  false) {
+			if (_button  ==  mbRight) {
+				FadeOut();
+			} else {
+				if (_layer.getGUID()  ==  -1)
+					return;
+				item_message_in( prn_page, _layer.getGUID() );
+			}
+		} else {
+			item_message_out();
+		}
+		return;
+	}
+	function start_click()
+	{
+		with ( prn_base )
+		{
+//			.setMouseDownCallback( back_button_hit );
+			.setMouseUpCallback( back_button_hit );
+			.setHitCheckAlphaLimit( "ALL" );
+		}
+
+
+		if (message_window.visible  ==  false) {
+			btn_menu.Start();
+			if (btn_page_d.GetButtonAlpha()  !=  0)
+				btn_page_d.Start();
+			if (btn_page_u.GetButtonAlpha()  !=  0)
+				btn_page_u.Start();
+
+			prn_cursor.Close();
+			start_click_item_hit( prn_page );
+		}
+
+
+		UpdateCursorPos2( parLayer );
+		return;
+	}
+	function stop_click()
+	{
+		with ( prn_base )
+		{
+//			.setMouseDownCallback( void );
+			.setMouseUpCallback( void );
+			.setHitCheckAlphaLimit( "NONE" );
+		}
+
+		btn_menu.Stop();
+		btn_page_d.Stop();
+		btn_page_u.Stop();
+
+		btn_menu.Print();
+		if (btn_page_d.GetButtonAlpha()  !=  0)
+			btn_page_d.Print();
+		if (btn_page_u.GetButtonAlpha()  !=  0)
+			btn_page_u.Print();
+
+		stop_click_item_hit( prn_page );
+		return;
+	}
+
+
+
+
+	function Update()
+	{
+		if (CheckValid(prn_cursor))
+			prn_cursor.Update();
+		switch ( mode )
+		{
+		case MODE_SELECT:
+			break;
+
+
+		case MODE_FADE_IN:
+			if (ProcessFadeAnime(prn_base)  ==  "UPDATING")
+				break;
+			mode = MODE_SELECT;
+			start_click();
+			break;
+		case MODE_FADE_OUT:
+			if (ProcessFadeAnime(prn_base)  ==  "UPDATING")
+				break;
+			mode = MODE_END;
+			break;
+
+	 	case MODE_INIT:
+	 	case MODE_END:
+	 		break;
+
+
+	 	case MODE_MESSAGE_IN:
+	 		mode = MODE_MESSAGE_PRN;
+			start_click();
+	 		break;
+	 	case MODE_MESSAGE_PRN:
+	 		break;
+	 	case MODE_MESSAGE_OUT:
+			message_window.visible = false;
+			message_window_back.visible = false;
+			mode = MODE_SELECT;
+			start_click();
+	 		break;
+
+		case MODE_PAGE_CHANGE:
+			{
+			var		break_flag;
+			var		i;
+				break_flag = false;
+				if (ProcessFadeAnime(bg_cg[prn_page])  ==  "UPDATING")
+					break_flag = true;
+				if (btn_page_u.UpdateFade()  ==  false)
+					break_flag = true;
+				if (btn_page_d.UpdateFade()  ==  false)
+					break_flag = true;
+
+				if (break_flag  ==  true)
+					break;
+
+
+				for (i=0;  i<MAX_IRIYA_ITEM_PAGE;  i++) {
+					if (i  ==  prn_page)
+						continue;
+					if (bg_cg[i].visible  ==  true) {
+						bg_cg[i].visible = false;
+						bg_cg[i].opacity = 0;
+					}
+				}
+			}
+			mode = MODE_SELECT;
+			start_click();
+			break;
+		}
+		return;
+	}
+}
+
+
+

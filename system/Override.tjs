@@ -1,0 +1,5036 @@
+/*----------------------------------------------------------------------------/
+/	Copyright (C) TYPE-MOON All Rights Reserved.
+/		KAGシステムのオーバーライド
+/----------------------------------------------------------------------------*/
+kagVersion	= "3 customized";
+
+//	立ち位置補正値の取り込み
+var correctLeft;
+if(Storages.isExistentStorage("correct.ksc"))
+	correctLeft	= Scripts.evalStorage("correct.ksc");
+
+Scripts.execStorage("SystemMessages.tjs");
+Scripts.execStorage( "YesNoLayer.tjs" );
+Scripts.execStorage("ExButtonLayer.tjs");
+Scripts.execStorage("ScrollBarLayer.tjs");
+Scripts.execStorage("subroutine.tjs");
+Scripts.execStorage("ComplexLinearMover.tjs");
+
+//	SEの指定
+global.clickSE	= "コンフィグ-決定.wav";
+global.okSE	= "タイトル-決定.wav";
+global.cancelSE= "コンフィグ-決定.wav";
+
+/*----------------------------------------------------------------------------/
+/	KAGWindow
+/----------------------------------------------------------------------------*/
+class KAGWindow extends KAGWindowORIGINAL
+{
+	var	userChSpeed	= 15;	//	デフォルト設定(テキスト速度)
+	var numBookMarks		= 20;
+	var bookmarkName		= "記憶";
+	var loadActionName		= "をたど";
+	var loadActionNameLast	= "らりるれろ";
+	var saveActionName		= "にのこ";
+	var saveActionNameLast	= "さしすせそ";
+
+	var thumbnailWidth		= 133;
+	var fullcolorThumbnail	= false;
+
+	//	揺れ(揺れ減衰処理のため)
+	var quakeStartTick;
+	var finishQuake;
+	var lastQuakeX, lastQuakeY;	//	直前の揺れ
+
+	//	衝撃
+	var shocking;
+	var shockVertMax, shockHorzMax;
+	var finishShock;
+	var shockRotate, shockStartTick, shockEndTick, lastShockTick;
+	var pauseQuaking;
+	var lastShockX, lastShockY;	//	直前の衝撃
+
+	var returnOriginalPosition;	//	元の位置に立ち絵を戻すか？
+	var noSwingFGImage;			//	立ち絵を揺らさないか？
+
+	//	クリックリピート
+	var clickRepeatTimer;		//	オートクリックタイマー
+	var clickRepeatTime1st	= 500;	//	オートクリックに入るまでの間隔(初回)
+	var clickRepeatTime	= 100;	//	オートクリック間隔
+	var isClickIfStable;		//	Stableの時だけクリックするか？
+	var _isClickRepeat;			//	オートクリック中か？(mouse on->true/mouse off->false)
+	var isClickRepeatPause;		//	オートクリックの一時停止中か?
+	var lastMessagePos;
+
+	//	地平線の高さ(0なら画面下端:0<なら上がる:0>なら下がる)
+	var _horizon	= 0;
+
+	var	savedataHistoryCount	= 3;
+
+	var	inputDevice	= "mouse";
+	var noConcurrentKeys	= %[
+		VK_UP=>1, VK_DOWN=>1, VK_LEFT=>1, VK_RIGHT=>1,
+		VK_TAB=>1,
+	];	//	マウスと併用しないキー
+	var noFlipCursor	= false;	//	(キーが押された時に)カーソルを弾き飛ばさない
+
+	var isChangedAfterSaving	= false;	//	セーブしてからラベルを通過した
+
+	var isPossibleChangeScreen	= true;
+
+	var	quakeCount;		//	現在実行中の「揺れ」の数
+
+	function KAGWindow()
+	{
+		super.KAGWindowORIGINAL(...);
+		freeSaveDataMode	= false;	//	最初はtrueにしておいて、表示を変えておく
+//		forelayers_count	= numCharacterLayers;	//	現時点の前景レイヤー数が立ち絵の数
+		//	前景レイヤー数の縛りをなくした
+	}
+
+	function finalize()
+	{
+		release(clickRepeatTimer);
+		super.finalize(...);
+	}
+
+	function internalStoreFlags(f)
+	{
+		super.internalStoreFlags(...);
+
+		//	quake, shocking関連
+/*		f.shocking		= shocking;
+		f.shockVertMax	= shockVertMax;
+		f.shockHorzMax	= shockHorzMax;
+		f.finishShock	= finishShock;
+		f.shockRotate	= shockRotate;
+		f.shockStartTick= shockStartTick;
+		f.shockEndTick	= shockEndTick;
+		f.lastShockTick	= lastShockTick;
+		f.pauseQuaking	= pauseQuaking;
+		f.lastShockX	= lastShockY;
+*/		f.quakeStartTick= quakeStartTick;
+		f.finishQuake	= finishQuake;
+		f.lastQuakeX	= lastQuakeX;
+		f.lastQuakeY	= lastQuakeY;
+		f.returnOriginalPosition	= returnOriginalPosition;
+		f.noSwingFGImage			= noSwingFGImage;
+//		f.lastMessagePos= lastMessagePos;
+	}
+
+	function internalRestoreFlags(f, clear = true, elm = void)
+	{
+		//	quake, shocking関連
+/*		shocking		= f.shocking if f.shocking!==void;
+		shockVertMax	= f.shockVertMax if f.shockVertMax!==void;
+		shockHorzMax	= f.shockHorzMax if f.shockHorzMax!==void;
+		finishShock		= f.finishShock if f.finishShock!==void;
+		shockRotate		= f.shockRotate if f.shockRotate!==void;
+		shockStartTick	= f.shockStartTick if f.shockStartTick!==void;
+		shockEndTick	= f.shockEndTick if f.shockEndTick!==void;
+		lastShockTick	= f.lastShockTick if f.lastShockTick!==void;
+		pauseQuaking		= f.pauseQuaking if f.pauseQuaking!==void;
+		lastShockY		= f.lastShockX if f.lastShockX!==void;
+*/		quakeStartTick	= f.quakeStartTick if f.quakeStartTick!==void;
+		finishQuake		= f.finishQuake if f.finishQuake!==void;
+		lastQuakeX		= f.lastQuakeX if f.lastQuakeX!==void;
+		lastQuakeY		= f.lastQuakeY if f.lastQuakeY!==void;
+		returnOriginalPosition	= f.returnOriginalPosition if f.returnOriginalPosition!==void;
+		noSwingFGImage	= f.noSwingFGImage if f.noSwingFGImage!==void;
+//		lastMessagePos	= f.lastMessagePos if f.lastMessagePos!==void;
+
+		super.internalRestoreFlags(...);
+	}
+
+	function calcThumbnailSize()
+	{
+		// サムネイルのサイズを計算する
+		// 横幅は thumbnailWidth に
+		var ratio = scHeight / scWidth;
+		var w = thumbnailWidth;
+		var h = (int)(w * ratio);
+
+		// サムネイル用ビットマップのサイズを計算
+		var size;
+		if(fullcolorThumbnail)
+			size = ((((w - 1) >> 2) + 1) << 2) * h * 3 + 54;
+		else
+			size = 
+			((((w - 1) >> 2) + 1) << 2) * h +
+				1024 + 54;
+		return %[width : w, height : h, size : size];
+	}
+
+	//	システム変数の読み込み
+	function internalLoadSystemVariables(filename)
+	{
+		Plugins.link("util.dll");
+		var bkfn	= filename+".bak";
+		var exfn	= Storages.isExistentStorage(filename);
+		var exbk	= Storages.isExistentStorage(bkfn);
+		var fnsz	= GetFileSize(filename);
+		var bksz	= GetFileSize(bkfn);
+		var flag;
+		var failed	= "";
+
+		//	ファイルが存在しないので、最初から
+		dm("(primary)  "+filename+": "+exfn+" "+fnsz+"byte.");
+		dm("(secondary)"+bkfn+": "+exbk+" "+bksz+"byte.");
+		if(!exfn && !exbk)
+			return %[];
+
+		//	マスターデータが存在し、バックアップの90%以上のデータサイズを持つなら
+		//	マスターデータを開く。失敗するようならバックアップを開く
+		if(exfn && fnsz >= int(bksz * 0.9))
+		{
+			try
+			{
+				dm("try-1: open "+filename);
+				flag	= Scripts.evalStorage(filename);
+				flag	= %[] if flag === void;
+			}
+			catch(e)
+			{
+				dm("can't open "+filename);
+				try
+				{
+					dm("try-2: open "+bkfn);
+					DeleteFile(filename);	//	エラーが出たファイルは削除する
+					flag	= Scripts.evalStorage(bkfn);
+					flag	= %[] if flag === void;
+				}
+				catch(e)
+				{
+					dm("can't open "+bkfn+" ... load system variables faild");
+					DeleteFile(bkfn);	//	エラーが出たファイルは削除する
+					failed	= e.message;
+				}
+			}
+		}
+		else
+		{
+			dm("can't open "+filename);
+			try
+			{
+				dm("try-1: open "+bkfn);
+				flag	= Scripts.evalStorage(bkfn);
+				flag	= %[] if flag === void;
+			}
+			catch(e)
+			{
+				dm("can't open "+bkfn+" ... load system variables faild");
+				DeleteFile(bkfn);	//	エラーが出たファイルは削除する
+				failed	= e.messages;
+			}
+		}
+		Plugins.unlink("util.dll");
+
+		if(failed!="")
+		{
+			msg	= "システム変数データとそのバックアップのいずれもが破損しています。\n"
+				"("+e.message+")\n\""+filename+"\"と\n\""+lsfn+"\"の\n"
+				"二つのファイルは破棄してください。";
+			System.inform(msg);
+			System.exit();
+		}
+		return flag;
+	}
+
+	function loadSystemVariables()
+	{
+		//	各システム変数を読み込む
+		scflags	= internalLoadSystemVariables(saveDataLocation + "/" + dataName + "sc.ksd");
+		sflags	= internalLoadSystemVariables(saveDataLocation + "/" + dataName + "su.ksd");
+		return;
+	}
+
+	function setSystemStateFromSystemVariables()
+	{
+		//	退避していた情報を復帰させる
+		super.setSystemStateFromSystemVariables(...);
+
+		//	フォント関連
+		current.defaultBold		= scflags.defaultBold if scflags.defaultBold!==void;
+		current.defaultRubyBold	= scflags.defaultRubyBold if scflags.defaultRubyBold!==void;
+		setMessageLayerFontBold();
+
+		//	ウィンドウ位置の復帰
+		left = scflags.lastWindowLeft if scflags.lastWindowLeft !== void;
+		top = scflags.lastWindowTop if scflags.lastWindowTop !== void;
+
+		//	設定を反映する
+		setUserVolume();
+	}
+
+	function saveSystemVariables()
+	{
+		//	一時的にファイルをバックアップする(リネームのみ)
+		Plugins.link("util.dll");
+		var fns	= [ saveDataLocation + "/" + dataName + "sc.ksd", saveDataLocation + "/" + dataName + "su.ksd" ];
+		for(var i=0; i<fns.count; i++)
+		{
+			var fn	= fns[i];
+			var bk	= fn+".bak";
+			//	ファイルが存在し、その時点でのバックアップより大きいときのみ入れ替える
+			if(Storages.isExistentStorage(fn) && GetFileSize(fn) >= int(GetFileSize(bk) * 0.9))
+			{
+				DeleteFile(bk) if Storages.isExistentStorage(bk);
+				MoveFile(fn, bk);
+			}
+		}
+		Plugins.unlink("util.dll");
+
+		//	フォント関連
+		if(current != void)
+		{
+			scflags.defaultBold		= current.defaultBold;
+			scflags.defaultRubyBold	= current.defaultRubyBold;
+		}
+
+		//	ウィンドウ位置の記録
+		scflags.lastWindowLeft	= left;
+		scflags.lastWindowTop	= top;
+
+//		super.saveSystemVariables(...);
+		{
+			// システム変数の保存
+			if(!isMain) return;
+
+			// プラグインを呼ぶ
+			forEachEventHook('onSaveSystemVariables',
+				function(handler, f) { handler(); } incontextof this);
+
+			// フルスクリーン
+			scflags.fullScreen = fullScreened;
+
+			// 文字表示速度
+			scflags.autoModePageWait = autoModePageWait;
+			scflags.autoModeLineWait = autoModeLineWait;
+			scflags.userChSpeed = userChSpeed;
+			scflags.userCh2ndSpeed = userCh2ndSpeed;
+			scflags.chDefaultAntialiased = chDefaultAntialiased;
+			scflags.chDefaultFace = chDefaultFace;
+			scflags.chNonStopToPageBreak = chNonStopToPageBreak;
+			scflags.ch2ndNonStopToPageBreak = ch2ndNonStopToPageBreak;
+			scflags.autoMode = autoMode;
+
+			// ブックマーク名
+			scflags.bookMarkNames = bookMarkNames; // (コピーではなくて)参照で十分
+			scflags.bookMarkDates = bookMarkDates;
+			scflags.bookMarkProtectedStates = bookMarkProtectedStates;
+
+			scflags.lastSaveDataNameGlobal = lastSaveDataNameGlobal;
+
+			// ファイルに書き込む(書き込むときに例外が発生し、ファイルが消失してしまう)
+			if(!readOnlyMode)
+			{
+				var fn = saveDataLocation + "/" + dataName + "sc.ksd";
+				try
+				{
+					(Dictionary.saveStruct incontextof scflags)(fn, saveDataMode);
+				}
+				catch(e)
+				{
+					//	メッセージ記録
+					dm("Exception: scflagsを\""+fn+"\"へ保存できませんでした。("+e.message+")");
+
+					//	保存に失敗したファイルが残っていれば、削除する
+//					DeleteFile(fn) if Storages.isExistentStorage(fn);
+					with(global.GetDatetime())
+						MoveFile(fn, fn+".%02d%02d%02d-%02d%02d%02d".sprintf(.year%100, .mon, .day, .hour, .minute, .second));
+				}
+
+				var fn = saveDataLocation + "/" + dataName + "su.ksd";
+				try
+				{
+					(Dictionary.saveStruct incontextof sflags)(fn, saveDataMode);
+				}
+				catch(e)
+				{
+					//	メッセージ記録
+					dm("Exception: sflagsを\""+fn+"\"へ保存できませんでした。("+e.message+")");
+
+					//	保存に失敗したファイルが残っていれば、削除する
+//					DeleteFile(fn) if Storages.isExistentStorage(fn);
+					with(global.GetDatetime())
+						MoveFile(fn, fn+".%02d%02d%02d-%02d%02d%02d".sprintf(.year%100, .mon, .day, .hour, .minute, .second));
+				}
+			}
+		}
+	}
+
+	//	ユーザー管理での音量変更(gvolume = volume2を変更)
+	function setUserVolume(gvol, bvol, svol)
+	{
+		with(sflags)
+		{
+			.globalVolume	= gvol if gvol !== void;
+			.bgmVolume		= bvol if bvol !== void;
+			.seVolume		= svol if svol !== void;
+			var vol = %[gvolume:int(.globalVolume * .bgmVolume / 100)];
+//			dm("BGM volume: "+vol.gvolume);
+			bgm.setOptions(vol);
+			vol.gvolume	= int(.globalVolume * .seVolume / 100);
+//			dm("SE volume: "+vol.gvolume);
+			for(var i=0; i<se.count; i++)
+				se[i].setOptions(vol);
+		}
+	}
+
+	function setMessageLayerUserFont()
+	{
+		super.setMessageLayerUserFont(...);
+
+		//	ついでにボールドも設定する(これはcurrentから持ってくる)
+		setMessageLayerFontBold();
+	}
+
+	function setMessageLayerFontBold()
+	{
+		var messages;
+		var bold = current.defaultBold;
+		var rubybold = current.defaultRubyBold;
+		messages = fore.messages;
+		for(var i = messages.count-1; i >= 0; i--)
+			messages[i].defaultBold = bold,
+			messages[i].defaultRubyBold = rubybold;
+		messages = back.messages;
+		for(var i = messages.count-1; i >= 0; i--)
+			messages[i].defaultBold = bold,
+			messages[i].defaultRubyBold = rubybold;
+	}
+
+	function saveBookMarkToFile(fn, savehist = true)
+	{
+		// ファイル fn に栞を保存する
+		if(readOnlyMode) return false;
+		pcflags.storeTime = (new Date()).getTime(); // 日付を保存
+
+		// セーブデータをまとめる
+		var data = %[];
+		data.id = saveDataID;
+		data.core = pcflags;
+		data.user = pflags;
+		if(savehist) data.history = historyOfStore;
+
+		if(saveThumbnail)
+		{
+			// サムネイルを保存
+			lockSnapshot();
+			try
+			{
+				// サムネイルのサイズまで縮小
+				var size = calcThumbnailSize();
+				var tmp = new Layer(this, primaryLayer);
+				try
+				{
+					tmp.setImageSize(size.width, size.height);
+					tmp.face = dfBoth;
+					tmp.stretchCopy(0, 0, size.width, size.height, snapshotLayer,
+						0, 0, snapshotLayer.imageWidth, snapshotLayer.imageHeight, stLinear);
+					/*
+					// サムネイル画像をセピア調にして保存する場合はここをコメントアウト
+					tmp.doGrayScale();
+					tmp.adjustGamma(
+									1.3, 0, 255,  // R gamma, floor, ceil
+									1.0, 0, 255,  // G gamma, floor, ceil
+									0.8, 0, 255); // B gamma, floor, ceil
+					*/
+
+					//	わいせつと判断されそうな画像(/[ABC]H.*/)が表示されていたら、モザイク
+					var st	= kag.fore.base.Anim_loadParams.storage.toUpperCase();
+					if(st[1]=="H" && (st[0]=="A" || st[0]=="B" ||st[0]=="C"))
+					{
+						//	モザイク化
+						var step = 4;	//	2の倍数
+						var pixs = 2;	//	step = 1 << pixs
+						for(var y=0; y<size.height; y+=step)
+						{
+							for(var x=0; x<size.width; x+=step)
+							{
+/*								var rc=0, gc=0, bc=0;	//	ちゃんとしたモザイク(遅い/忠実)
+								var yi=y+step-1, xi=x+step-1;
+								yi = size.height-1 if yi>=size.height;
+								xi = size.width-1 if xi>=size.width;
+
+								for(; yi>=y; yi--)
+								{
+									for(; xi>=x; xi--)
+									{
+										var pix = tmp.getMainPixel(xi, yi);
+										rc	+= (pix >> 16) & 0xFF;
+										gc	+= (pix >>  8) & 0xFF;
+										bc	+= (pix      ) & 0xFF;
+									}
+								}
+								var col = (((rc >> pixs)&0xFF)<<16) |
+										  (((gc >> pixs)&0xFF)<<8) |
+										  ((bc >> pixs)&0xFF);
+*/
+								var col = tmp.getMainPixel(x, y);	//	簡易色決定(早い/若干落ちる)
+								tmp.fillRect(x, y, step, step, 0xFF000000|col);
+							}
+						}
+					}
+
+					try
+					{
+						if(fullcolorThumbnail)
+							tmp.saveLayerImage(fn, "bmp24");
+						else
+							tmp.saveLayerImage(fn, "bmp8");
+
+						// データを保存
+						var mode = saveDataMode;
+						mode += "o" + size.size; // モード文字列に 書き込みオフセットを指定
+						(Dictionary.saveStruct incontextof data)(fn, mode);
+					}
+					catch(e)
+					{
+						System.inform("ファイルに保存できません (ファイルを開けないか、"
+							"書き込み禁止です)");
+						return false;
+					}
+				}
+				catch(e)
+				{
+					invalidate tmp;
+					throw e;
+				}
+				invalidate tmp;
+			}
+			catch(e)
+			{
+				unlockSnapshot();
+				throw e;
+			}
+			unlockSnapshot();
+		}
+		else
+		{
+			// 通常のファイルに保存
+			try
+			{
+				(Dictionary.saveStruct incontextof data)(fn, saveDataMode);
+			}
+			catch(e)
+			{
+				System.inform("ファイルに保存できません (ファイルを開けないか、"
+					"書き込み禁止です)");
+				return false;
+			}
+		}
+
+		isChangedAfterSaving	= false;	//	ゲームがセーブされた状態
+		return true;
+	}
+
+	function loadBookMarkFromFile(fn, loaduser = true)
+	{
+		// ファイル fn から栞を読み込む
+		// loaduser が false の時は user を読み込まない
+		try
+		{
+			if(!Storages.isExistentStorage(fn)) return false; //ファイルがない
+
+			var data;
+
+			var modestr;
+
+			if(saveThumbnail)
+			{
+				// 指定オフセットからデータを読み込む
+				modestr += "o" + calcThumbnailSize().size;
+			}
+
+			data = Scripts.evalStorage(fn, modestr);
+
+			if(data.id != saveDataID)
+			{
+				System.inform("他のシステムのデータを読み込もうとしました", "エラー");
+				return false;
+			}
+
+			pcflags = data.core;
+			pcflags = %[] if pcflags === void;
+			if(loaduser)
+			{
+				pflags = data.user;
+				pflags = %[] if pflags === void;
+			}
+			else
+			{
+				(Dictionary.assignStruct incontextof pflags)(flags);
+			}
+			historyOfStore = data.history;
+			historyOfStore = [] if historyOfStore === void;
+		}
+		catch(e)
+		{
+			throw new Exception(bookmarkName+"を読み込めないか、あるいは"+bookmarkName+"が"
+				"壊れています(" + e.message + ")");
+		}
+
+		restoreFlags();
+		return true;
+	}
+
+	function saveBookMarkWithAsk(num, func=void)
+	{
+		// 栞番号 num に栞を設定する
+		num = +num;	dm("save: "+num);
+		// そのとき、設定するかどうかをたずねる
+		if(readOnlyMode) return false;
+		var prompt;
+		if(bookMarkDates[num] == "" && !Storages.isExistentStorage(getBookMarkFileNameAtNum(num)))
+		// bookMarkDates が空文字の場合は栞は存在しない
+		{
+			//	上書きしないときは保存するか聞く必要が無い
+			saveBookMarkAskOk(true, num, func);
+			playSound(okSE);	//	セーブが実行された効果音として再生(問い合わせする時はダイアログ側で再生される)
+			return true;
+		}
+		//	データが存在する時に上書き禁止フラグが立っていたら、書き込めない
+		if(bookMarkProtectedStates[num]) return false;
+		prompt += "「" + bookMarkNames[num] + "」[記録日時:"+bookMarkDates[num]+"]に\n";
+		prompt += "「"+ pcflags.currentPageName + "」"+saveActionName+saveActionNameLast.substring(1,1)+"ますか?";
+		askYesNo2(prompt, saveBookMarkAskOk, num, func);
+
+		return true;
+	}
+	function saveBookMarkAskOk(result, num, func=void)
+	{
+		if(result)
+		{
+//			release(yesnolayer);
+			if(saveBookMarkToFile(getBookMarkFileNameAtNum(num), true))
+			{
+				// メニュー / bookMarkNames / bookMarkDates を更新
+				getBookMarkInfoFromData(pcflags, num);
+			}
+		}
+		func(result) if func != void;
+	}
+
+	function loadBookMarkWithAsk(num, func=void)
+	{
+		// 栞番号 num から栞を読み出す
+		num = +num;	dm("load: "+num);
+		// そのとき、読み出すかどうかをたずねる
+		if(num < numBookMarks && bookMarkDates[num] == "" &&
+			!Storages.isExistentStorage(getBookMarkFileNameAtNum(num)))
+			// bookMarkDates が空文字の場合は栞は存在しない
+			return false;
+		var prompt;
+		prompt += "「"+ bookMarkNames[num] + "」\n[記録日時:"+bookMarkDates[num]+"]\n"+loadActionName+loadActionNameLast.substring(1,1)+"ますか?";
+		askYesNo2(prompt, loadBookMarkAskOk, num, func);
+	}
+	function loadBookMarkAskOk(result, num, func=void)
+	{
+		if(result)
+		{
+//			release(yesnolayer);
+			loadBookMark(num);
+			func() if func != void;
+		}
+	}
+
+	function eraseBookMarkWithAsk(num, func=void)
+	{
+		// 栞番号 num を削除する
+		num = +num;	dm("erase: "+num);
+		// そのとき、削除しても良いかをたずねる
+		if(num < numBookMarks && //bookMarkDates[num] == "" &&
+			!Storages.isExistentStorage(getBookMarkFileNameAtNum(num)))
+			return false;
+		var prompt;
+		if(bookMarkProtectedStates[num])
+			prompt	= "上書き禁止のデータですが、";
+		prompt += "「"+ bookMarkNames[num] + "」\n[記録日時:"+bookMarkDates[num]+"]を削除しますか？";
+		askYesNo2(prompt, eraseBookMarkAskOk, num, func);
+	}
+	function eraseBookMarkAskOk(result, num, func=void)
+	{
+		if(result)
+			eraseBookMark(num);
+
+		func(result) if func != void;
+	}
+
+	function eraseBookMark(num)
+	{
+		// 栞を消す
+		// num < numBookMarks の時にしか動作しないようになったので注意
+		if(num < numBookMarks)
+		{
+//			if(!bookMarkProtectedStates[num])
+			{
+				Plugins.link("util.dll");
+				bookMarkNames[num] = void;
+				bookMarkDates[num] = void;
+				bookMarkProtectedStates[num] = false;
+				scflags.bookMarkComments[num] = void if scflags.bookMarkComments!=void;
+				var fname = getBookMarkFileNameAtNum(num);
+				DeleteFile(fname);
+
+				//	強制的にファイルパスキャッシュを更新
+				//	(isExistentStorageが削除したファイルをあると勘違いするので)
+				Storages.addAutoPath("image/");
+				fname = Storages.getPlacedPath(fname);
+
+				setBookMarkMenuCaptions();
+				Plugins.unlink("util.dll");
+			}
+		}
+	}
+
+	function onConductorLabel(label, page)
+	{
+		// コンダクタがラベルを通過した
+		if(!usingExtraConductor)
+		{
+			incRecordLabel(true);
+			setRecordLabel(conductor.curStorage, label);
+		}
+		setUserSpeed();
+		if(!usingExtraConductor)
+		{
+			if(!getCurrentRead() && skipMode != 4)
+				cancelSkip(); // 未読なのでスキップを停止
+			currentLabel = label;
+		}
+		if(page !== void && page !== '')
+		{
+			if(page[0] == '&') page = Scripts.eval((page.substring(1)));
+			currentPageName = page;
+		}
+		if(page !== void)
+		{
+			pushHistoryOfStore();
+			stablePosibility = false;
+			dm(conductor.curStorage + " : ラベル/ページ : " + label + "/" + currentPageName);
+			if(usingExtraConductor) throw new Exception("右クリックサブルーチン内/extraCondutor"
+				"サブルーチン内では保存可能なラベルを記述できません");
+//			dm("store = "+((!sf.stopStoreFlags && !f.derangedScreen) ? "ok" : "no")+@"(sf.stopStoreFlags=${sf.stopStoreFlags}/sf.derangedScreen=${sf.derangedScreen})");
+			if(	!sf.stopStoreFlags &&	//	フラグ保存停止中
+				!f.derangedScreen &&	//	かつ、画面が乱れていない(dashなどで画面に直接描画したままになっていない)
+				!f.wavingScreen)		//	かつ、画面が波打っていない(hazeが実行中でない)
+				storeFlags(), storeLabelPassed = true, setMenuAccessibleAll();	//	フラグを保存したり。
+			if(recordHistoryOfStore == 1) // 1 : 保存可能なラベルごと
+				setToRecordHistory();
+		}
+		return true;
+	}
+
+	//------------------------------------------ パッドのキーマッピング作成 --
+
+	function createPadKeyMap()
+	{
+		// パッド入力とそれに対応する動作のマッピング。
+		// 標準では十字キーはキーボードのカーソルキーにマッピング、
+		// ボタン1 は Return、ボタン2 は ESC、ボタン3 は スキップ
+		// にマッピングされる。
+		// 関数を指定した場合はボタンを押したときにはその関数が呼ばれる。
+
+		padKeyMap = %[
+			VK_PADLEFT =>		VK_LEFT,
+			VK_PADRIGHT =>		VK_RIGHT,
+			VK_PADUP =>			VK_UP,
+			VK_PADDOWN =>		VK_DOWN,
+			VK_PAD1 =>			VK_RETURN,
+			VK_PAD2 =>			VK_ESCAPE,
+			VK_PAD3 =>
+				function(ev) {
+					skipToStop2();
+				},
+			];
+
+		// padKeyMapReverse を作成
+		padKeyMapReverse = %[];
+		var ar = [];
+		ar.assign(padKeyMap);
+		for(var i = 0; i < ar.count; i += 2)
+		{
+			if(typeof(ar[i+1]) != "Object")
+			{
+				padKeyMapReverse[ar[i+1]] = ar[i];
+			}
+		}
+	}
+
+	function onMouseMove()
+	{
+		inputDevice	= "mouse";
+		super.onMouseMove(...);
+	}
+
+	function onMouseDown(x, y, button, shift)
+	{
+		isClickRepeat	= true;
+		inputDevice	= "mouse";
+		super.onMouseDown(...);
+	}
+
+	function onMouseUp(x, y, button, shift)
+	{
+		isClickRepeat	= false;
+		super.onMouseUp(...);
+	}
+
+	function onMouseWheel(shift, delta, x, y)
+	{
+		// ホイールが回転した
+		global.Window.onMouseWheel(...);
+//		dm(shift+","+delta+","+x+","+y+" enabled="+historyEnabled+" / visible = "+historyLayer.visible);
+		if(historyEnabled)	//	テキスト履歴を表示してもいいとき
+		{
+			if(!historyLayer.visible)
+			{
+				if(delta > 0)
+					showHistoryByKey(); // メッセージ履歴を表示
+				else if(System.getTickCount() - lastHistoryHiddenTick > 150) 
+						onPrimaryClick(); // クリックをエミュレート
+				// ↑ tick を比較しているのは、メッセージ履歴を隠す操作とホイールを
+				// 手前に回す操作が連続した場合に勝手に読み進むのをある程度防ぐ仕掛け
+			}
+			else
+			{
+				// メッセージ履歴にイベントを垂れ流す
+				historyLayer.windowMouseWheel(shift, delta, x, y);
+			}
+		}
+	}
+
+	function onKeyDown(key, shift)
+	{
+		//	キー入力があったら、マウスカーソルを消す
+		if(noConcurrentKeys[key])
+		{
+			//	併用するキー以外
+			hideMouseCursor();	inputDevice	= "keyboard";
+		}
+
+		//	優先度の高いキー入力
+		if(key == VK_RETURN && (shift & ssAlt))
+		{
+			//	Alt + Enter: ウィンドウ<->フルスクリーン切り替え
+			dm("change screen mode.");
+			if(fullScreened)
+				onWindowedMenuItemClick();
+			else if(this == kag)
+				onFullScreenMenuItemClick();
+		}
+		else
+			super.onKeyDown(...);
+	}
+
+	function processKeys(key, shift)
+	{
+		if(checkProceedingKey(key, shift)) return;
+
+		if(key == #'F')
+		{
+			// 次の選択肢/未読まで進む
+			skipToNextStopByKey();
+			return;
+		}
+
+		if(key == #'B')
+		{
+			// 前に戻る
+			goBackByKey();
+			return;
+		}
+
+		if(key == #'A')
+		{
+			// 自動的に読み勧める
+			switchAutoModeByKey();
+			return;
+		}
+
+		if(freeSaveDataMode)
+		{
+			if(key == #'S')
+			{
+				// 栞をはさむ
+				if(typeof this.storeMenu != "undefined" && storeMenu.enabled)
+					storeMenu.click();
+				return;
+			}
+
+			if(key == #'L')
+			{
+				// 栞をたどる
+				if(typeof this.restoreMenu != "undefined" && restoreMenu.enabled)
+					restoreMenu.click();
+				return;
+			}
+		}
+
+		if(key == #'R' || key == VK_UP || key==VK_PRIOR)
+		{
+			// メッセージ履歴を表示
+			showHistoryByKey();
+			historyLayer.keyDisregardOnce	= true;
+			return;
+		}
+
+		if(isKeyOfSub(key))
+		{//	BackSpaceやDeleteキーにもESCと同じ役割を与える
+			// メッセージを消す
+			if(typeof this.rightClickMenuItem != "undefined" &&
+				rightClickMenuItem.enabled)
+			{
+				rightClickMenuItem.click(); // クリックをエミュレート
+				return;
+			}
+		}
+	}
+
+	function checkProceedingKey(key, shift)
+	{
+		// key が読みすすみのキーの場合はキーを処理し、
+		// true を返す。そうでなければ false を返す
+		if(sf.skipKey<2)
+		{
+			if(isKeyOfPrimary(key))
+			{
+//				dm(shift+" & "+ssRepeat+" = "+(shift & ssRepeat)+" / clickSkipEnabled = "+clickSkipEnabled+" / "+conductor.status+" == "+conductor.mRun+" = "+(conductor.status == conductor.mRun));
+				if((shift & ssRepeat) && clickSkipEnabled)/* && 
+					conductor.status == conductor.mRun)*/
+				{
+					dm("key repeat.");
+					// キーリピート
+					if(skipMode != 4 && skipKeyRepressed)
+						skipToStop2(); // まだskipMode 4に入っていない場合は早送りモードに入る
+					// skipKeyRepressed をチェックするのは
+					// 連続してキーリピートが発生しているときに
+					// cancelSkip 後にスキップに突入するのを防ぐため
+				}
+				else
+				{
+//					dm("key press.");
+					skipKeyRepressed = true;
+					onPrimaryClickByKey();
+				}
+				return true;
+			}
+		}
+		else
+		{
+			var greetkey = [ ,, VK_CONTROL, VK_SHIFT ];
+			if(key == greetkey[sf.skipKey] && clickSkipEnabled)
+			{
+				skipToStop2() if skipMode!=4;
+				return true;
+			}
+			else if(isKeyOfPrimary(key) && (!(shift & ssRepeat)))
+			{
+				//	CtrlやShiftの時も、ReturnやSpaceの押下は有効
+				onPrimaryClickByKey();
+				return true;
+			}
+		}
+		return false;
+	}
+
+	function skipKeyPressing()
+	{
+		if(sf.skipKey<2)
+			// VK_RETURN あるいは VK_SPACE が押されているかどうか
+			return System.getKeyState(VK_RETURN) || System.getKeyState(VK_SPACE) || System.getKeyState(VK_DOWN);
+		else if(sf.skipKey<3)
+			return System.getKeyState(VK_CONTROL);
+		else if(sf.skipKey<4)
+			return System.getKeyState(VK_SHIFT);
+	}
+
+	function isKeyOfPrimary(key)
+	{
+		//	ここに書いてあるキーが押されると、先に進む
+		//		Enter, ↓キー, Space
+		return key==VK_RETURN || key==VK_SPACE || key==VK_DOWN;
+	}
+
+	function isKeyOfSub(key)
+	{
+		//	キャンセルしたりサブメニューを開くキー
+		//		Escape, Home
+		return key==VK_ESCAPE || key==VK_HOME;
+	}
+
+	function goToStartWithAsk()
+	{
+		askYesNo2(isChangedAfterSaving ? SMsg_saveOrReturn : SMsg_returnTop, onReturnTop);
+	}
+
+	property enabledAutoMode
+	{
+		setter(flag)
+		{
+			f.enabledAutoMode	= flag;
+			cancelAutoMode() if !flag;	//	自動実行に切り替えられないようにした場合、自動実行を停止する
+		}
+		getter	{ return f.enabledAutoMode; }
+	}
+
+	function onAutoModeMenuItemClick(sender)
+	{
+		if(!enabledAutoMode)	return;	//	自動実行に切り替えられない
+		if(autoMode) cancelAutoMode(); else enterAutoMode();
+	}
+
+	function enterAutoMode()
+	{
+		popupMessage("自動読み進みを開始します。") if !autoMode;
+		super.enterAutoMode(...);
+	}
+
+	function cancelAutoMode()
+	{
+		popupMessage("自動読み進みを終了します。") if autoMode;
+		super.cancelAutoMode(...);
+	}
+
+	function skipToStop()
+	{
+		popupMessage("次の選択肢/未読まで進みます。") if skipMode!=3;
+		super.skipToStop();
+	}
+
+	function cancelSkip()
+	{
+		popupMessage("自動進行をキャンセルします。") if skipMode==3;
+		super.cancelSkip(...);
+	}
+
+	function onExitMenuItemClick(sender)
+	{
+		onCloseQuery();		//	メニューから選ばれた時も終了してよいか聞く
+	}
+
+	function onReturnTop(result)
+	{
+		if(result)
+			goToStart();
+	}
+
+	function getHandlers()
+	{
+		var funcs = super.getHandlers();	//	本来の命令群を取り出す
+
+		///	追加命令 ///
+		funcs.shock		= doShock;
+		funcs.stopshock	= stopShock;
+		funcs.wshock	= waitShock;
+		funcs.shockT	= doShock;
+		funcs.shockt	= doShock;
+
+		///	ルビ(左寄せ) ///
+		funcs.rubyl		= function(elm)
+		{
+			// 次の文字に対するルビ設定
+			if(currentWithBack) current.comp.setRuby(elm.text, "left");
+			current.setRuby(elm.text, "left");
+			return 0;
+		} incontextof this;
+
+		funcs.ruby	= function(elm)
+		{
+			if(currentWithBack) current.comp.setRuby(elm.text);
+			current.setRuby(elm.text);
+			if(historyWriteEnabled) historyLayer.storeRuby(elm.text);
+			return 0;
+		} incontextof this;
+
+		///	待ち(スキップ受け入れ) ///
+		funcs.wait		= function(elm)
+		{
+			//	waitもスキップを受け入れる
+			if(!sf.effectSkip && skipMode<2)
+				return doWait(elm);		//	スキップ状態でないときのみ待つ
+			else
+				return 0;
+		} incontextof this;
+
+		///	メッセージボタンの消去 ///
+		funcs.cb	= function(elm)
+		{
+			if(currentWithBack)	current.comp.clearButtons();
+			current.clearButtons();
+			return 0;
+		} incontextof this;
+		///	フェードするメッセージボタンの追加 ///
+		funcs.fadebutton	= function(elm)
+		{
+			if(elm.page == "back")
+			{
+				if(currentWithBack) current.addFadeButton(elm);
+				current.comp.addFadeButton(elm);
+			}
+			else
+			{
+				if(currentWithBack) current.comp.addFadeButton(elm);
+				current.addFadeButton(elm);
+			}
+			return 0;
+		} incontextof this;
+		///	スライドするメッセージボタンの追加 ///
+		funcs.slidebutton	= function(elm)
+		{
+			if(elm.page == "back")
+			{
+				if(currentWithBack) current.addSlideButton(elm);
+				current.comp.addSlideButton(elm);
+			}
+			else
+			{
+				if(currentWithBack) current.comp.addSlideButton(elm);
+				current.addSlideButton(elm);
+			}
+			return 0;
+		} incontextof this;
+		///	テキスト履歴にだけテキストを追加するの追加 ///
+		funcs.onlyhistory	= function(elm)
+		{
+			if(historyWriteEnabled && elm.text !== void)
+			{
+				with(historyLayer)
+				{
+					var text = elm.text;
+					for(var i=0; i<text.length; i++)
+					{
+						if(text[i] == "[")
+						{
+							var pos		= text.indexOf("]");
+							var tagline	= text.substr(i+1, pos-i-1);
+							var attrstr	= tagline.split(" ");
+							var curtag	= attrstr[0];
+							var attr	= %[];
+							for(var j=1; j<attrstr.count; j++)
+							{
+								var kv = attrstr[j].split("=");
+								attr[kv[0]]	= kv[1];
+							}
+							i	= pos;
+							dm("onlyhistory: "+curtag+".text="+attr.text);
+							if(curtag == "ruby")
+								.storeRuby(attr.text);
+						}
+						else
+							.store(text[i]);
+					}
+					.reline();	//	最後に改行
+				}
+			}
+			return 0;
+		} incontextof this;
+		/// テキスト履歴にだけ改ページを追加するの追加 ///
+		funcs.pghistory	= function(elm)
+		{
+			if(historyWriteEnabled)
+				historyLayer.repage();
+			return 0;
+		} incontextof this;
+		/// 自動実行の可否切替の追加 ///
+		funcs.setautomode	= function(elm)
+		{
+			enabledAutoMode	= +elm.enabled;
+			return 0;
+		} incontextof this;
+		/// 繰り返し処理move ///
+		funcs.loopmove	= function(elm)
+		{
+			getLayerFromElm(elm).beginLoopMove(elm);
+			return 0;
+		} incontextof this;
+		/// 特定のレイヤーのみstopmoveする ///
+		funcs.stopmove	= function(elm)
+		{
+			if(elm.layer !== void)
+			{
+				if(elm.page !== void)
+					getLayerFromElm(elm).stopMove();	//	特定のレイヤーのみ
+				else
+				{//	特定の裏表両方のレイヤー
+					elm.page	= "fore";	getLayerFromElm(elm).stopMove();
+					elm.page	= "back";	getLayerFromElm(elm).stopMove();
+				}
+			}
+			else
+				stopAllMoves();		//	全てのレイヤー
+			return 0;
+		} incontextof this;
+
+		return funcs;
+	}
+
+	function onCloseQuery()
+	{
+		//	処理を一時的に停止
+		forEachEventHook('onCloseQuery',
+			function(handler, f) { handler(); } incontextof this);
+
+		if(exceptionOccured)
+		{
+			//	例外発生時はデータを保存しない
+			MYshutdown();
+		}
+		else
+		{
+			lockSnapshot() if canStore();
+			if(!askOnClose) { global.Window.onCloseQuery(true); return; }
+			var msg = isChangedAfterSaving ? SMsg_saveOrExit : (canStore() ? SMsg_saveAndExit : SMsg_exitGame);
+			MYclose(askYesNo(msg,, true));
+		}
+	}
+
+	function MYclose(result)
+	{
+		if(canStore() && result)
+			lockSnapshot() if snapshotLockCount == 0;
+		if(result)
+		{
+//			yesnolayer.visible	= false if yesnolayer isvalid;
+			saveCurrentStatus();	//	保存可能なら、進行状況も保存する(不可能ならチケットデータのみ)
+			saveSystemVariables();
+			if(kag.mainWindow == kag)
+				MYshutdown();
+		}
+		else
+		{
+			forEachEventHook('onCancelClose',
+				function(handler, f) { handler(); } incontextof this);
+		}
+	}
+
+	function MYshutdown()
+	{
+		global.shutdownTrigger =
+			new AsyncTrigger(MYhandleShutdown, '');
+		global.shutdownTrigger.cached = true;
+		global.shutdownTrigger.trigger();
+		if(conductor.status == conductor.mRun)
+			conductor.interrupt();
+	}
+
+	function MYhandleShutdown()
+	{
+		System.exit();
+	}
+
+	function askYesNo2(msg, func, arg1, arg2, defaultcancel=false)
+	{
+		MYaskYesNo(this, fore.base, msg, func, arg1, arg2, defaultcancel);
+	}
+
+	function onBackStartMenuItemClick(sender)
+	{
+		goBackHistory(false);	//	戻るか確認しない
+	}
+
+	//	テキスト履歴を表示している間は、メッセージレイヤーを非表示にしておく
+	var	isMessageLayerVisible = [];
+	function showHistory()
+	{
+		if(transCount != 0) return;	//	トランジションが実行されているときはテキスト履歴を表示しない
+		super.showHistory(...);
+		var msgs = kag.fore.messages;
+		for(var i=0; i<msgs.count; i++)
+		{
+			isMessageLayerVisible[i]	= msgs[i].visible;
+			msgs[i].visible	= false;	//	メッセージを非表示にする
+		}
+	}
+
+	function hideHistory()
+	{
+		if(historyShowing)
+		{
+			super.hideHistory(...);
+			//	メッセージレイヤーを元の状態に戻す
+			var msgs = kag.fore.messages;
+			for(var i=0; i<msgs.count; i++)
+				msgs[i].visible	= isMessageLayerVisible[i];
+		}
+	}
+
+	//	メッセージ位置の記憶
+	function storeMessagePos()
+	{
+		if(lastMessagePos != void)
+			return;
+
+		dm("store message pos");
+		lastMessagePos	= [];
+		var	pages	= [ "fore", "back" ];
+		for(var i=0; i<pages.count; i++)
+		{
+			lastMessagePos[i]	= [];
+			var	msgs			= this[pages[i]].messages;
+			for(var j=0; j<msgs.count; j++)
+			{
+				lastMessagePos[i][j]	= [msgs[j].left, msgs[j].top];
+				dm(@"lastMessagePos[${i}][${j}] = (${lastMessagePos[i][j][0]}, ${lastMessagePos[i][j][1]})");
+			}
+		}
+	}
+
+	//	メッセージ位置の記憶を消去
+	function restoreMessagePos()
+	{
+		if(lastMessagePos == void)
+			return;
+
+		dm("restore message pos");
+		var	pages	= [ "fore", "back" ];
+		for(var i=0; i<pages.count; i++)
+		{
+			var	msgs	= this[pages[i]].messages;
+			var	pos		= lastMessagePos[i];
+			for(var i=0; i<msgs.count; i++)
+				msgs[i].setPos(pos[i][0], pos[i][1]);
+		}
+
+		invalidate lastMessagePos;	lastMessagePos	= void;
+	}
+
+	function doQuake(elm)
+	{
+		//	スキップ中は揺れない
+		if(skipMode>=2)	return 0;
+
+		//	特殊効果がカットされているなら揺れない
+		if(!sf.speffect)	return 0;
+
+		//	前景を揺らさないか
+		noSwingFGImage	= elm.nofg !== void ? +elm.nofg : false;
+
+		//	現時点でのメッセージウィンドウ座標を保存
+		if(!quaking && !shocking)
+		{
+			//	ただし、揺れたり衝撃を受けていない時
+			storeMessagePos();
+
+			//	前景レイヤーも保存しておく(揺らさないなら必要ない)
+			if(!noSwingFGImage)
+			{
+				var fores = fore.layers, backs = back.layers;
+				for(var i=0; i<fores.count; i++)
+				{
+					with(fores[i])	.storePos() if .visible;
+					with(backs[i])	.storePos() if .visible;
+				}
+			}
+		}
+
+		//	振幅の減衰
+		quakeStartTick	= System.getTickCount();	//	減衰を計算するために必要
+		finishQuake	= elm.finish!==void ? +elm.finish : 0;
+
+		//	立ち絵を、終わった時に元の位置に戻すか?
+		returnOriginalPosition	= elm.noreturn!==void ? +elm.noreturn : false;
+
+		super.doQuake(...);
+	}
+
+	function onQuakeTimerInterval()
+	{
+		// quakeTimer により呼ばれる
+		var tick = System.getTickCount();
+		if(quakeEndTick != -1 && tick > quakeEndTick) {
+			stopQuake(); return;
+		}
+		if(historyShowing || pauseQuaking)
+		{
+			// メッセージ履歴レイヤ表示中はさすがに揺れていられない
+			setAllPos(0, 0);
+			return;
+		}
+		var per;
+		if(quakeEndTick != -1)
+		{
+			//	時間に制限のある時だけ減衰する
+			per = 1.0-((tick - quakeStartTick) / (quakeEndTick - quakeStartTick)) *
+				(1.0-finishQuake);
+		}
+		else
+			per	= 1.0;
+		var x, y;
+		if(quakeHorzMax == quakeVertMax)
+		{
+			// だいたい同じ
+			x = int((Math.random() * quakeHorzMax - quakeHorzMax)*per);
+			y = int((Math.random() * quakeVertMax - quakeVertMax)*per);
+		}
+		else if(quakeHorzMax < quakeVertMax)
+		{
+			// 縦揺れ
+			x = int((Math.random() * quakeHorzMax - quakeHorzMax)*per);
+			y = int(((quakePhase ? Math.random() : -Math.random()) * quakeVertMax)*per);
+		}
+		else
+		{
+			// 横揺れ
+			x = int(((quakePhase ? Math.random() : -Math.random()) * quakeHorzMax)*per);
+			y = int((Math.random() * quakeVertMax - quakeVertMax)*per);
+		}
+		quakePhase = !quakePhase;
+		lastQuakeX = x, lastQuakeY = y;
+		setAllPos(x+lastShockX, y+lastShockY);
+	}
+
+	function stopQuake()
+	{
+//		super.stopQuake(...);
+		if(quaking)
+		{
+			resetAllPos();
+			quakeTimer.enabled = false;
+			quaking = false;
+			conductor.trigger('quake');
+			lastQuakeX = lastQuakeY = 0;	//	揺れが終了したら前回値をクリア
+		}
+	}
+
+	function setAllPos(x, y, noSetFgimage)
+	{
+		//	背景を揺らす( x,yは本来の位置との差分量 )
+		setLayerPos(x, y);
+
+		//	メッセージレイヤーは揺らさない
+		storeMessagePos();
+		var	pages	= [ "fore", "back" ];
+		for(var i=0; i<pages.count; i++)
+		{
+			var	msgs	= this[pages[i]].messages;
+			var	pos		= lastMessagePos[i];
+			for(var i=0; i<msgs.count; i++)
+				msgs[i].setPos(pos[i][0]-x, pos[i][1]-y);
+		}
+
+		//	立ち絵は背景の半分
+		noSetFgimage	= noSetFgimage === void ? noSwingFGImage : noSetFgimage;
+		if(!noSetFgimage)
+		{
+//			dm(@"x = ${x} / x >> 1 = ${x>>1} / x \ 2 = ${x\2} / y = ${y} / y >> 1 = ${y>>1} / y \ 2 = ${y\2}");
+//			x >>=1, y >>= 1;	//	x, y が小数である可能性があるため、シフトで割ると値がおかしくなることがある。
+			x \= 2, y \= 2;
+			var fores = fore.layers, backs = back.layers;
+			for(var i=0; i<fores.count; i++)
+			{
+				with(fores[i])	.offsetPos(-x, -y) if .visible;
+				with(backs[i])	.offsetPos(-x, -y) if .visible;
+			}
+		}
+	}
+
+	//	元の位置へ戻す
+	function resetAllPos()
+	{
+		//	背景の位置を戻す
+		setLayerPos(0, 0);
+
+		//	メッセージレイヤーの位置を元へ
+		restoreMessagePos();
+
+		//	前景レイヤーも元の位置へ
+		if(!(returnOriginalPosition === void ? noSwingFGImage : returnOriginalPosition))
+		{
+			var	fores = fore.layers, backs = back.layers;
+			for(var i=0; i<fores.count; i++)
+			{
+				with(fores[i])	.restorePos() if .visible;
+				with(backs[i])	.restorePos() if .visible;
+			}
+		}
+	}
+
+	//	sinカーブで揺れる処理
+	function doShock(elm)
+	{
+		//	スキップ中は揺れない
+		if(skipMode>=2)	return 0;
+
+		//	特殊効果がカットされているなら揺れない
+		if(!sf.speffect)	return 0;
+
+		//	揺れの方向(指定が無ければ縦に10)
+		shockVertMax = elm.vmax!==void ? +elm.vmax : 0;
+		shockHorzMax = elm.hmax!==void ? +elm.hmax : 0;
+
+		//	処理時間
+		shockStartTick	= System.getTickCount();
+		shockEndTick	= elm.time!==void ? +elm.time : 1000;
+
+		//	回転数(1でπ)
+		shockRotate		= (elm.count!==void ? +elm.count : 2) * Math.PI;
+
+		//	最終的な振幅
+		finishShock		= elm.finish!==void ? +elm.finish : 0;
+
+		//	前景を揺らさないか
+		noSwingFGImage	= elm.nofg !== void ? +elm.nofg : false;
+
+		//	現時点でのメッセージウィンドウ座標を保存
+		if(!quaking && !shocking)
+		{
+			//	前景レイヤーも保存しておく
+			if(!noSwingFGImage)
+			{
+				var fores = fore.layers, backs = back.layers;
+				for(var i=0; i<fores.count; i++)
+				{
+					with(fores[i])	.storePos() if .visible;
+					with(backs[i])	.storePos() if .visible;
+				}
+			}
+		}
+
+		//	立ち絵を、終わった時に元の位置に戻すか?
+		returnOriginalPosition	= elm.noreturn!==void ? +elm.noreturn : noSwingFGImage;	//	揺らさないなら元の位置へ戻さない
+
+		//	衝撃処理中だったら、ハンドラを再登録しない
+		if(!shocking)
+		{
+			System.addContinuousHandler(shock_handler);
+			shocking	= true;
+		}
+		lastShockTick	= shockStartTick;
+
+		return 0;
+	}
+
+	function stopShock()
+	{
+		if(shocking)
+		{
+			resetAllPos();
+			System.removeContinuousHandler(shock_handler);
+			shocking	= false;
+			conductor.trigger('shock');
+			lastShockX = lastShockY = 0;	//	衝撃が終了したら前回値はクリア
+		}
+		return 0;
+	}
+
+	function shock_handler(tick)
+	{
+		//	更新間隔が短すぎるなら、処理を行わない
+		if(tick-lastShockTick<minInterval)
+			return;
+		lastShockTick	= tick;
+
+		var past = tick - shockStartTick;
+		if(past>shockEndTick)
+		{
+			stopShock();
+			return;
+		}
+		if(historyShowing || pauseQuaking)
+		{	//	履歴表示中は揺らさない
+			setAllPos(0, 0);
+			return;
+		}
+		var prg = past/shockEndTick;
+		var per = Math.sin(prg * shockRotate);
+		var atten = (1.0 - prg * (1.0 - finishShock)) * per;
+		var x	= shockHorzMax * atten;
+		var y	= shockVertMax * atten;
+		lastShockX = x, lastShockY = y;	//	衝撃を記憶
+		setAllPos(x+lastQuakeX, y+lastQuakeY);
+	}
+
+	function waitShock(elm)
+	{
+		// 揺れが終了するまでまつ
+		if(!shocking) return 0; // 揺れていなければ待たない
+		if(elm.canskip !== void && +elm.canskip && clickSkipEnabled)
+		{
+			// スキップできる場合
+			if(skipMode)
+			{
+				// スキップ中の場合
+				stopShock();
+				return 0; // スキップ中の場合は揺れを停止させて返る
+			}
+			conductor.wait(%[
+				click : function
+				{
+					stopShock(); // 揺れは停止する
+				} incontextof this,
+
+				shock : function
+				{
+					// やることなし
+				} incontextof this
+				]);
+		}
+		else
+		{
+			// スキップできない場合
+			conductor.wait(%[
+				shock : function
+				{
+					// やることなし
+				} incontextof this
+				]);
+		}
+		return -2;
+	}
+
+	//	クリックリピート
+	function onClickRepeat()
+	{
+		if(!isClickRepeatPause)
+			onPrimaryClick() if !isClickIfStable || inStable;
+		if(isClickRepeat==true)
+		{
+			isClickRepeat	|= 2;
+			clickRepeatTimer.interval	= clickRepeatTime;	//	2回目以降の間隔
+		}
+	}
+
+	var clickRepeatPauseCount	= 0;
+	function pauseClickRepeat(pause=true, force=false)
+	{
+//		dm("pause["+clickRepeatPauseCount+"]: "+pause+" / force = "+force);
+		if(force && !pause)
+		{
+			//	強制的に一時停止状態を解除
+			isClickRepeatPause		= false;
+			clickRepeatPauseCount	= 0;
+		}
+		else if(pause)
+		{
+			isClickRepeatPause	= true;
+			clickRepeatPauseCount++;	//	クリックリピート一時停止にされた回数
+		}
+		else
+		{
+			clickRepeatPauseCount-- if clickRepeatPauseCount>0;
+			if(clickRepeatPauseCount==0)	//	クリックリピート一時停止にされた回数が0になった
+				isClickRepeatPause	= false;	//	クリックリピート一時停止を解除
+		}
+
+		if(!isClickRepeat)
+			return;
+
+//		dm("click repeat pause: "+pause);
+		if(clickRepeatTimer.enabled)
+		{
+			if(pause)
+			{
+				//	一時停止させる
+				clickRepeatTimer.enabled	= false;
+			}
+		}
+		else
+		{
+			if(!pause)
+			{
+				//	再開させる
+				clickRepeatTimer.enabled	= true;
+			}
+		}
+	}
+
+	function onSESoundBufferStop(id)
+	{
+		super.onSESoundBufferStop(...);
+//		dm("stop: "+se[id].playingStorage);
+		se[id].playingStorage	= "";	//	再生が終了したので、再生中のファイル名を消す
+	}
+
+	//	ウィンドウモードへ変更
+	function onWindowedMenuItemClick()
+	{
+		if(isPossibleChangeScreen)	//	変更可能なときのみ
+			super.onWindowedMenuItemClick(...);
+	}
+
+	//	フルスクリーンモードへ変更
+	function onFullScreenMenuItemClick()
+	{
+		if(isPossibleChangeScreen)	//	変更可能なときのみ
+			super.onFullScreenMenuItemClick(...);
+	}
+
+	function doWait(elm)
+	{
+		// wait タグの処理
+		var waittime;
+		if(elm.mode == 'until')
+		{
+			// until モード
+			waittime = timeOrigin + +elm.time - System.getTickCount();
+			if(waittime < 0) { lastWaitTime = 0; return 0; } // すでに時間が経過している
+			lastWaitTime = waittime;
+			if(waittime < 6) return 0; // あまりに待ち時間が短いので待たない
+		}
+		else
+		{
+			waittime = +elm.time;
+		}
+		return waitTime(waittime, (elm.canskip === void || +elm.canskip) && clickSkipEnabled, elm.onskip);
+	}
+
+	//	onskipを取り入れた時間待ち
+	function waitTime(waittime, canskip, onskip)
+	{
+		// waittime 分待つ
+		if(waittime == 0) return 0;
+		if(canskip)
+		{
+			// スキップできる場合
+			if(skipMode)
+			{
+				// スキップ中の場合
+				if(onskip !== void) onskip!;
+				return 0; // すぐに返る
+			}
+			conductor.waitWithTimeOut(%[
+				click : function(arg)
+				{
+					if(arg !== void) arg!;
+				} incontextof this,
+				click_arg : onskip,
+
+				timeout : function
+				{
+					// やることなし
+				} incontextof this
+				], waittime);
+		}
+		else
+		{
+			// スキップできない場合
+			conductor.waitWithTimeOut(%[
+				timeout : function
+				{
+					// やることなし
+				} incontextof this
+				], waittime);
+		}
+		return -2; // break
+	}
+
+	//	自動改ページ時のクリック後の処理を、MessageLayer.clear2を直接呼び出すのではなく、
+	//	一度autoFormFeedを呼び出した後に実行するようにした。
+	function showPageBreakAndClear()
+	{
+		// メッセージレイヤが最終行まで達して自動改ページがされるときに
+		// 呼ばれる。現在のメッセージレイヤにページ待ち記号を表示し、
+		// 実行再開時には MessageLayer.clear2 → KAGWindow.autoFormFeed を呼ぶ
+		stablePosibility = true;
+		if(skipMode == 1 || skipMode == 2) cancelSkip();
+		if(skipMode == 4 && !skipKeyPressing()) cancelSkip();
+		var lasttagname = conductor.lastTagName;
+		if(!autoMode && ((!canIgnoreL() && lasttagname == 'l') || lasttagname == 'p'))
+			{ autoFormFeed(); return -5; }// いったんイベントを処理(タグは後回し)
+		if(skipMode) { autoFormFeed(); return -5; }// いったんイベントを処理(タグは後回し)
+
+		if(!current.nodeVisible)
+		{
+			dm("警告 : 非表示になっている" +
+				(currentPage ? "裏" : "表") + "メッセージレイヤ" + currentNum +
+				"で自動改ページクリック待ちになりました");
+		}
+
+		if(autoMode)
+		{
+			conductor.waitWithTimeOut(%[ // タイムアウト付きウェイト
+				click : function
+				{
+					autoFormFeed(); // autoFormFeed を呼ぶ
+					cancelAutoMode();
+				} incontextof this,
+				timeout : function
+				{
+					autoFormFeed(); // autoFormFeed を呼ぶ
+				} incontextof this
+				], autoModePageWait <= 0 ? 1 : autoModePageWait);
+			return -3;
+		}
+		else
+		{
+			current.showPageBreakGlyph(pageBreak);
+			storeClickGlyphState("page");
+
+			// conductor を 'click' まで待ち状態に
+			conductor.wait(%[
+				click : function
+				{
+					clickWaiting = false;
+					fore.base.cursor = cursorDefault;
+					autoFormFeed(); // autoFormFeed を呼ぶ
+					notifyRun();
+				} incontextof this
+				]);
+			clickWaiting = true;
+			fore.base.cursor = cursorWaitingClick;
+			notifyStable();
+			return -3;
+		}
+	}
+
+	function autoFormFeed()
+	{
+		current.clear2();
+		if(f.afterAutoFormFeed != void)
+			global[f.afterAutoFormFeed]();
+	}
+
+	property isClickRepeat
+	{
+		setter(i)
+		{
+//			dm("click repeat start: "+i);
+			if(i!=(isClickRepeat & 1))
+			{
+				if(i)
+				{
+					//	リピート開始
+					clickRepeatTimer	= new Timer(onClickRepeat, "") if clickRepeatTimer==void;
+					clickRepeatTimer.interval	= clickRepeatTime1st;	//	初回の間隔
+					clickRepeatTimer.enabled	= true;
+				}
+				else
+				{
+					//	リピート終了
+					clickRepeatTimer.enabled	= false;
+				}
+				_isClickRepeat	= i;
+			}
+		}
+		getter	{ return _isClickRepeat; }
+	}
+
+	property horizon
+	{
+		setter(h)
+		{
+			if(h != _horizon)
+			{
+/*				var dv = h - _horizon;
+				for(var i=0; i<numCharacterLayers; i++)
+				{
+					fore.layers[i].top	-= dv;
+					back.layers[i].top	-= dv;
+				}
+*/				_horizon	= h;
+			}
+		}
+		getter	{ return _horizon; }
+	}
+
+	//	現在の拡大縮小アフィン変換の補間モード
+	property currentInterpolationMode
+	{
+		getter { return sf.speffect ? stFastLinear : stNearest; }
+	}
+
+	function onLayerQuakeStop(triggername)
+	{
+		conductor.trigger(triggername);
+	}
+
+	//	指定のレイヤーの揺れを止める
+	function waitLayerQuake(elm)
+	{
+		if(quakeCount == 0)	return 0;	//	揺れてない
+
+		var layer	= getLayerFromElm(elm);
+		if(layer.isQuaking)
+		{
+			var we	= %[ layer.quakeObject.triggername => function { kag.updateBeforeCh = 1; } incontextof layer ];
+			if(elm.canskip !== void && +elm.canskip && clickSkipEnabled)
+			{
+				if(skipMode)
+				{
+					layer.stopQuake();
+					return 0;
+				}
+				we.click	= function { updateBeforeCh = 1; stopQuake(); } incontextof layer;
+			}
+			conductor.wait(we);
+			return -2;
+		}
+		return 0;
+	}
+
+	//	全てのレイヤーの揺れを止める
+	function stopAllQuake()
+	{
+		var layers, messages;
+		fore.base.stopQuake();
+		back.base.stopQuake();
+		layers = fore.layers, messages = fore.messages;
+		for(var i = layers.count-1; i >= 0; i--) layers[i].stopQuake();
+		for(var i = messages.count-1; i >= 0; i--) messages[i].stopQuake();
+		layers = back.layers, messages = back.messages;
+		for(var i = layers.count-1; i >= 0; i--) layers[i].stopQuake();
+		for(var i = messages.count-1; i >= 0; i--) messages[i].stopQuake();
+		quakeCount = 0; // 一応
+	}
+
+	//	テキスト履歴表示/非表示切り替え
+	function onShowHistoryMenuItemClick(sender)
+	{
+		dm("show history: "+historyLayer.visible+" / "+historyEnabled);
+		if(historyLayer.visible) hideHistory(); else if(historyEnabled) showHistory();
+	}
+
+	//------------------------------------------------- クリック待ち記号処理 --
+	//	currentWithBack の時でも、クリック待ち記号は片面にしか表示されていないので、両面表示に対応させる
+
+	function restoreClickGlyphState()
+	{
+		// lastClickGlyph *** に一時的に待避したクリック待ち記号の情報
+		// に基づいてクリック待ち記号を設定する
+		if(lastClickGlyphVisible)
+		{
+			var layer = getMessageLayerObjectFromPageAndNumber
+				(lastClickGlyphMessagePage, lastClickGlyphMessageNum);
+			if(layer !== void)
+			{
+				switch(lastClickGlyphWhich)
+				{
+				case 'line':
+					layer.showLineBreakGlyph(lineBreak);
+					layer.comp.showLineBreakGlyph(pageBreak) if currentWithBack;
+					break;
+				case 'page':
+					layer.showPageBreakGlyph(pageBreak);
+					layer.comp.showPageBreakGlyph(lineBreak) if currentWithBack;
+					break;
+				}
+			}
+		}
+	}
+
+	function showLineBreak(elm)
+	{
+		// 現在のメッセージレイヤに行待ち記号を表示する
+		stablePosibility = true;
+		if(canIgnoreL())
+		{
+			// l タグの無視
+			if(elm.canskip === void || !+elm.canskip)
+				return (skipMode==3 || skipMode==4) ? 0 : -4;
+		}
+		if(autoMode)
+		{
+			// 自動読みすすみの場合
+			return autoModeLineWait;
+		}
+		if(skipMode == 1) cancelSkip();
+		if(skipMode == 4 && !skipKeyPressing()) cancelSkip();
+		if(skipMode == 4) return -4;
+		if(skipMode) return skipCancelKeyPressing()?-4:0;
+			// スキップ中(スキップをキャンセルするようなキーがあればスキップ解除
+			// のためのイベント処理の機会を与える)
+
+		current.showLineBreakGlyph(lineBreak);
+		lineBreak.name	= "行クリック待ち記号";
+		if(currentWithBack)
+		{
+			current.comp.showLineBreakGlyph(pageBreak);
+			pageBreak.name	= lineBreak.name;
+
+			//	アニメの仕切りなおし
+			lineBreak.stopAnim(0);
+			pageBreak.stopAnim(0);
+			lineBreak.loadAnimInfo(0, '');
+			pageBreak.loadAnimInfo(0, '');
+		}
+		storeClickGlyphState("line");
+
+		if(!current.nodeVisible)
+		{
+			dm("警告 : 非表示になっている" +
+				(currentPage ? "裏" : "表") + "メッセージレイヤ" + currentNum +
+				"で行クリック待ちになりました");
+		}
+
+		// conductor を 'click' まで待ち状態に
+		conductor.wait(%[
+			click : function
+			{
+				clickWaiting = false;
+				fore.base.cursor = cursorDefault;
+				notifyRun();
+			} incontextof this
+			]);
+		clickWaiting = true;
+		fore.base.cursor = cursorWaitingClick;
+		notifyStable();
+		return -2;
+	}
+
+	function showPageBreak(elm)
+	{
+		// 現在のメッセージレイヤにページ待ち記号を表示する
+		stablePosibility = true;
+		if(skipMode == 1 || skipMode == 2) cancelSkip();
+		if(skipMode == 4 && !skipKeyPressing()) cancelSkip();
+		if(skipMode) return -4; // いったんイベントを処理
+		if(autoMode)
+		{
+			// 自動読みすすみの場合
+			return autoModePageWait;
+		}
+
+		current.showPageBreakGlyph(pageBreak);
+		pageBreak.name	= "ページ末クリック待ち記号";
+		if(currentWithBack)
+		{
+			current.comp.showPageBreakGlyph(lineBreak);
+			lineBreak.name	= pageBreak.name;
+
+			//	アニメの仕切りなおし
+			pageBreak.stopAnim(0);
+			lineBreak.stopAnim(0);
+			pageBreak.loadAnimInfo(0, '');
+			lineBreak.loadAnimInfo(0, '');
+		}
+		storeClickGlyphState("page");
+
+		if(!current.nodeVisible)
+		{
+			dm("警告 : 非表示になっている" +
+				(currentPage ? "裏" : "表") + "メッセージレイヤ" + currentNum +
+				"でページクリック待ちになりました");
+		}
+
+		// conductor を 'click' まで待ち状態に
+		conductor.wait(%[
+			click : function
+			{
+				clickWaiting = false;
+				fore.base.cursor = cursorDefault;
+				notifyRun();
+			} incontextof this
+			]);
+		clickWaiting = true;
+		fore.base.cursor = cursorWaitingClick;
+		notifyStable();
+		return -2;
+	}
+
+	function showPageBreakAndClear()
+	{
+		// メッセージレイヤが最終行まで達して自動改ページがされるときに
+		// 呼ばれる。現在のメッセージレイヤにページ待ち記号を表示し、
+		// 実行再開時には MessageLayer.clear2 を呼ぶ
+		stablePosibility = true;
+		if(skipMode == 1 || skipMode == 2) cancelSkip();
+		if(skipMode == 4 && !skipKeyPressing()) cancelSkip();
+		var lasttagname = conductor.lastTagName;
+		if(!autoMode && ((!canIgnoreL() && lasttagname == 'l') || lasttagname == 'p'))
+			{ current.clear2(); return -5; }// いったんイベントを処理(タグは後回し)
+		if(skipMode) { current.clear2(); return -5; }// いったんイベントを処理(タグは後回し)
+
+		if(!current.nodeVisible)
+		{
+			dm("警告 : 非表示になっている" +
+				(currentPage ? "裏" : "表") + "メッセージレイヤ" + currentNum +
+				"で自動改ページクリック待ちになりました");
+		}
+
+		if(autoMode)
+		{
+			conductor.waitWithTimeOut(%[ // タイムアウト付きウェイト
+				click : function
+				{
+					current.clear2(); // clear2 を呼ぶ
+					cancelAutoMode();
+				} incontextof this,
+				timeout : function
+				{
+					current.clear2(); // clear2 を呼ぶ
+				} incontextof this
+				], autoModePageWait <= 0 ? 1 : autoModePageWait);
+			return -3;
+		}
+		else
+		{
+			current.showPageBreakGlyph(pageBreak);
+			pageBreak.name	= "ページ末クリック待ち記号";
+			if(currentWithBack)
+			{
+				current.comp.showPageBreakGlyph(lineBreak);
+				lineBreak.name	= pageBreak.name;
+
+				//	アニメの仕切りなおし
+				pageBreak.stopAnim(0);
+				lineBreak.stopAnim(0);
+				pageBreak.loadAnimInfo(0, '');
+				lineBreak.loadAnimInfo(0, '');
+			}
+			storeClickGlyphState("page");
+
+			// conductor を 'click' まで待ち状態に
+			conductor.wait(%[
+				click : function
+				{
+					clickWaiting = false;
+					fore.base.cursor = cursorDefault;
+					current.clear2(); // clear2 を呼ぶ
+					notifyRun();
+				} incontextof this
+				]);
+			clickWaiting = true;
+			fore.base.cursor = cursorWaitingClick;
+			notifyStable();
+			return -3;
+		}
+	}
+
+	function allocateCharacterLayersWithoutOrder(num)
+	{
+		// 前景レイヤ数を num に設定する
+		if(fore.layers.count > num)
+		{
+			// レイヤが減る
+			for(var i = num; i<fore.layers.count; i++)
+			{
+				invalidate fore.layers[i];
+				invalidate back.layers[i];
+			}
+			fore.layers.count = num;
+			back.layers.count = num;
+		}
+		else if(fore.layers.count < num)
+		{
+			// レイヤが増える
+			for(var i = fore.layers.count; i<num; i++)
+			{
+				fore.layers[i] = new CharacterLayer(this, fore.base, "表前景レイヤ" + i, i);
+				back.layers[i] = new CharacterLayer(this, back.base, "裏前景レイヤ" + i, i);
+				fore.layers[i].setCompLayer(back.layers[i]);
+				back.layers[i].setCompLayer(fore.layers[i]);
+			}
+		}
+		numCharacterLayers = num;
+	}
+}
+
+/*----------------------------------------------------------------------------/
+/	AnimationLayer
+/----------------------------------------------------------------------------*/
+class AnimationLayer extends AnimationLayerORIGINAL
+{
+	var	reservedCenter, reservedBottom;	//	他動(quake,shock)開始直前の位置
+	var	lastCenter, lastBottom;			//	直前の位置
+	var	noQuake;
+
+	function AnimationLayer()
+	{
+		super.AnimationLayerORIGINAL(...);
+	}
+
+	function finalize()
+	{
+		super.finalize(...);
+	}
+
+	function loadImages(elm)
+	{
+		type	= -1;
+		super.loadImages(...);
+		if(type>=0)
+		{//	読み込み成功
+			if(elm !== void)
+			{
+				//	補正の効いた状態にする
+				if(elm.pos !== void)
+				{
+					center	= window.scPositionX[elm.pos];
+					basePos	= 0;
+				}
+
+				//	ADD: 地平線からの距離あわせ
+				if ( elm.horizon !== void ) {
+					top	-= elm.horizon;
+				}
+
+				//	ADD: 中心座標の指定
+				if ( elm.center !== void) {
+					center	= elm.center;
+				}
+
+				//	位置の保存
+				reservedCenter = reservedBottom	= void;	//	記録していない状態へ
+
+				//	揺れるかどうか
+				noQuake	= elm.noquake !== void ? +elm.noquake : false;
+				noQUake	= +elm.noshock if elm.noshock !== void;
+
+				//	単色表示
+				if ( elm.mono != void )
+					paintMonocro(elm.color);	//	単色で塗りつぶす
+
+				//	後処理
+				if ( elm.postOperate != void )
+				{
+					elm.postOperate!;
+				}
+
+				//	拡大・縮小、回転の率を初期化
+				magnify	= +elm.magnify if elm.magnify !== void;
+				cx		= +elm.cx if elm.cx !== void;
+				cy		= +elm.cy if elm.cy !== void;
+				magnify2= +elm.magnify2 if elm.magnify2 !== void;
+				rotate	= +elm.rotate if elm.rotate !== void;
+
+				//	必要なら再描画
+				redraw(,, true);
+			}
+		}
+	}
+
+	//	指定のレイヤー(通常は自身)を単色で塗りつぶす(ただし、不透明度情報は上書きしない)
+	function paintMonocro(color, layer=this)
+	{
+		var	col	= color === void ? 0xBB00BBFF : +color;
+		dm("draw mono color: "+col);
+		var lastface	= face;
+		face		= dfOpaque;
+		holdAlpha	= true;
+		fillRect(0, 0, width, height, col & 0xFFFFFF);
+		opacity		= (col >> 24) & 0xFF;
+		face		= lastface;
+	}
+
+	//	位置の保存
+	function storePos()
+	{
+		if(reservedCenter === void)
+		{
+//			dm(storage+".storePos("+center+", "+basePos+")");
+			reservedCenter	= center;
+			reservedBottom	= basePos;
+		}
+	}
+
+	//	位置を復帰
+	function restorePos()
+	{
+		if(reservedCenter !== void)
+		{
+			center	= reservedCenter;
+			basePos	= reservedBottom;
+			reservedCenter = reservedBottom = void;	//	記録していない状態へ
+			lastCenter = lastBottom	= void;
+		}
+	}
+
+	//	位置をアサインする
+	function assignPos(src)
+	{
+		center	= src.center;
+		bottom	= src.bottom;
+		if(src.reservedCenter !== void)
+		{
+			reservedCenter	= src.reservedCenter;
+			reservedBottom	= src.reservedBottom;
+		}
+	}
+
+	//	本来の位置からずらす
+	function offsetPos(x, y)
+	{
+		if(!noQuake)
+		{
+			storePos();	//	ずらす前に、位置が保存されていなかったら保存しておく。
+//			dm(@"center = ${center}(${lastCenter}) / bottom = ${basePos}(${lastBottom})");
+			if(lastCenter !== void && (lastCenter != center || lastBottom != basePos))
+			{
+				//	位置が直前と異なっていた場合、自動でレイヤーが移動したものと判断して、
+				//	基本位置を現在の位置とする。
+				reservedCenter	= center;
+				reservedBottom	= basePos;
+			}
+			lastCenter	= center	= reservedCenter + x;
+			lastBottom	= basePos	= reservedBottom + y;
+//			dm(storage+".offsetPos("+x+", "+y+") -> ("+center+", "+basePos+")");
+		}
+	}
+
+	//	画像を破棄するとき
+	function freeImage()
+	{
+		super.freeImage(...);
+		reservedCenter = reservedBottom = void;	//	記録していない状態へ
+		lastCenter = lastBottom	= void;
+	}
+
+	function store()
+	{
+		var	dic	= super.store();
+		dic.lastCenter		= lastCenter;
+		dic.lastBottom		= lastBottom;
+		dic.reservedCenter	= reservedCenter;
+		dic.reservedBottom	= reservedBottom;
+		return dic;
+	}
+
+	function restore(dic)
+	{
+		super.restore(dic);
+		lastCenter		= dic.lastCenter;
+		lastBottom		= dic.lastBottom;
+		reservedCenter	= dic.reservedCenter;
+		reservedBottom	= dic.reservedBottom;
+	}
+
+	//	中心座標(画像の中心位置を指定)
+	property center
+	{
+		setter(c)
+		{
+			if(c !== center)
+			{
+				var crl = Anim_loadParams!==void ? correctLeft[storage.toLowerCase()] : 0;
+				left	= c - width \ 2 + crl;
+			}
+		}
+		getter	{ return left + width \ 2 - (Anim_loadParams!==void ? correctLeft[storage.toLowerCase()] : 0); }
+	}
+
+	//	下端座標(画面下端の時に0)
+	property basePos
+	{
+		setter(b)
+		{
+			if(b !== basePos)
+				top	= b + window.scHeight - height;
+		}
+		getter
+		{
+//			dm(@"top = ${top} / height = ${height} / window.scHeight = ${window.scHeight}");
+			return top + height - window.scHeight;
+		}
+	}
+
+	property storage
+	{
+		getter	{ return Anim_loadParams == void ? "" : Anim_loadParams.storage; }
+	}
+/*
+	property absolute
+	{
+		setter(a)
+		{
+			dm(storage+".absolute = "+super.absolute+"->"+a+"("+Scripts.getTraceString(5)+")");
+			super.absolute	= a;
+		}
+		getter	{ return super.absolute; }
+	}
+*/}
+
+/*----------------------------------------------------------------------------/
+/	MessageLayer
+/----------------------------------------------------------------------------*/
+class MessageLayer extends MessageLayerORIGINAL
+{
+	var edgeExtent = 2; // 袋文字のふとさ
+	var edgeEmphasis = 1024; // 袋文字の強調度
+	var displaysInFixedPitchAlsoByVariable	= false;	// 常時固定ピッチで表示するか
+	var defaultRubyBold = false;	//	ルビをボールドにするか
+
+	var currentRubyPosition;
+
+	var ltFadeButton	= 10;
+	var ltSlideButton	= 11;
+
+	var overlays = [];	//	メッセージレイヤーの上で、画像として表示されるテキストのレイヤー
+
+	function MessageLayer()
+	{
+		super.MessageLayerORIGINAL(...);
+	}
+
+	function finalize()
+	{
+		releaseArray(overlays);
+		super.finalize(...);
+	}
+
+	function clearLayer()
+	{
+		// レイヤをクリア
+		window.updateBeforeCh = 1;
+
+		cancelDrag();
+
+		if(imageModified)
+		{
+			if(frameGraphic == "")
+			{
+				// フレーム画像が指定されていない場合
+				face = dfAuto;
+				if(type == ltAddAlpha)
+				{
+					fillRect(0, 0, imageWidth, imageHeight, (frameOpacity << 24) +
+						((int)((((frameColor&0xff0000)>>16) * frameOpacity) / 255)<<16 ) +
+						((int)((((frameColor&0x00ff00)>> 8) * frameOpacity) / 255)<< 8 ) +
+						((int)((((frameColor&0x0000ff)    ) * frameOpacity) / 255)     ) );
+				}
+				else
+				{
+					fillRect(0, 0, imageWidth, imageHeight, (frameOpacity << 24) + frameColor);
+				}
+			}
+			else
+			{
+				if(window.sflags.messageFrameOpacity === void)
+				{
+					loadImages(frameGraphic, frameKey);
+					setSizeToImageSize();
+				}
+				else
+				{
+					//	フレームの不透明度を変更する
+					var	layer;
+					with(layer = new global.Layer(window, this))
+					{
+						.loadImages(frameGraphic, frameKey);
+
+						face	= dfAuto;
+						setImageSize(.imageWidth, .imageHeight);
+						setSizeToImageSize();
+						fillRect(0, 0, .imageWidth, .imageHeight, 0x00000000);
+
+						operateRect(0, 0, layer, 0, 0, .imageWidth, .imageHeight, omAlpha, window.sflags.messageFrameOpacity);
+
+						invalidate layer;
+					}
+				}
+			}
+
+			face = dfProvince;
+			colorRect(0, 0, imageWidth, imageHeight, 0); // 領域もクリア
+			face = dfAuto;
+		}
+
+		imageModified = false;
+
+		invalidateLinkObjects(); // リンクに関連づけられたオブジェクトを無効化
+
+		focusable = false;
+		links.clear();
+		numLinks = 0;
+		inLink = -1;
+		highlightLink(lastLink, false); // ハイライトを消す
+		highlightLayer.visible = false;
+		lastLink = -1;
+		keyLink = -1;
+		linkFilled = false;
+		lastDrawnCh = ""; // 最後に描画した文字
+		isLastLine = false; // 最終行か
+		selClickLock = true;
+		lastMouseX = cursorX;
+		lastMouseY = cursorY;
+		initLineLayer();
+
+		//	テキストオーバーレイレイヤーも破棄
+		for(var i=0; i<overlays.count; i++)
+			removeOverlay(i);
+	}
+
+	function processCh(ch)
+	{
+		//	\マークは表示しない
+		if(ch=="\\")
+			return false;
+
+		// 文字 ch を描画する
+		// 改行が行われ、かつそれがページ末端を越える場合は true を返す
+		// それ以外は false
+		var vert = vertical;
+
+		if((vert ?  y >= relinexpos  : x >= relinexpos ) && autoReturn)
+		{
+			if(((lastDrawnCh=="" || wwLeading.indexOf(lastDrawnCh)==-1) &&
+				wwFollowing.indexOf(ch)==-1) ||
+				(lastDrawnCh!="" && wwFollowingWeak.indexOf(lastDrawnCh)!=-1 &&
+					wwFollowingWeak.indexOf(ch)!=-1))
+			{
+				// 最後に描画したのが行末禁則文字でない場合
+				// しかもこれから描画するのが行頭禁則文字でない
+				// 場合
+				// または弱禁則文字が連続していない場合
+				if(reline()) return autoReturn;
+			}
+			else if(vert ? ( y>imageHeight ) : (x>imageWidth))
+			{
+				// これから描画するのが強禁則文字ではなくて、
+				// 確実に 右端を越える場合
+				// ( この場合は余白は考えない )
+				if(reline()) return autoReturn;
+			}
+		}
+
+		changeLineSize() if sizeChanged;
+
+		var inlink = inLink != -1;
+
+		beginLinkLine() if inlink;
+
+ 		var ll = lineLayer;
+ 		var llfont = ll.font;
+
+		var cw	= llfont.getTextWidth(ch);
+
+		var dx , dy;
+
+		if(vert)
+			dx = int(lineLayerBase+(fontSize>>1)), dy = int(lineLayerPos);
+		else
+			dx = int(lineLayerPos), dy = int(lineLayerBase-fontSize);
+
+		var dxp = 0;
+		if(displaysInFixedPitchAlsoByVariable && typeof ch == "String" && #ch>255)
+		{
+			//	可変ピッチフォントでも固定ピッチで表示するときは
+			//	固定ピッチ相当のピッチで文字を表示する(ただし全角の時のみ)
+			var tw = llfont.height * ch.length;
+			dxp	= (tw - cw) \ (ch.length << 1) if ch.length!=0;	//	中央へずらす
+			cw	= tw;
+		}
+
+		if(edge)
+			ll.drawText(dx+dxp, dy, ch, chColor, 255, antialiased, edgeEmphasis, edgeColor, edgeExtent, 0, 0);
+		else if(shadow)
+			ll.drawText(dx+dxp, dy, ch, chColor, 255, antialiased, 255, shadowColor, 0, 2, 2);
+		else
+			ll.drawText(dx+dxp, dy, ch, chColor, 255, antialiased);
+
+		if(currentRuby != "")
+		{
+			// ルビがある
+//			var cw = llfont.getTextWidth(ch);
+			var orgsize = llfont.height;
+			llfont.height = rubySize;
+			llfont.bold	= defaultRubyBold if llfont.bold!=defaultRubyBold;	//	ルビを太字にする
+			var rw = llfont.getTextWidth(currentRuby);
+			var rx,ry;
+			if(currentRubyPosition[0]=="c")
+			{
+				//	センタリングする
+				if(!vert)
+				{
+					rx = int(dx + (cw>>1) - (rw>>1));
+					ry = int(dy - rubySize - rubyOffset);
+				}
+				else
+				{
+					rx = int(dx + rubySize + rubyOffset);
+					ry = int(dy + (cw>>1) - (rw>>1));
+				}
+			}
+			else
+			{
+				//	センタリングしない
+				if(!vert)
+				{
+					rx = dx;
+					ry = int(dy - rubySize - rubyOffset);
+				}
+				else
+				{
+					rx = int(dx + rubySize + rubyOffset);
+					ry = dy;
+				}
+			}
+
+			if(edge)
+				ll.drawText(rx, ry, currentRuby, chColor, 255, antialiased, edgeEmphasis, edgeColor, edgeExtent, 0, 0); // 文字
+			else if(shadow)
+				ll.drawText(rx, ry, currentRuby, chColor, 255, antialiased, 255, shadowColor, 0, 2, 2); // 文字
+			else
+				ll.drawText(rx, ry, currentRuby, chColor, 255, antialiased); // 文字
+
+			llfont.height = orgsize;
+			currentRuby = '';
+			llfont.bold	= defaultBold if llfont.bold!=defaultBold;	//	太字を元に戻す(変わっていたときだけ)
+		}
+
+		ll.visible = true;
+
+		if(inlink)
+		{
+			// ハイパーリンクでちゅー
+			ll.face = dfProvince;
+			if(!vert)
+				ll.fillRect(lineLayerPos, lineLayerBase - fontSize,
+					cw, fontSize, numLinks + 1);
+			else
+				ll.fillRect(lineLayerBase - (fontSize>>1), lineLayerPos,
+					fontSize, cw, numLinks + 1);
+
+			// 領域画像も塗りつぶしてやる
+			ll.face = dfBoth;
+			linkFilled = true;
+		}
+
+		cw += pitch;
+
+		if(vert) y += cw; else x += cw;
+
+		lineLayerPos += cw;
+		lineLayerLength += cw;
+
+		lastDrawnCh = ch;
+
+		adjustAlign() if(align >= 0);
+
+		return false;
+	}
+
+	function putGraph(storage, key, ischar)
+	{
+		// 画像 storage を描画する
+
+		// テンポラリのレイヤを用意
+		var lay = window.temporaryLayer;
+
+		lay.type = ltTransparent;
+		lay.face = dfAuto;
+		lay.loadImages(storage, key); // 画像読み込み
+		var lw, lh;
+		lw = lay.imageWidth;
+		lh = lay.imageHeight;
+
+		var cw;
+		if(vertical)
+		{
+			if(lw > lineSize) lineSize = lw; // 拡張
+			cw = lh;
+		}
+		else
+		{
+			if(lh > lineSize) lineSize = lh; // 拡張
+			cw = lw;
+		}
+
+		changeLineSize();
+
+		if(inLink != -1) beginLinkLine();
+
+		var repage = false;
+
+		if(autoReturn)
+		{
+			// 改行位置に達している？
+			if(vertical ? ( y > relinexpos ) : (x > relinexpos) )
+			{
+				repage = reline();
+			}
+		}
+
+		if(repage) return true; // 文字は描画しない
+
+
+		// 描画
+		var cx,cy;
+		if(vertical)
+		{
+			cx = lineLayerBase - (lw>>1);
+			cy = lineLayerPos;
+		}
+		else
+		{
+			cx = lineLayerPos;
+			cy = lineLayerBase - lh;
+		}
+
+		dm(ischar+" && ("+shadow+" || "+edge+") = "+(ischar && (shadow || edge)));
+		if(ischar && (shadow || edge) )
+		{
+			lay.face = dfOpaque;
+			lay.holdAlpha = true;
+				// 影/袋文字の色でメインを塗りつぶす
+
+			if(edge)
+			{
+				// 袋
+				lay.fillRect(0, 0, lw, lh, edgeColor);
+				lineLayer.operateRect(cx+1, cy+1, lay, 0, 0, lw, lh);
+				lineLayer.operateRect(cx-1, cy+1, lay, 0, 0, lw, lh);
+				lineLayer.operateRect(cx-1, cy-1, lay, 0, 0, lw, lh);
+				lineLayer.operateRect(cx+1, cy-1, lay, 0, 0, lw, lh);
+			}
+			else if(shadow)
+			{
+				// 影
+				lay.fillRect(0, 0, lw, lh, shadowColor);
+				lineLayer.operateRect(cx+2, cy+2, lay, 0, 0, lw, lh);
+			}
+
+		}
+
+		if(ischar)
+		{
+			lay.face = dfOpaque;
+			lay.holdAlpha = true;
+			lay.fillRect(0, 0, lw, lh, chColor);
+				// メインを文字色で塗りつぶす
+		}
+
+		lineLayer.operateRect(cx, cy, lay, 0, 0, lw, lh); // 描画
+
+		// 描画おわり
+		lastDrawnCh="";
+
+		if(inLink!=-1)
+		{
+			// ハイパーリンクでちゅー
+			lineLayer.face = dfProvince;
+			if(vertical)
+				lineLayer.fillRect(lineLayerBase - (fontSize>>1), lineLayerPos,
+					fontSize, cw, numLinks+1);
+			else
+				lineLayer.fillRect(lineLayerPos, lineLayerBase - fontSize,
+					cw, fontSize, numLinks+1);
+			face = dfAuto;
+			lineLayer.face = dfBoth;
+			// 領域画像も塗りつぶしてやる
+			linkFilled=true;
+		}
+
+		if(vertical) y+=cw; else x+=cw;
+
+		lineLayerPos += cw;
+		lineLayerLength += cw;
+
+		lineLayer.visible = true;
+
+		if(align >= 0) adjustAlign();
+
+		return false;
+	}
+
+	function setRuby(text, pos="c")
+	{
+		super.setRuby(...);
+		currentRubyPosition	= pos;
+	}
+
+	function internalAssign(src)
+	{
+		super.internalAssign(...);
+
+		currentRubyPosition	= src.currentRubyPosition;
+
+		//	メッセージオーバーレイレイヤーもassignする
+		for(var i=0; i<src.overlays.count; i++)
+		{
+			if(src.overlays[i] != void)
+			{
+				with(overlays[i] = new MessageOverlayLayer(window, this))
+					.assignImages(src.overlays[i], true);
+			}
+		}
+	}
+
+	function internalOnMouseDown(x, y, button)
+	{
+		if(button == mbRight)
+			window.onPrimaryRightClick();
+		else
+			super.internalOnMouseDown(...);
+	}
+
+	function store()
+	{
+		var	dic	= super.store();
+
+		dic.overlays	= [];
+		for(var i=0; i<overlays.count; i++)
+			dic.overlays[i]	= overlays[i].store() if overlays[i] != void;
+
+		return dic;
+	}
+
+	function restore(dic)
+	{
+		super.restore(...);
+
+		for(var i=0; i<dic.overlays.count; i++)
+		{
+			if(dic.overlays[i] != void)
+			{
+				with(overlays[i] = new MessageOverlayLayer(window, this))
+					.restore(dic.overlays[i]);
+			}
+		}
+	}
+
+	//	addButtonに独自のボタンを登録する機能を持たせたもの
+	//		ボタンを作ってから、リンクに関連付ける
+	//	in	: elm		設定データ
+	//		: object	ボタンオブジェクト
+	function addButtonEx(elm, object, type)
+	{
+		// グラフィカルボタンを配置
+//		var object = new LinkButtonLayer(window, this);
+//		object.loadImages(elm.graphic, elm.graphickey);
+		object.linkNum = numLinks;
+//		object.setPos(x, y);
+		object.hint = elm.hint;
+		object.visible = true;
+		object.onenter = createSoundExpression(elm.onenter, elm.enterse, elm.entersebuf);
+		object.onleave = createSoundExpression(elm.onleave, elm.leavese, elm.leavesebuf);
+		object.hitThreshold =
+			(elm.recthit === void || +elm.recthit) ? 0 : 64;
+
+		x	= +elm.x;
+		y	= +elm.y;
+		links[numLinks] = %[
+//			type :			ltButton,
+			type :			type,
+			graphic :		elm.graphic,
+			graphickey :	elm.graphickey,
+			storage :		elm.storage,
+			target :		elm.target,
+			exp :			createSoundExpression(elm.exp, elm.clickse, elm.clicksebuf),
+			countPage :		(elm.countpage === void) ? true : +elm.countpage,
+			object :		object,
+			onenter :		object.onenter,
+			onleave :		object.onleave,
+			x :				[x],
+			y :				[y],
+			w :				[object.width],
+			h :				[object.height],
+			fixed :			[true],
+			lineCount :		1
+			];
+
+		numLinks++;
+		focusable = true; // フォーカスを受け取れるように
+		setSelProcessLock(false); // 選択ロック解除
+		comp.setSelProcessLock(false); // 選択ロック解除
+	}
+
+	//	フェードイン・フェードアウトで表示/消去されるボタン
+	function addFadeButton(elm)
+	{
+		var object	= new FadeButton(window, this);
+		object.init(elm);
+		addButtonEx(elm, object, ltFadeButton);
+	}
+
+	//	フェードイン＋移動・フェードアウト＋移動で表示/消去されるボタン
+	function addSlideButton(elm)
+	{
+		var object	= new SlideButton(window, this);
+		object.init(elm);
+		addButtonEx(elm, object, ltSlideButton);
+	}
+
+	//	リンクの表示を開始する
+	//	memo:	showを持っているもののみ
+	function showButton()
+	{
+		var lks	= links;
+		for(var i=0; i<lks.count; i++)
+		{
+			var link = lks[i];
+			if(link !== void && link.object !== void && typeof link.object.show != "undefined")
+				link.object.show();
+		}
+	}
+
+	//	ボタンの消去を開始する
+	//	memo:	hideを持っているもののみ
+	function clearButtons()
+	{
+//		dm("clear buttons: "+links.count);
+		var lks	= links;
+		for(var i=0; i<lks.count; i++)
+		{
+			var link = lks[i];
+			if(link !== void && link.object !== void && typeof link.object.hide != "undefined")
+				link.object.hide();
+		}
+		lks.clear();
+		numLinks = 0;
+	}
+
+	//	オブジェクトの作成
+	function createObject(type)
+	{
+		switch(type)
+		{
+		case ltButton:
+			return new LinkButtonLayer(window, this);
+		case ltEdit:
+			return new LinkEditLayer(window, this);
+		case ltCheckBox:
+			return new LinkCheckBoxLayer(window, this);
+
+		case ltFadeButton:
+			return new FadeButton(window, this);
+		case ltSlideButton:
+			return new SlideButton(window, this);
+		}
+		return void;
+	}
+
+	//	メッセージレイヤーに乗っかるオブジェクトの再作成部分を切り離した
+	function internalAssign(src, copyvisiblestate)
+	{
+		// レイヤの情報をコピー
+		// ( コピーする情報が膨大なのでちょっと実行時間がかかる )
+
+		// このレイヤ自身の画像、位置、透明度などのコピー
+		assignImages(src);
+		if(copyvisiblestate)
+			assignVisibleState(src); // assignImages は可視・不可視などの情報はコピーしないため
+
+		focusable = src.focusable;
+
+		// links のコピー
+		{
+			invalidateLinkObjects(); // 一応オブジェクトはすべて無効化
+			var tl = links, sl = src.links;
+			tl.count = sl.count;
+			for(var i = sl.count-1; i>=0; i--)
+			{
+				if(sl[i] === void) continue;
+				var tl_d = (tl[i] = %[]);
+				var sl_d = sl[i];
+				(Dictionary.assign incontextof tl_d)(sl_d);
+				// ただし、x, y, w, h, fixed の各メンバは実際に内容を assign
+				// しないと駄目
+				(tl_d.x = []).assign(sl_d.x);
+				(tl_d.y = []).assign(sl_d.y);
+				(tl_d.w = []).assign(sl_d.w);
+				(tl_d.h = []).assign(sl_d.h);
+				(tl_d.fixed = []).assign(sl_d.fixed);
+
+				// タイプに従って
+				var object	= createObject(tl_d.type);
+				if(object !== void)
+				{
+					object.assign(sl_d.object);
+					tl_d.object	= object;
+				}
+/*				var type = tl_d.type;
+				if(type == ltButton)
+				{
+					// ボタン
+					var sl_d_object = sl_d.object;
+					var object = new LinkButtonLayer(window, this);
+						// object は再作成
+					object.assign(sl_d_object);
+					tl_d.object = object;
+				}
+				else if(type == ltEdit)
+				{
+					// 単一行エディット
+					var sl_d_object = sl_d.object;
+					var object = new LinkEditLayer(window, this);
+						// object は再作成
+					object.assign(sl_d_object);
+					tl_d.object = object;
+				}
+				else if(type == ltCheckBox)
+				{
+					// チェックボックス
+					var sl_d_object = sl_d.object;
+					var object = new LinkCheckBoxLayer(window, this);
+						// object は再作成
+					object.assign(sl_d_object);
+					tl_d.object = object;
+				}
+*/			}
+		}
+
+
+		// lineLayerLinks のコピー
+		{
+			var tl = lineLayerLinks, sl = src.lineLayerLinks;
+			tl.count = sl.count;
+			for(var i = sl.count-1; i>=0; i--)
+			{
+				(Dictionary.assign incontextof (tl[i] = %[]))(sl[i]);
+			}
+		}
+
+		// lineLayer の位置、サイズ、画像、フォント情報をコピー
+		{
+			var tl = lineLayer, sl = src.lineLayer;
+			tl.assignImages(sl);
+			tl.assignVisibleState(sl);
+			var tf = tl.font, sf = sl.font;
+			tf.face = sf.face;
+			tf.angle = sf.angle;
+			tf.bold = sf.bold;
+			tf.italic = sf.italic;
+			tf.height = sf.height;
+		}
+
+		// そのほか
+		highlightLayer.visible = false;
+		keyLink = -1;
+		imageModified = true;
+
+		// その他の情報のコピー
+		// [start_assign_vars] と [end_assign_vars] の間は
+		// perl によって自動生成されるので、このマークを消したり、
+		// 二つのマークの間を編集したりしないこと。
+		// [start_assign_vars]
+		frameGraphic = src.frameGraphic;
+		frameKey = src.frameKey;
+		frameColor = src.frameColor;
+		frameOpacity = src.frameOpacity;
+		marginL = src.marginL;
+		marginT = src.marginT;
+		marginR = src.marginR;
+		marginB = src.marginB;
+		marginRCh = src.marginRCh;
+		x = src.x;
+		y = src.y;
+		relinexpos = src.relinexpos;
+		isLastLine = src.isLastLine;
+		indentxpos = src.indentxpos;
+		linkFilled = src.linkFilled;
+		numLinks = src.numLinks;
+		selProcessLock = src.selProcessLock;
+		storedSelProcessLock = src.storedSelProcessLock;
+		defaultLinkColor = src.defaultLinkColor;
+		defaultLinkOpacity = src.defaultLinkOpacity;
+		defaultFontSize = src.defaultFontSize;
+		fontSize = src.fontSize;
+		_fontSize = src._fontSize;
+		defaultLineSize = src.defaultLineSize;
+		reserveLineSize = src.reserveLineSize;
+		lineSize = src.lineSize;
+		defaultRubySize = src.defaultRubySize;
+		rubySize = src.rubySize;
+		_rubySize = src._rubySize;
+		defaultRubyOffset = src.defaultRubyOffset;
+		rubyOffset = src.rubyOffset;
+		_rubyOffset = src._rubyOffset;
+		defaultLineSpacing = src.defaultLineSpacing;
+		lineSpacing = src.lineSpacing;
+		defaultPitch = src.defaultPitch;
+		pitch = src.pitch;
+		defaultShadow = src.defaultShadow;
+		shadow = src.shadow;
+		defaultEdge = src.defaultEdge;
+		edge = src.edge;
+		defaultShadowColor = src.defaultShadowColor;
+		shadowColor = src.shadowColor;
+		defaultEdgeColor = src.defaultEdgeColor;
+		edgeColor = src.edgeColor;
+		defaultBold = src.defaultBold;
+		bold = src.bold;
+		defaultFace = src.defaultFace;
+		userFace = src.userFace;
+		face = src.face;
+		defaultChColor = src.defaultChColor;
+		chColor = src.chColor;
+		defaultAntialiased = src.defaultAntialiased;
+		antialiased = src.antialiased;
+		vertical = src.vertical;
+		currentRuby = src.currentRuby;
+		lastDrawnCh = src.lastDrawnCh;
+		edgeExtent = src.edgeExtent;
+		edgeEmphasis = src.edgeEmphasis;
+		sizeChanged = src.sizeChanged;
+		nextClearFlag = src.nextClearFlag;
+		lineLayerBase = src.lineLayerBase;
+		lineLayerPos = src.lineLayerPos;
+		lineLayerLength = src.lineLayerLength;
+		lineLayerOriginX = src.lineLayerOriginX;
+		lineLayerOriginY = src.lineLayerOriginY;
+		align = src.align;
+		defaultAutoReturn = src.defaultAutoReturn;
+		autoReturn = src.autoReturn;
+		lineBreakGlyph = src.lineBreakGlyph;
+		lineBreakGlyphKey = src.lineBreakGlyphKey;
+		pageBreakGlyph = src.pageBreakGlyph;
+		pageBreakGlyphKey = src.pageBreakGlyphKey;
+		glyphFixedPosition = src.glyphFixedPosition;
+		glyphFixedLeft = src.glyphFixedLeft;
+		glyphFixedTop = src.glyphFixedTop;
+		draggable = src.draggable;
+		selClickLock = src.selClickLock;
+		lastMouseX = src.lastMouseX;
+		lastMouseY = src.lastMouseY;
+		// [end_assign_vars]
+	}
+
+	function highlightLink(n, b)
+	{
+		if(n < 0 || n >= numLinks) return;
+		if(links[n].type < ltFadeButton)
+			super.highlightLink(...);
+	}
+
+	//	メッセージオーバーレイを追加
+	function addOverlay(id, text, opacity=0)
+	{
+		//	改行位置を探す
+		var	lines	= [];
+		var	max		= 0;
+		var	CRLF	= "<br>";
+		var	font	= lineLayer.font;
+		var	x		= this.x;
+		var	y		= this.y;
+		do
+		{
+			var	line= text;
+			text	= "";
+			var	tw, over, cw;
+			var	l	= vertical ? y : x;
+			var	pos;
+			while((over = (l + (tw = font.getTextWidth(line)) - relinexpos)) > 0)
+			{
+				var	aw	= tw / line.length;
+				pos		= int((tw - over) / aw);	//	おおよその見当をつけて
+				text	= line.substr(pos) + text;	//	前後に分割
+				line	= line.substr(0, pos);
+			}
+			if(text.length > 0)
+			{//	テキストの残りがあれば、行にくっつけられるか調べる
+				while((l + tw + (cw = font.getTextWidth(text[0])) - relinexpos) <= 0)
+				{//	1文字ずつ調整していく
+					tw		+= cw;
+					line	+= text[0];
+					text	= text.substr(1);
+				}
+			}
+			if((pos = line.indexOf(CRLF))>=0)
+			{//	改行記号があれば、そこで改行させる
+				text	= line.substr(pos + CRLF.length) + text;
+				line	= line.substr(0, pos);
+				tw		= font.getTextWidth(line);
+			}
+			else if(text.length > 0)
+			{
+				var	lastCh	= line[line.length - 1];	//	最後になっている文字
+				var	ch	= text[0];
+				var	reline	= false;
+				if(((lastCh=="" || wwLeading.indexOf(lastCh)==-1) &&
+					wwFollowing.indexOf(ch)==-1) ||
+					(lastCh!="" && wwFollowingWeak.indexOf(lastCh)!=-1 &&
+						wwFollowingWeak.indexOf(ch)!=-1))
+				{
+					// 最後に描画したのが行末禁則文字でない場合
+					// しかもこれから描画するのが行頭禁則文字でない
+					// 場合
+					// または弱禁則文字が連続していない場合
+					reline	= true;
+				}
+				else if(vertical ? ( y>imageHeight ) : (x>imageWidth))
+				{
+					// これから描画するのが強禁則文字ではなくて、
+					// 確実に 右端を越える場合
+					// ( この場合は余白は考えない )
+					reline	= true;
+				}
+
+				if(!reline)
+				{//	もう一文字だけ加える
+					tw		+= font.getTextWidth(ch);
+					line	+= ch;
+					text	= text.substr(1);
+				}
+			}
+
+			lines.add(line);
+			if(lines.count == 1 && text != "")
+				tw	+= int(lineLayerPos);	//	最初の行で、改行の予定があるなら、ズレを組み込んでおく
+			max	= tw if tw > max;
+
+			//	作った行の分だけ、カーソルを移動
+			if(vertical)
+			{
+				y = marginT + indentxpos;
+				x -= lineSize + lineSpacing;
+			}
+			else
+			{
+				y += lineSize + lineSpacing;
+				x = marginL + indentxpos;
+			}
+		}
+		while(text != "");
+		var	tm	= System.getTickCount();
+
+		//	レイヤーを用意
+		if(overlays[id] == void)
+			overlays[id]	= new MessageOverlayLayer(window, this);
+		with(overlays[id])
+		{
+			.name	= "message overlay: "+id;
+			.draw(lines, max);
+			.opacity	= opacity;
+			.visible	= true;
+		}
+	}
+
+	function removeOverlay(id)
+	{
+		if(overlays[id] != void)
+		{
+			invalidate overlays[id];
+			overlays[id]	= void;
+		}
+	}
+
+	function beginMoveOverlay(id, elm)
+	{
+		if(overlays[id] == void)
+			return false;
+
+		with(overlays[id])
+		{
+			//	現在の移動は停止
+			.stopMove();
+
+			//	スキップ中は処理時間0(ms)とする
+			var time = +elm.time;
+			var accel = elm.accel === void ? 0 : +elm.accel;
+			if(sf.effectSkip || kag.skipMode>=2)
+				time	= 0;
+
+			//	pathの分解
+			var	params	= [];
+			var	array	= [].split("()", elm.path,, true);
+			var	no		= 0;
+			params[no  ]= .left;
+			params[no+1]= .top;
+			params[no+2]= .opacity;
+			for(var i=0; i<array.count; i++)
+			{
+				no	+= 3;
+				var	param	= array[i].split(",", array,, false);
+				params[no  ]= param[0] != "" ? +param[0] : params[no-3];	//	値が指定されていなければ、
+				params[no+1]= param[1] != "" ? +param[1] : params[no-2];	//	その直前の値を用いる
+				params[no+2]= param[2] != "" ? +param[2] : params[no-1];
+			}
+			dm("path: "+params.join(", "));
+
+			// 移動用オブジェクトの作成
+			var rl;
+			rl = .reverseLayer if +elm.both;
+			if(elm.spline !== void && +elm.spline && params.count > 3*2)
+			{
+				// スプライン補間(ポイントが3つ以上必要)
+				.moveObject = new SplineMover(overlays[id], params, time, accel, .moveFinalFunction, rl);
+			}
+			else
+			{
+				// 直線補間
+				.moveObject = new LinearMover(overlays[id], params, time, accel, .moveFinalFunction, rl);
+			}
+			window.moveCount++;
+			dm("time = "+time+" / delay = "+elm.delay);
+			.moveObject.startMove(time==0 ? 0 : +elm.delay);
+		}
+		return true;
+	}
+}
+
+//	メッセージレイヤーに重ねるレイヤー
+class MessageOverlayLayer extends KAGLayer
+{
+	var	lines, max;
+
+	function MessageOverlayLayer(win, par)
+	{
+		super.KAGLayer(...);
+
+		face			= dfAlpha;
+		type			= ltAlpha;
+		hitThreshold	= 256;	//	透過
+	}
+
+	function finalize()
+	{
+		release(lines);
+		super.finalize(...);
+	}
+
+	function store()
+	{
+		var	dic	= super.store();
+		dic.lines	= lines;
+		dic.max		= max;
+		return dic;
+	}
+
+	function restore(dic)
+	{
+		super.restore(dic);
+		draw(dic.lines, dic.max, dic.opacity);
+	}
+
+	function assignImages(src, copyvisiblestate = false)
+	{
+		super.assignImages(...);
+		name	= src.name;
+		if(copyvisiblestate)
+			copyRect(0, 0, src, 0, 0, src.width, src.height);
+	}
+
+	function draw(lines, max)
+	{
+		this.lines	= lines;
+		this.max	= max;
+
+		with(parent)
+		{
+			//	フォント設定
+			font.face	= .lineLayer.font.face;
+			font.angle	= .lineLayer.font.angle;
+			font.bold	= .lineLayer.font.bold;
+			font.italic	= .lineLayer.font.italic;
+			font.height	= ._fontSize;
+
+			//	複数行ある場合は改行しているので、レイヤーの基準は行頭になる。
+			if(lines.count > 1)
+			{
+				if(.vertical)
+					.y = .marginT + .indentxpos;
+				else
+					.x = .marginL + .indentxpos;
+			}
+
+			//	サイズ変更
+			if(.vertical)
+			{
+				setPos(.x, .y - 4);
+				setImageSize((.lineSize + .lineSpacing) * lines.count, max + 8);
+			}
+			else
+			{
+				setPos(.x - 4, .y);
+				setImageSize(max + 8, (.lineSize + .lineSpacing) * lines.count);
+			}
+			setSizeToImageSize();
+			fillRect(0, 0, width, height, 0x00000000);
+
+			//	テキストを描画
+			var	dx, dy;
+			if(lines.count == 1)
+				.lineLayerPos	= 0;	//	1行だけなら、行頭から
+			var	t	= .lineSpacing;
+			for(var i=0; i<lines.count; i++)
+			{
+				//	描画位置決定
+				var	ch	= lines[i];
+				if(.vertical)
+					dx	= t, dy = int(.lineLayerPos) + 4;
+				else
+					dx	= int(.lineLayerPos) + 4, dy = t;
+
+				if(.edge)
+					drawText(dx, dy, ch, .chColor, 255, .antialiased, .edgeEmphasis, .edgeColor, .edgeExtent, 0, 0);
+				else if(.shadow)
+					drawText(dx, dy, ch, .chColor, 255, .antialiased, 255, .shadowColor, 0, 2, 2);
+				else
+					drawText(dx, dy, ch, .chColor, 255, .antialiased);
+
+				//	履歴への文字追加
+				if(window.historyWriteEnabled)
+				{
+					for(var i=0; i<ch.length; i++)
+						window.historyLayer.store(ch[i]);	//	履歴にも追加(一文字ずつでないと、変に改行されてしまう)
+				}
+				if(i < lines.count - 1)	//	最終行でないなら
+				{
+					.reline();	//	改行
+					t	+= .lineSize + .lineSpacing;
+				}
+				else
+				{//	最終行ならカーソル位置を調整する。
+					var	cw	= font.getTextWidth(ch) + .pitch;
+					if(.vertical) .y += cw; else .x += cw;
+					.lineLayerPos	+= cw;
+					.lineLayerLength+= cw;
+					.lastDrawCh		= ch[ch.length - 1];
+				}
+			}
+		}
+	}
+}
+
+/*----------------------------------------------------------------------------/
+/	テキスト履歴レイヤー
+/----------------------------------------------------------------------------*/
+class HistoryLayer extends HistoryLayerORIGINAL
+{
+	var scroll;
+	var controlWidth	= 16;
+	var controlHeight	= 30;
+	var keyDisregardOnce;
+
+	var historyFontSize		= [];	//	各ページがどのサイズでフォント表示されていたかを記録
+	var historyLineSpacing	= [];	//	行間
+
+	var currentRuby;				//	次の文字に付与されるルビ
+	var historyRuby			= [];	//	ルビ(ルビ文字, 桁, align)
+
+	var bgimage;
+	var bgimageLayer;
+
+	function HistoryLayer()
+	{
+		super.HistoryLayerORIGINAL(...);
+	}
+
+	function finalize()
+	{
+		release(bgimageLayer);
+		super.finalize(...);
+	}
+
+	function clear()
+	{
+		historyFontSize		= [];
+		historyLineSpacing	= [];
+		historyRuby			= [];
+		super.clear(...);
+	}
+
+	function save()
+	{
+		var	dic	= super.save(...);
+		if(dic==void)	return void;
+		if(everypage)
+		{
+			dic.historyFontSize		= historyFontSize;
+			dic.historyLineSpacing	= historyLineSpacing;
+			dic.historyRuby			= historyRuby;
+		}
+		return dic;
+	}
+
+	function load(dic)
+	{
+		if(dic!==void && everypage)
+		{
+			historyFontSize.assignStruct(dic.historyFontSize) if dic.historyFontSize!==void;
+			historyLineSpacing.assignStruct(dic.historyLineSpacing) if dic.historyLineSpacing!==void;
+			historyRuby.assignStruct(dic.historyRuby) if dic.historyRuby!==void;
+		}
+		super.load(dic);
+	}
+
+	function store(ch)
+	{
+		if(currentLine!==void && currentLine.length<2)
+		{
+			//	計測用にフォントサイズを変更し、更に記録しておく
+			historyLineSpacing[dataPage]= [] if historyLineSpacing[dataPage]==void;
+			historyLineSpacing[dataPage][dataPos]	= window.current.lineSpacing;	//	行間は行単位で記録
+		}
+
+		var result = super.store(...);
+
+		//	フォントサイズを保存
+		font.height	= window.current.fontSize;
+		if(historyFontSize[dataPage] == void)
+			historyFontSize[dataPage]	= [];
+		if(historyFontSize[dataPage][dataPos] == void)
+			historyFontSize[dataPage][dataPos]	= [];
+		for(var i=0; i<ch.length; i++)
+			historyFontSize[dataPage][dataPos].add(font.height);
+//		dm(ch+"["+(currentLine != "" ? currentLine.length : 0)+"] => "+font.height+"\""+currentLine+"\"");
+
+		//	ルビを保存
+		if(currentRuby)
+		{
+			historyRuby[dataPage]= [] if historyRuby[dataPage]==void;
+			currentRuby[1]	= dataPos;				//	行
+			currentRuby[2]	= currentLine.length-1;	//	桁
+			historyRuby[dataPage].add(currentRuby);
+			currentRuby	= void;
+		}
+
+		return result;
+	}
+
+	function storeRuby(ruby, pos="c")
+	{//					ルビ	行	桁	表示位置(c,l)
+		currentRuby	= [ ruby,	0,	0,	pos ];
+	}
+
+	function repage()
+	{
+		super.repage(...);
+		if(everypage)
+		{
+			//	新しい入れ物を作る
+			historyFontSize[dataPage]	= [];
+			historyLineSpacing[dataPage]= [];
+			historyRuby[dataPage]		= void;
+		}
+	}
+
+	function dispInit()
+	{
+		if(typeof window.pauseClickRepeat != "undefined")
+			window.pauseClickRepeat(true);	//	クリックリピートを一時停止
+
+		//	背景画像を用意
+		if(bgimage!="")
+		{
+			with(bgimageLayer = new global.Layer(window, this))
+			{
+				.loadImages(bgimage);
+				.setSizeToImagaSize();
+			}
+		}
+
+		super.dispInit(...);
+	}
+
+	function dispUninit()
+	{
+		super.dispUninit(...);
+
+		release(bgimageLayer);	//	背景画像を消去
+
+		if(typeof window.pauseClickRepeat != "undefined")
+			window.pauseClickRepeat(false);	//	クリックリピートを再開
+	}
+
+	function clearBack(n)
+	{
+		if(bgimage!==void)
+		{
+		}
+		else
+			super.clearBack(...);
+	}
+
+	function drawPage()
+	{
+		var page	= getPage(dispStart);
+		var i;
+		var	n	= dispStart + dataStart;
+		if(n >= maxPages) n -= maxPages;
+		var fszs	= historyFontSize[n];		//	表示開始ページのフォントサイズ
+		var lspcs	= historyLineSpacing[n];	//	行間
+		var ruby	= historyRuby[n];
+		var lastls;
+		var rc = 0;
+
+		if(verticalView)
+		{
+			var x = width - marginR, y;
+			for(i = 0; i < repageLine; i++)
+			{
+				//	フォントサイズを変更
+				font.height	= fszs[i] if fszs != void && fszs[i]!=void && font.height!=fszs[i];
+				if(page[i]!="")
+				{
+					drawText(x, marginT + getLineStart2(dispStart, i),
+						page[i], historyColor, 255, antialiased);
+
+					//	ルビ
+					if(ruby)
+					{
+						var fh = font.height;
+						var r;
+						while((r = ruby[rc]) && r[1]==i)	//	同じ行のルビを描画
+						{
+							var ry = y + font.getTextHeight(page[i].substr(0, r[2]));
+							var ch = font.getTextHeight(page[i][r[2]]);
+							font.height = int(fh * 0.43 + 0.5);	//	ruby用フォントサイズ
+							ry -= (font.getTextHeight(r[0]) - ch) \ 2 if r[3][0]=="c";
+							drawText(x-font.height+1, ry, r[0], historyColor, 255, antialiased);
+							font.height	= fh;
+							rc++;	//	次のルビ
+						}
+					}
+				}
+				x -= font.height + (lspcs[i]!==void ? (lastls=lspcs[i]) : lastls);	//	次行へ
+//				dm(i+": x="+x+" / fh="+font.height+" / ls="+lastls);
+			}
+		}
+		else
+		{
+			var x, y = marginT;
+			for(i = 0; i < repageLine; i++)
+			{
+//				dm("line pos: "+y);
+				//	フォントサイズを変更
+//				font.height	= fszs[i] if fszs != void && fszs[i]!=void && font.height!=fszs[i];
+				var	line	= page[i];
+				var	maxfh	= 0;
+				if(line!="")
+				{
+					var	xpos	= marginL + getLineStart2(dispStart, 1);
+					var	fhs		= fszs[i];
+					for(var c=0; c<fhs.count; c++)
+						maxfh	= fhs[c] if maxfh < fhs[c];
+					for(var c=0; c<line.length; c++)
+					{
+						//	１文字描画
+//						dm(line[c]+"["+c+"] => "+fhs[c]);
+						var	fh	= font.height	= fhs[c];
+						var	ypos= y + maxfh - fh;
+						drawText(xpos, ypos, line[c], historyColor, 255, antialiased);
+						var	cw	= font.getTextWidth(line[c]);
+
+						//	描画した文字に対応するルビを描画
+						if(ruby)
+						{
+							var r;
+							while((r = ruby[rc]) && r[1] == i && r[2] == c)
+							{
+								font.height = int(fh * 0.43 + 0.5);	//	ruby用フォントサイズ
+								var	rx	= xpos;
+								rx	-= (font.getTextWidth(r[0]) - cw) \ 2 if r[3][0] == "c";	//	センタリング
+								drawText(rx, ypos - font.height + 1, r[0], historyColor, 255, antialiased);
+								rc++;
+							}
+						}
+
+						xpos	+= cw;
+					}
+				}
+				y += maxfh + (lspcs[i]!==void ? (lastls=lspcs[i]) : lastls);	//	次行へ
+//				dm(i+": y="+y+" / fh="+font.height+" / ls="+lastls);
+			}
+		}
+	}
+
+	function makeButtons()
+	{
+		if(prevPageButton !== void)
+		{
+			//	既に作成済み
+			with(scroll)
+			{
+				.total	= dataPages;
+				.area	= 1;
+				.current= dataPages;
+			}
+			return;
+		}
+
+		var cw = controlWidth;
+		var ch = controlHeight;
+
+		//	閉じるボタン
+		with(closeButton = new global.ExButtonLayer(window, this, "close", width-cw, 0, "closebtn", "メッセージ履歴を閉じる"))
+		{
+			.mode		= 3;
+			.readyVisible();
+		}
+		if(verticalView)
+		{
+			//	縦書きには未対応
+		}
+		else
+		{
+			//	ボタン
+			prevPageButton = new global.ExButtonLayer(window, this, "prev", width-cw, closeButton.height, "prevbtn", "前のページを表示します。");
+			with(prevPageButton)
+			{
+				.mode		= 3;
+				.readyVisible();
+			}
+			nextPageButton = new global.ExButtonLayer(window, this, "next", width-cw, height-ch, "nextbtn", "次のページを表示します。");
+			with(nextPageButton)
+			{
+				.mode		= 3;
+				.readyVisible();
+			}
+
+			//	スクロールバー
+			scroll	= new global.ScrollBarLayer(window, this, height-ch*2-closeButton.height, 6, 7);
+			with(scroll)
+			{
+				.left	= width - cw;
+				.top	= ch + closeButton.height;
+				.total	= dataPages;
+				.area	= 1;
+				.current= dataPages;
+				.moving	= 1;
+				.slider.onMouseWheel	= function()
+				{
+					//	履歴レイヤーからのメッセージのみで動作するように
+				} incontextof scroll.slider;
+			}
+		}
+	}
+
+	function prev()
+	{
+		var	last	= scroll.current;
+		scroll.current	-= scroll.slider.moving;
+//		if(last == scroll.current)
+//			hide();	//	一番上で更に上に行こうとしたので
+	}
+
+	function next()
+	{
+		with(scroll)
+		{
+			var cur = .current;
+			.current	+= .slider.moving;
+			if(cur == .current)
+				hide();	//	一番下でさらに下に行こうとしたので
+		}
+	}
+
+	function updateButtonState()
+	{
+		if(!canScroll)
+		{
+			prevPageButton.enabled	= canScroll;
+			nextPageButton.enabled	= canScroll;
+		}
+		prevPageButton.enabled	= !(dispStart==0);
+		nextPageButton.enabled	= !((everypage && dispStart >= dataPages-1) || (!everypage && dispStart >= dataLines-dispLines));
+		scroll.enabled	= canScroll;
+	}
+
+	function windowMouseWheel(shift, delta, x, y)
+	{
+		// ウィンドウのホイール操作メッセージがここに流される
+		var currenttick = System.getTickCount();
+		delta = delta \ 120;
+		if(delta > 0 )
+			prev();
+		else if(delta < 0 )
+		{
+			// 手前
+			if(currenttick - lastWheelTick > 150 &&
+				((everypage && dispStart >= dataPages-1) ||
+				(!everypage && dispStart >= dataLines - dispLines)))
+			{
+				/* くるくる回しているうちにいきなり履歴が閉じたりしないような仕掛け */
+				// 既に最終部分を表示している
+				hide();
+			}
+			else
+				next();
+		}
+		lastWheelTick = currenttick;
+	}
+
+	function onButtonDown(btn)
+	{
+		switch(btn.id)
+		{
+		case "prev":
+			prev();
+			break;
+		case "next":
+			next();
+			break;
+		case "close":
+			hide();
+			break;
+		}
+	}
+
+	function onKeyDown(key, shift)
+	{
+		dm("on key down(in history)");
+		window.hideMouseCursor();
+		if(keyDisregardOnce)
+		{
+			//	キー入力を一回だけ無視する(PageUpで履歴を表示すると、一つ上のページから開始してしまうので)
+			keyDisregardOnce	= false;
+			return;
+		}
+		if(canScroll)
+		{
+			if(verticalView)
+			{
+				if(key == VK_DOWN)
+					next();
+				else if(key == VK_UP)
+					prev();
+				else if(key == VK_LEFT || key == VK_PRIOR)
+				{
+					if(everypage)
+						prev();
+					else
+						scrollUp();
+				}
+				else if(key == VK_RIGHT || key == VK_NEXT)
+				{
+					if(everypage)
+						next();
+					else
+						scrollDown();
+				}
+			}
+			else
+			{
+				if(key == VK_DOWN)
+				{
+					if(everypage)
+						next();
+					else
+						scrollUp();
+				}
+				else if(key == VK_UP)
+				{
+					if(everypage)
+						prev();
+					else
+						scrollDown();
+				}
+				else if(key == VK_LEFT || key == VK_PRIOR)
+					prev();
+				else if(key == VK_RIGHT || key == VK_NEXT)
+					next();
+			}
+		}
+		if(key == VK_ESCAPE || key == VK_RETURN || key == VK_SPACE || key == VK_HOME || key == VK_R)
+		{
+			hide();
+		}
+	}
+
+	function onScroll(cur)
+	{
+		if(everypage)
+		{
+			dispStart	= cur;
+			clearBack();
+			drawPage();
+		}
+		else
+		{
+			//	未実装
+		}
+		updateButtonState();
+	}
+}
+
+/*----------------------------------------------------------------------------/
+/	KAGレイヤー
+/----------------------------------------------------------------------------*/
+//	差分情報を読み込む
+var	diffImageDataFile	= "diffrect.ksc";
+var	diffImageDatas;
+diffImageDatas	= Scripts.evalStorage(diffImageDataFile) if Storages.isExistentStorage(diffImageDataFile);
+diffImageDatas	= %[] if diffImageDatas == void;
+class KAGLayer extends KAGLayerORIGINAL
+{
+	var magnify;	//	拡大率
+	var magnify2;	//	上下方向の拡大率
+	var cx, cy;		//	中心座標
+	var	rotate;		//	傾き
+
+	var orglayer;	//	元画像
+	var spread;		//	外形が変化するか
+	var noerase;	//	元画像を終了時に削除しないか？
+
+//	var Anim_loadParams;
+
+	function KAGLayer()
+	{
+		super.KAGLayerORIGINAL(...);
+	}
+
+	function finalize()
+	{
+		release(orglayer);
+		super.finalize(...);
+	}
+
+	function loadImages(storage, key)
+	{
+		var	data;
+		if((data = diffImageDatas[storage]) != void)
+		{//	差分画像を読み込む
+			super.loadImages(data[0], key);	//	元画像を読み込む
+			var	layer	= new global.Layer(window, this);
+			layer.loadImages(storage);		//	差分画像を読み込む
+			copyRect(data[1], data[2], layer, 0, 0, layer.imageWidth, layer.imageHeight);	//	差分を追加
+			invalidate layer;
+		}
+		else
+		//	そのまま読み込む
+			super.loadImages(...);
+
+		//	初期化
+		magnify	= 1.0;
+		magnify2= void;
+		cx		= width >> 1;
+		cy		= height >> 1;
+		rotate	= void;
+		dm(storage+".erase: loadImages");
+		release(orglayer);	orglayer	= void;	//	orglayerがあれば破棄する
+
+		imagefilename	= storage;
+	}
+	var	imagefilename;
+
+	function freeImage()
+	{
+		super.freeImage(...);
+
+		//	orglayerがあれば破棄する
+		dm(storage+".erase: freeImage");
+		release(orglayer);	orglayer	= void;
+	}
+
+	function beginMove(elm)
+	{
+		// elm に従い自動移動を開始する
+		stopMove();
+
+		var time = +elm.time;
+		var accel = elm.accel === void ? 0 : +elm.accel;
+
+		//	スキップ中は処理時間0(ms)とする
+		if(sf.effectSkip || kag.skipMode>=2)
+			time	= 0;
+
+		//	Anim_loadParamsを用意
+/*		var alp;
+		if(typeof this.Anim_loadParams != "undefined")
+		{
+			Anim_loadParams	= %[] if Anim_loadParams == void;
+			alp	= Anim_loadParams;
+		}
+*/
+//		dm("elm.path = "+elm.path+" / elm.affine = "+elm.affine);
+		if(elm.path===void && elm.affine===void)
+		{
+			var rl;
+			rl = reverseLayer if +elm.both;
+			if(elm.anglespeed!==void)
+			{
+				dm("rotation move");
+				//	回転
+				var radius	= elm.radius===void ? 100 : +elm.radius;
+				var yradius	= elm.yradius===void ? radius : +elm.yradius;
+				moveObject	= new RotationMover(this, time, accel, moveFinalFunction, rl,
+					elm.cx===void ? 0 : +elm.cx, elm.cy===void ? 0 : +elm.cy,
+					+elm.anglespeed, radius, yradius);
+			}
+			else if(elm.gravity!==void)
+			{
+				dm("gravity move");
+				//	重力加速度
+				moveObject	= new GravityMover(this, time, accel, moveFinalFunction, rl,
+					elm.vx===void ? 0 : +elm.vx, elm.vy===void ? 0 : +elm.vy, +elm.gravity);
+			}
+			else
+			{
+				//	情報が足りず、実行不可
+				throw new Exception("[move]を実行する為に必要な情報が足りません。");
+				return false;
+			}
+		}
+		else if(elm.magnify !== void)
+		{
+			dm("magnify move");
+			loadOriginal() if !elm.noload || orglayer == void;	//	元画像を保存
+
+			spread	= elm.spread===void ? true : +elm.spread;	//	外形が広がる(変化する)か？
+
+			//	pathの分解(座標は中心点を基準とする)
+			var array = [].split("(), ", elm.path, , true);
+			for(var i = array.count-1; i>=0; i--) array[i+4] = +array[i];
+			if(spread)
+			{
+				array[0] = elm.mx!==void ? +elm.mx : left+width\2;	//	初期の中心座標
+				array[1] = elm.my!==void ? +elm.my : top+height\2;
+			}
+			else
+			{
+				var mx	= elm.mx!==void ? +elm.mx : width \ 2;	//	初期の拡大中心座標
+				var my	= elm.my!==void ? +elm.my : height \ 2;
+				setMagnifyCenterPos(mx, my);
+				array[0] = mx, array[1] = my;
+			}
+			array[2] = opacity;
+			array[3] = magnify = +elm.magnify;
+
+			//	移動用オブジェクト
+			var rl;
+			rl = reverseLayer if +elm.both;
+			if(elm.spline !== void & +elm.spline && array.count > 4*2)
+			{
+				moveObject	= new SplineMoverWithMagnify(this, array, time, accel,
+					moveFinalFunction, rl, spread);
+			}
+			else
+			{
+				moveObject	= new LinearMoverWithMagnify(this, array, time, accel,
+					moveFinalFunction, rl, spread);
+			}
+			rotate	= void;
+		}
+		else if(elm.affine!==void)
+		{
+			dm("magnify & rotate move: "+elm.affine);
+
+			loadOriginal() if !elm.noload || orglayer == void;	//	元画像を保存
+
+			var array = [].split("()", elm.affine,, true);
+			var p = [];
+			p[0]	= elm.px!==void ? +elm.px : 0;		//	初期値
+			p[1]	= elm.py!==void ? +elm.py : 0;
+			p[2]	= elm.deg!==void ? +elm.deg : 0;
+			p[3]	= elm.mag!==void ? +elm.mag : 1;
+			p[4]	= elm.opacity!==void ? +elm.opacity : 255;
+			p[5]	= elm.cx!==void ? +elm.cx : (orglayer.imageWidth>>1);
+			p[6]	= elm.cy!==void ? +elm.cy : (orglayer.imageHeight>>1);
+			var pvc	= p.count;
+			var ind = 0;
+			for(var i=0; i<array.count; i++)
+			{
+				var param = [].split(",", array[i]);
+				for(var j=0; j<pvc; j++)
+				{
+//					dm(@"param[${j}] = \""+param[j]+"\"");
+					//	設定されていればそれを、無ければ直前の値を入れる
+					p[pvc+ind]	= param[j]!="" ? +param[j] : p[ind];
+//					dm(@"path[${i}][${j}] = "+p[pvc+ind]);
+					ind++;
+				}
+			}
+			spread	= true;	//	回転していないときは拡大縮小をするので、とりあえずtrueにしておく必要がある。
+
+			var rl;
+			rl = reverseLayer if +elm.both;
+			if(elm.spline !== void && +elm.spline && p.count > 7*2)
+				moveObject = new SplineMoverWithAffine(this, p, time, accel,
+					moveFinalFunction, rl, orglayer, window.currentInterpolationMode);
+			else
+				moveObject = new LinearMoverWithAffine(this, p, time, accel,
+					moveFinalFunction, rl, orglayer, window.currentInterpolationMode);
+		}
+		else
+		{
+			dm("normal move");
+			// path の置換
+			var	path	= elm.path;
+			var	keys	= [
+				[ "left",	left ],
+				[ "top",	top ]
+			];
+			var	key, pos;
+			for(var i=0; i<keys.count; i++)
+			{
+				if(key = keys[i])
+				{
+					while((pos = path.indexOf(key[0]))>=0)
+						path	= path.substr(0, pos) + key[1] + path.substr(pos + key[0].length);
+				}
+			}
+
+			// path の分解
+			var array = [].split("(), ", path, , true);
+			for(var i = array.count-1; i>=0; i--) array[i+3] = +array[i];
+			array[0] = left;
+			array[1] = top;
+			array[2] = opacity;
+
+			// 移動用オブジェクトの作成
+			var rl;
+			rl = reverseLayer if +elm.both;
+			if(elm.spline !== void && +elm.spline && array.count > 3*2)
+			{
+				// スプライン補間(ポイントが3つ以上必要)
+				moveObject = new SplineMover(this, array, time, accel, moveFinalFunction, rl);
+			}
+			else
+			{
+				// 直線補間
+				moveObject = new LinearMover(this, array, time, accel, moveFinalFunction, rl);
+			}
+		}
+		window.moveCount++;
+		moveObject.startMove(time==0 ? 0 : +elm.delay);
+		return true;
+	}
+
+	/*-----------------------------------------------------------------------------
+	/	一定の動作を繰り返すmoveを開始
+	/	in	: mover		使用するmover名
+	/		: both		裏レイヤーも同様に動作させるか
+	/		: frame		1処理単位の時間(default:5ms[ただし、mover依存])
+	/		: interval	更新間隔(default:16ms[ただし、mover依存])
+	/		: delay		処理開始遅延(ms)
+	/		: その他	mover依存
+	/	out	: 
+	/----------------------------------------------------------------------------*/
+	function beginLoopMove(elm)
+	{
+		stopMove();
+
+		//	元画像の保存(〜Mover2のときのみ/アフィン変換するので)
+		var	key	= "Mover2";
+		var mlast	= elm.mover.substr(elm.mover.length - key.length, key.length);
+		if(mlast == key && (!elm.noload || orglayer == void))
+			loadOriginal();//%[]);
+
+		//	moverの作成
+		var rl;
+		rl = reverseLayer if +elm.both;
+		moveObject	= new (("global."+elm.mover)!)(this, loopMoveFinalFunction, rl, elm.frame, elm.interval, elm.limit);
+//		window.moveCount++;
+
+		//	処理開始(予約)
+		var delay	= sf.effectSkip || kag.skipMode>=2 ? 0 : +elm.delay;
+		moveObject.init(elm);
+		moveObject.startMove(delay);
+
+		return true;
+	}
+
+	function loopMoveFinalFunction()
+	{
+		//	特にすることはない
+	}
+
+	//	揺れ開始
+	var quakeObject;
+	function beginQuake(elm)
+	{
+		stopQuake();
+
+		//	スキップ中は処理時間0とする
+		if(sf.effectSkip || kag.skipMode>=2 && +elm.time > 0)
+			elm.time	= 0;
+
+		quakeObject	= new Quaker(this, elm.time, elm.hmax, elm.vmax, elm.withback, quakeFinalFunction);
+		window.quakeCount++;
+		quakeObject.startQuake(+elm.delay);
+	}
+
+	//	揺れ終了時に呼ばれる
+	function quakeFinalFunction()
+	{
+		window.quakeCount--;
+		window.onLayerQuakeStop(quakeObject.triggername);
+	}
+
+	//	揺れの終了
+	function stopQuake()
+	{
+		if(quakeObject !== void)
+			invalidate quakeObject, quakeObject = void;
+	}
+
+	//	揺れているか？
+	property isQuaking
+	{
+		getter	{ return quakeObject !== void && quakeObject.quaking; }
+	}
+
+	//	中心座標を指定
+	function setCenterPos(cl, ct)
+	{
+		var l = cl - width\2;
+		var t = ct - height\2;
+//		dm(@"(${left}, ${top}) -> (${l}, ${t})");
+		if(left != l)	left	= l;
+		if(top != t)	top		= t;
+	}
+
+	//	拡大・縮小、回転の中心を設定
+	function setMagnifyCenterPos(x, y)
+	{
+		cx = x, cy = y;
+	}
+
+	//	拡大縮小・回転の元となるレイヤーを読み込む
+	function loadOriginal()
+	{
+		release(orglayer);
+		with(orglayer = new global.KAGLayer(window, this))
+		{
+			.assignImages(this);
+			.type	= ltOpaque;
+		}
+	}
+
+	//	状態に合わせて描画しなおす
+	//	座標、元画像も更新
+	function redraw(l, t, full=false)
+	{
+//		dm(storage+".redraw("+l+", "+t+", "+full+")");
+		var	limit	= 0.0001;
+//		dm("redraw rotate: "+Math.abs(rotate)+" / magnify: "+magnify+", "+magnify2);
+//		dm(storage+": orglayer = "+orglayer+" / full = "+full+" / Anim_loadParams = "+Anim_loadParams);
+		if(rotate !== void)
+		{//	回転もあり
+			if(orglayer == void || (full && typeof Anim_loadParams != "undefined"))
+			{//	元画像が存在しないか、
+//				dm("load original layer");
+				loadOriginal();	//	元画像を読み込み直す
+			}
+//			dm("rotate");
+			var sw = orglayer.imageWidth, sh = orglayer.imageHeight;
+			var minX = sw, minY = sh;
+			var affine;
+			with(affine = new easyAffineTransform())
+			{
+				.addTransferMatrix(-cx, -cy);		//	中心点へ
+				.addMagnifyMatrix(magnify, magnify2 !== void ? magnify2 : magnify);	//	拡大
+				.addRotateMatrix(rotate);			//	回転
+				.addTransferMatrix(cx, cy);			//	元に戻る
+
+				//	変換後に必要なサイズを計算
+				var pos = [];
+				pos[0]	= .calc(0, 0);
+				pos[1]	= .calc(sw, 0);
+				pos[2]	= .calc(0, sh);
+				pos[3]	= .calc(sw, sh);
+				var maxX, maxY;
+				for(var i=0; i<4; i++)
+				{
+					minX	= pos[i][0] if pos[i][0]<=minX;
+					maxX	= pos[i][0] if pos[i][0]>=maxX;
+					minY	= pos[i][1] if pos[i][1]<=minY;
+					maxY	= pos[i][1] if pos[i][1]>=maxY;
+				}
+				left	= int(l + minX - cx + 0.5) if l !== void;	//	ついでに左上座標も
+				top		= int(t + minY - cy + 0.5) if t !== void;
+				setImageSize(int(maxX - minX), int(maxY - minY));
+				setSizeToImageSize();
+				.addTransferMatrix(-int(minX), -int(minY));
+				fillRect(0, 0, width, height, 0x00000000);
+				.transformByProgram(this, orglayer, 0, 0, sw, sh, window.currentInterpolationMode);
+//				dm(name+" - "+storage+" = "+width+", "+height);
+			}
+			invalidate affine;
+		}
+		else if(Math.abs(magnify - 1.0) > limit || (magnify2 !== void && Math.abs(magnify2 - 1.0) > limit))
+		{//	拡縮のみ
+			if(orglayer == void || (full && typeof Anim_loadParams != "undefined"))
+			{//	元画像が存在しないか、
+//				dm("load original layer");
+				loadOriginal();	//	元画像を読み込み直す
+			}
+//			dm("streach");
+			var	mw = magnify, mh = magnify2 !== void ? magnify2 : magnify;
+			var w = int(orglayer.imageWidth * mw);
+			var h = int(orglayer.imageHeight * mh);
+//			dm(@"${storage}: ${mw}, ${mh} - ${orglayer.imageWidth}, ${orglayer.imageHeight} - ${w}, ${h}");
+			face	= dfOpaque,	holdAlpha	= false;
+			if(spread)
+			{
+				cx		= w >> 1;
+				cy		= h >> 1;
+				left	= l - cx if l !== void;
+				top		= t - cy if t !== void;
+				if(w != width || h != height)
+				{//	サイズが変わってないので、描画しなおさない
+					setImageSize(w, h);
+					setSizeToImageSize();
+					operateStretch(0, 0, width, height, orglayer, 0, 0,
+						orglayer.imageWidth, orglayer.imageHeight, omOpaque,, window.currentInterpolationMode);
+				}
+			}
+			else
+			{
+				cx	= l if l !== void;
+				cy	= t if t !== void;
+				if(w != width || h != height)
+				{//	サイズが変わってないので、描画しなおさない
+					var l = cx - cx * mw;
+					var t = cy - cy * mh;
+					operateStretch(l, t, w, h, orglayer, 0, 0,
+						orglayer.imageWidth, orglayer.imageHeight, omOpaque,, window.currentInterpolationMode);
+				}
+			}
+//			dm(storage+".streach: ("+left+", "+top+")-("+width+", "+height+"), "+opacity);
+			face	= dfAlpha;
+		}
+		else
+		{
+			//	回転も拡大・縮小もしていないが、移動だけはしている
+			if(spread)
+			{
+				left	= l - cx if l !== void;
+				top		= t - cy if t !== void;
+			}
+		}
+	}
+
+	//	このレイヤーが立ち絵であるとき、対のレイヤーを返す
+	property reverseLayer
+	{
+		getter	{
+			var ls = kag.fore.layers;
+			for(var i=0; i<ls.count; i++)
+			{
+				if(ls[i] == this)
+					return kag.back.layers[i];
+			}
+			ls = kag.back.layers;
+			for(var i=0; i<ls.count; i++)
+			{
+				if(ls[i] == this)
+					return kag.fore.layers[i];
+			}
+			return void;
+		}
+	}
+
+	function store()
+	{
+		var	dic	= super.store(...);
+		with(dic)
+		{
+			.magnify	= magnify;
+			.magnify2	= magnify2;
+			.cx			= cx;
+			.cy			= cy;
+			.rotate		= rotate;
+			.spread		= spread;
+			.noerase	= noerase;
+			if(orglayer)
+			{//	保存時点での、レイヤーの本来のサイズを記録しておく
+				.originalImageWidth	= orglayer.imageWidth;
+				.originalImageHeight= orglayer.imageHeight;
+			}
+//			dm(@"${imagefilename}: ${left}, ${top}, ${magnify}, ${magnify2}, ${cx}, ${cy}, ${rotate}, ${spread}, ${noerase}");
+//			dm("image size: ("+imageWidth+", "+imageHeight+")");
+		}
+		return dic;
+	}
+
+	function restore(dic)
+	{
+		super.restore(dic);
+		with(dic)
+		{
+			magnify		= .magnify;
+			magnify2	= .magnify2;
+			cx			= .cx;
+			cy			= .cy;
+			rotate		= .rotate;
+			spread		= .spread;
+			noerase		= .noerase;
+			if(.originalImageWidth !== void)
+			{//	レイヤーを本来のサイズに戻す
+				imageWidth	= .originalImageWidth;
+				imageHeight	= .originalImageHeight;
+			}
+		}
+//		dm(@"${imagefilename}: ${left}, ${top}, ${magnify}, ${magnify2}, ${cx}, ${cy}, ${rotate}, ${spread}, ${noerase}");
+//		dm("image size: ("+imageWidth+", "+imageHeight+")");
+//		loadOriginal();
+		redraw();
+	}
+}
+
+/*----------------------------------------------------------------------------/
+/	背景レイヤー
+/----------------------------------------------------------------------------*/
+@if(0)
+class BaseLayer extends BaseLayerORIGINAL
+{
+	function BaseLayer()
+	{
+		super.BaseLayerORIGINAL(...);
+	}
+
+	function finalize()
+	{
+		super.finalize(...);
+	}
+/*
+	function internalOnMouseDown(x, y, button, processprovince = true)
+	{
+		// 内部関数
+		var provinceprocessed = false;
+		if(button == mbLeft && processprovince && !window.messageLayerHiding)
+			provinceprocessed = processProvince(x, y);
+		if(button == mbLeft && !provinceprocessed)
+		{
+			// 自身がプライマリレイヤならば、ウィンドウの
+			// onPrimaryClick を呼ぶ
+			if(isPrimary)
+			{
+				window.onPrimaryClick();
+				window.isClickRepeat	= true;
+			}
+		}
+		else if(button == mbRight)
+		{
+			// 自身がプライマリレイヤならば、ウィンドウの
+			// onPrimaryRightClick を呼ぶ
+			if(isPrimary) window.onPrimaryRightClick();
+		}
+	}
+
+	function internalOnMouseUp(x, y, button, processprovince = true)
+	{
+		var provinceprocessed = false;
+		if(button == mbLeft && processprovince && !window.messageLayerHiding)
+			provinceprocessed = processProvince(x, y);
+		if(button == mbLeft && !provinceprocessed)
+		{
+			if(isPrimary)	window.isClickRepeat	= false;
+		}
+	}
+
+	function onMouseUp(x, y, button)
+	{
+		super.onMouseUp(...);
+		internalOnMouseUp(x - imageLeft, y - imageTop, button);
+	}
+*//*
+	function onFocus()
+	{
+		super.onFocus(...);
+		window.pauseClickRepeat(false);	//	リピート一時停止の解除
+	}
+
+	function onBlur()
+	{
+		super.onBlur(...);
+		window.pauseClickRepeat(true);	//	リピート一時停止
+	}
+
+	function onMouseEnter()
+	{
+		super.onMouseEnter(...);
+		window.pauseClickRepeat(false);	//	リピート一時停止の解除
+	}
+
+	function onMouseLeave()
+	{
+		super.onMouseLeave(...);
+		window.pauseClickRepeat(true);	//	リピート一時停止
+	}
+*/}
+@endif
+
+/*----------------------------------------------------------------------------/
+/	SE
+/----------------------------------------------------------------------------*/
+class SESoundBuffer extends SESoundBufferORIGINAL
+{
+	var	playingStorage;
+
+	function SESoundBuffer()
+	{
+		super.SESoundBufferORIGINAL(...);
+	}
+
+	function play(elm)
+	{
+		super.play(...);
+		playingStorage	= Storages.chopStorageExt(elm.storage);
+	}
+
+	function fadeIn(elm)
+	{
+		super.fadeIn(elm);
+		playingStorage	= Storages.chopStorageExt(elm.storage);
+	}
+
+	function stop()
+	{
+		var st	= this.status;	//	停止直前の状態を記録
+
+		super.stop(...);
+
+		if(st == "play")			//	停止直前に再生中だったら
+			play(%[storage:"mute"]);//	無音データを再生し、バッファを綺麗にする
+	}
+
+	function stopFade()
+	{
+		var st	= this.status;	//	停止直前の状態を記録
+
+		super.stopFade(...);
+
+		if(st == "play")			//	停止直前に再生中だったら
+			play(%[storage:"mute"]);//	無音データを再生し、バッファを綺麗にする
+	}
+
+	function restore(dic)
+	{
+		// 辞書配列から状態を読み出し、復帰する
+		currentVolume = dic.volume;
+		pan = dic.pan;
+		if(dic.currentStorage != "")
+		{
+			play(%[storage : dic.currentStorage, loop : true]);
+			dm("restore se: "+dic.currentStorage+"(loop:true)");
+		}
+		else
+			fadeOut(%[time:500]);	//	ぷっつり切れちゃうのも何なので、フェードさせる
+	}
+}
+
+/*----------------------------------------------------------------------------/
+/	BGM
+/----------------------------------------------------------------------------*/
+class BGM extends BGMORIGINAL
+{
+	var nextElm;
+	var delayTimer;
+
+	function finalize()
+	{
+		super.finalize(...);
+	}
+
+	function play(elm)
+	{
+		// elm.storage で与えられた BGM の演奏を開始
+		// elm.loop が true ならばループ再生を行う
+		// buf1 で演奏を行う
+		if(elm.storage == currentStorage) return; // 同じ曲は再演奏しない
+		var loop = elm.loop === void ? true : +elm.loop;
+
+		if(elm.delay!=void)
+		{
+			dm("delay play: "+elm.delay+" ms");
+			//	遅延再生
+			nextElm	= %[];
+			(Dictionary.assign incontextof nextElm)(elm);
+			nextElm.delay	= void;
+			delayTimer	= new Timer(delayPlay, "");
+			delayTimer.interval	= +elm.delay;
+			delayTimer.enabled	= true;
+
+			return;
+		}
+
+		try
+		{
+			buf1.stop();
+			buf2.stop() if buf2 !== void;
+		}
+		catch(e)
+		{
+			dm("BGM の停止に失敗しました(実行は続行できます) : " + e.message);
+		}
+		stopFade(); // フェーディングは終了
+		buf1.volume = volume;
+		playBuffer(buf1, elm.storage, loop);
+
+		if(loop)
+			currentStorage = elm.storage; // ループ演奏の場合
+		else
+			currentStorage = ""; // 単発演奏の場合
+		playingStorage = elm.storage;
+		looping = loop;
+	}
+
+	function delayPlay()
+	{
+		dm("delay play start");
+		invalidate delayTimer;
+		delayTimer	= void;
+
+		play(nextElm);
+	}
+
+	function playOverlap(elm)
+	{
+		//	オーバーラップが不要か、
+		if(!doubleBuffered || currentBuffer.status!="play")
+		{
+			play(elm);
+			return;
+		}
+
+		if(elm.storage == currentStorage) return; // 同じ曲は再演奏しない
+		var loop = elm.loop === void ? true : +elm.loop;
+
+		if(elm.delay!=void)
+		{
+			_dm("delay play overlap: "+elm.delay+" ms");
+			//	遅延再生
+			nextElm	= %[];
+			(Dictionary.assign incontextof nextElm)(elm);
+			nextElm.delay	= void;
+			delayTimer	= new Timer(delayPlayOverlap, "");
+			delayTimer.interval	= +elm.delay;
+			delayTimer.enabled	= true;
+
+			return;
+		}
+
+		//	ダブルバッファ且つ既に再生中の場合、もう一つのバッファで再生開始
+		var nextbuffer; // 次の演奏バッファ
+		nextbuffer = (currentBuffer == buf1) ? buf2 : buf1;
+
+		nextbuffer.volume	= volume;
+		playBuffer(nextbuffer, elm.storage, loop);
+
+		if(loop)
+			currentStorage = elm.storage; // ループ演奏の場合
+		else
+			currentStorage = ""; // 単発演奏の場合
+		playingStorage = elm.storage;
+		looping = loop;
+	}
+
+	function delayPlayOverlap()
+	{
+		_dm("delay play overlap");
+		invalidate delayTimer;
+		delayTimer	= void;
+
+		playOverlap(nextElm);
+	}
+
+	function stopDelay()
+	{
+		//	遅延の再生開始が指定されていたら、それを停止する
+		_dm("delay play stop? : "+delayTimer);
+		if(delayTimer)
+		{
+			invalidate delayTimer;
+			delayTimer	= void;
+		}
+	}
+}
+
+class KAGSoundBuffer extends KAGSoundBufferORIGINAL
+{
+	function stop()
+	{
+		_dm("stop");
+		owner.stopDelay();	//	遅延処理をキャンセル
+		super.stop(...);
+	}
+
+	function stopFade()
+	{
+		_dm("stopFade");
+		owner.stopDelay();	//	遅延処理をキャンセル
+		super.stopFade(...);
+	}
+
+	function fadeOutAndStop()
+	{
+		_dm("fadeOutAndStop");
+		owner.stopDelay();	//	遅延処理をキャンセル
+		super.fadeOutAndStop(...);
+	}
+}
+
+/*----------------------------------------------------------------------------/
+/
+/----------------------------------------------------------------------------*/
+var yesnolayer;
+function MYaskYesNo(win=kag, par=kag.fore.base, msg, resultfunc, arg1, arg2, defaultcancel=false)
+{
+//	dm("alreadyExistYesNo: "+alreadyExistYesNo);
+//	dm("message: "+msg);
+//	dm("trace: "+Scripts.getTraceString());
+	if(!alreadyExistYesNo)
+	{
+		yesnolayer = new YesNoLayer(win, par, defaultcancel);
+		if(!yesnolayer.show(msg, resultfunc, arg1, arg2,, par.cursorX, par.cursorY))
+		{
+			invalidate yesnolayer;
+			yesnolayer	= void;
+			dm("yes no dialog: can't show");
+			return false;
+		}
+		return true;
+	}
+	dm("yes no dialog: already existent");
+	return false;
+}
+
+/*----------------------------------------------------------------------------/
+/	MessageLayer用ボタン
+/----------------------------------------------------------------------------*/
+class ExLinkButtonLayer extends LinkButtonLayer
+{
+	var mover;
+	var setting;
+	var defaulttime = 300, defaultaccel = -2, defaultopacity = 255;
+
+	function ExLinkButtonLayer(win, par)
+	{
+		super.LinkButtonLayer(...);
+	}
+
+	function finalize()
+	{
+		release(mover);
+		release(setting);
+		super.finalize(...);
+	}
+
+	function assign(src)
+	{
+		super.assign(...);
+		mover	= new ComplexLinearMover(this) if mover==void;
+		mover.assign(src.mover);
+		setting	= %[] if setting == void;
+		(Dictionary.assign incontextof setting)(src.setting);
+		with(src.setting)
+		{
+			count	= .count != void ? .count : 3;
+		}
+	}
+
+	function init(elm)
+	{
+		setting	= %[] if setting == void;
+		(Dictionary.assign incontextof setting)(elm);
+		with(setting)
+		{
+			loadImages(.graphic, .graphickey);
+			count	= .count if .count != void;
+			name	= .graphic if name == "";
+		}
+
+		show();
+	}
+
+	function show()
+	{
+		dm(this+": show");
+		mover	= new ComplexLinearMover(this) if mover==void;
+	}
+
+	function hide()
+	{
+		dm(this+": hide");
+		mover	= new ComplexLinearMover(this) if mover==void;
+	}
+
+	function eraseThis()
+	{
+		dm("erase this: "+name);
+		dispose(this);
+	}
+
+	function drawState(s)
+	{
+		s	= s==1 ? 2 : (s==2 ? 1 : s);	//	1(押下状態)と2(乗った状態)を入れ替える
+		super.drawState(s);
+	}
+
+	property count
+	{
+		setter(c)
+		{
+			global.KAGLayer.width	= imageWidth \ c;
+		}
+		getter
+		{
+			return imageWidth \ width;
+		}
+	}
+
+	property opacity
+	{
+		setter(o)
+		{
+			super.opacity	= o;
+		}
+		getter	{ return super.opacity; }
+	}
+}
+
+//	フェードイン・アウトで表示・消去するボタン
+class FadeButton extends ExLinkButtonLayer
+{
+	function FadeButton(win, par)
+	{
+		super.ExLinkButtonLayer(...);
+	}
+
+	function finalize()
+	{
+		super.finalize(...);
+	}
+
+	function show()
+	{
+		super.show(...);
+		var time, accel, opa, delay;
+		with(setting)
+		{
+			time	= .showtime!==void ? +.showtime : (.time!==void ? +.time : defaulttime);
+			accel	= .showaccel!==void ? +.showaccel : (.accel!==void ? +.accel : defaultaccel);
+			opa		= .opacity !== void ? +.opacity : defaultopacity;
+			delay	= .showdelay !== void ? +.showdelay : (.delay !== void ? +.delay : 0);
+			setPos(+.x, +.y);
+			opacity	= 0;
+		}
+		startFade(time, accel, delay, 0, opa);
+	}
+
+	function hide()
+	{
+		super.hide(...);
+		var time, accel, delay;
+		with(setting)
+		{
+			time	= .hidetime!==void ? +.hidetime : (.time!==void ? +.time : defaulttime);
+			accel	= .hideaccel!==void ? +.hideaccel : (.accel!==void ? +.accel : defaultaccel);
+			delay	= .hidedelay !== void ? +.hidedelay : (.delay !== void ? +.delay : 0);
+		}
+		startFade(time, accel, delay, opacity, 0, eraseThis);
+	}
+
+	function startFade(time, accel, delay, sopa, opa, func)
+	{
+		with(mover)
+		{
+			.init(time, accel, func);
+			.add("opacity", sopa, opa);
+			.start(delay);
+		}
+	}
+}
+
+//	フェードイン・アウトと移動で表示・消去するボタン
+class SlideButton extends ExLinkButtonLayer
+{
+	function SlideButton(win, par)
+	{
+		super.ExLinkButtonLayer(...);
+	}
+
+	function finalize()
+	{
+		super.finalize(...);
+	}
+
+	function show()
+	{
+		super.show(...);
+		var time, accel, x, y, sx, sy, opa, sopa, delay;
+		with(setting)
+		{
+			time	= .showtime!==void ? +.showtime : (.time!==void ? +.time : defaulttime);
+			accel	= .showaccel!==void ? +.showaccel : (.accel!==void ? +.accel : defaultaccel);
+			x	= +.x;
+			sx	= .sx !== void ? (.sx[0] == "+" ? x+int(.sx) : (.sx[0] == "-" ? x-int(.sx) : +.sx)) : x;
+			y	= +.y;
+			sy	= .sy !== void ? (.sy[0] == "+" ? y+int(.sy) : (.sy[0] == "-" ? y-int(.sy) : +.sy)) : y;
+			opa		= .opacity !== void ? +.opacity : defaultopacity;
+			sopa	= .sopa !== void ? +.sopa : 0;
+			delay	= .showdelay !== void ?+ .showdelay : (.delay !== void ? +.delay : 0);
+		}
+		startMove(time, accel, delay, sx, sy, sopa, x, y, opa);
+	}
+
+	function hide()
+	{
+		super.hide(...);
+		var time, accel, x, y, ex, ey, opa, eopa, delay;
+		with(setting)
+		{
+			time	= .hidetime!==void ? +.hidetime : (.time!==void ? +.time : defaulttime);
+			accel	= .hideaccel!==void ? +.hideaccel : (.accel!==void ? +.accel : defaultaccel);
+			x	= .x !== void ? +.x : left;
+			ex	= .ex !== void ? +.ex : (.sx !== void ? (.sx[0] == "+" ? x+int(.sx) : (.sx[0] == "-" ? x-int(.sx) : +.sx)) : x);
+			y	= .y !== void ? +.y : top;
+			ey	= .ey !== void ? +.ey : (.sy !== void ? (.sy[0] == "+" ? y+int(.sy) : (.sy[0] == "-" ? y-int(.sy) : +.sy)) : y);
+			opa	= +.opacity;
+			eopa	= .eopa !== void ? +.eopa : 0;
+			delay	= .hidedelay !== void ? +.hidedelay : (.delay !== void ? +.delay : 0);
+		}
+		startMove(time, accel, delay, x, y, opa, ex, ey, eopa, eraseThis);
+	}
+
+	function startMove(time, accel, delay, sx, sy, sopa, x, y, opa, func)
+	{
+		dm(@"${this}: startMove(${time}, ${accel}, ${delay}, ${sx}, ${sy}, ${sopa}, ${x}, ${y}, ${opa})");
+		with(mover)
+		{
+			.init(time, accel, func);
+			left	= sx;
+			top		= sy;
+			opacity	= sopa;
+			if(sx != x)
+				.add("left", sx, x);
+			if(sy != y)
+				.add("top", sy, y);
+			if(sopa != opa)
+				.add("opacity", sopa, opa);
+			.start(delay);
+		}
+	}
+
+	function setPos(l, t)
+	{
+//		dm(@"${top} -> ${t}");
+		super.setPos(...);
+	}
+
+	property top
+	{
+		setter(t)
+		{
+//			dm(@"${super.top} -> ${t}");
+			super.top	= t;
+		}
+		getter	{ return super.top; }
+	}
+}
+
+/*----------------------------------------------------------------------------/
+/	例外の最終受付
+/		例外が発生したら、セーブデータ下に"excepted/YYMMDDhhmmss/"ディレクトリを
+/		作成して、状態を保存する
+/----------------------------------------------------------------------------*/
+var exceptionOccured	= false;	//	例外が発生したか？
+System.exceptionHandler = function(e)
+{
+	Debug.logAsError();	//	ログ出力
+
+	//	フルスクリーンモードで実行中だったら、ウィンドウモードに切り替える
+	if(kag.fullScreened)
+		kag.onWindowedMenuItemClick();
+
+	//	"script exception"が発生したら、処理しない
+	dm("exception: "+e+"\""+e.message+"\"");
+	if(e instanceof "ConductorException" && kag == kag.mainWindow)
+		return false;
+
+	//	時刻取得
+	var date;
+	Plugins.link("util.dll");
+	date	= global.GetDatetime();
+
+	//	セーブデータディレクトリの存在チェックと作成
+	var dir	= kag.saveDataLocation;
+	try
+	{
+		CreateDirectory(dir) if !ExistDirectory(dir);
+	}
+	catch(e)
+	{
+		return false;
+	}
+
+	//	exceptedディレクトリの存在チェックと作成
+	dir	+= "/excepted/";
+	try
+	{
+		CreateDirectory(dir) if !ExistDirectory(dir);
+	}
+	catch(e)
+	{
+		return false;	//	致命的エラー
+	}
+
+	//	今回のディレクトリ名決定して、作成する
+	var now;
+	with(date)
+		now = "%02d%02d%02d%02d%02d%02d".sprintf(.year%100, .mon, .day, .hour, .minute, .second);
+	dir	+= now + "/";
+	try
+	{
+		CreateDirectory(dir) if !ExistDirectory(dir);
+	}
+	catch(e)
+	{
+		return false;
+	}
+	Plugins.unlink("util.dll");
+
+	//	ファイル名決定
+	var ticketfile	= TicketFileName + CurrentTicketNo + ".bmp";
+	var savefile	= kag.dataName + getTicketNo2BookMarkNo(CurrentTicketNo) + ".kdt";
+	var lastdataname= kag.dataName;
+	kag.dataName	= "excepted/"+now+"/"+lastdataname;
+	var systemfile	= dir + lastdataname + "s?.ksd";
+
+	//	データバックアップ
+	makeTicketFile(dir+ticketfile);
+	if(kag.storeEnabled)
+		kag.saveBookMarkToFile(dir+savefile);
+	else
+		savefile	= "";
+	kag.saveSystemVariables();
+	kag.dataName	= lastdataname;
+
+	//	イベント停止
+	var ed	= System.eventDisabled;
+	System.eventDisabled	= true;
+
+	//	メッセージ表示
+	var msg;
+	msg	= "下記の例外が発生しました。\n\n";
+	msg	+= e.message+"\n\n";
+	msg	+= "※ 現在の進行状況を\n";
+	msg	+= "     ・"+dir+ticketfile+"\n";
+	msg	+= "     ・"+dir+savefile+"\n" if savefile != "";
+	msg	+= "     ・"+systemfile+"\n";
+	msg	+= "   に保存しましたので、問題が取り除かれた後に復帰してください。\n";
+	msg	+= "-- trace --\n"+e.trace if e.trace != "";
+	System.inform(msg);
+
+	//	イベント再開
+	System.eventDisabled	= ed;
+	exceptionOccured	= true;	//	例外が発生しているので、終了時点での確認→データ保存を行わない
+
+	return true;	//	停止
+};
+
+/*----------------------------------------------------------------------------/
+/	KAGWindow_config_override(コンフィグ情報の上書き)
+/----------------------------------------------------------------------------*/
+function KAGWindow_config_override()
+{
+	//	セーブディレクトリの位置をユーザーが任意に指定できるようにする
+	var	configconfigfile	= System.exePath+"config.ksc";
+	var	config;
+	if(Storages.isExistentStorage(configconfigfile) && (config = Scripts.evalStorage(configconfigfile)) != void)
+	{
+		//	設定済みの値を用いる
+		saveDataLocation	= config.saveDataLocation if config.saveDataLocation != void;
+			//	config.saveDataLocation == void なら、デフォルトの値を使用する
+	}
+	else
+	{//	初回起動時
+		//	ユニークなフォルダ名を取得("Fate_Savedata"等)
+		var	savefolder	= saveDataLocation;
+		var	pos, chr = "/";
+		for(pos=savefolder.length-1; pos>=0; pos--)
+		{
+			if(savefolder[pos] == chr)
+			{
+				savefolder	= savefolder.substr(pos+1);
+				break;
+			}
+		}
+
+		//	ディレクトリ選択ダイアログを開いて、指定してもらう
+		Plugins.link("util.dll");
+		var	dir	= saveDataLocation;
+		dir	= dir.substr(0, dir.indexOf(savefolder));
+		dir	= SelectDirectory("セーブフォルダ("+savefolder+")の作成先を指定してください。\n(キャンセルした場合、インストールフォルダに作成します。)", dir);
+		if(dir == "")
+			dir	= System.exePath;
+//		dm("dir: "+dir);
+		dir	= Storages.getFullPath(dir);
+//		dm("dir: "+dir);
+		saveDataLocation	= dir+"/"+savefolder;
+		Plugins.unlink("util.dll");
+
+		//	指定されたディレクトリ名を保存
+		config	= %[saveDataLocation:saveDataLocation];
+		(Dictionary.saveStruct incontextof config)(configconfigfile);
+	}
+}
+
+/*----------------------------------------------------------------------------/
+/
+/----------------------------------------------------------------------------*/

@@ -1,0 +1,1719 @@
+/*******************************************************************************
+
+	風雲イリヤ城 - キャラセレクト
+
+*******************************************************************************/
+class CIriyaCharaSelOKDialog
+{
+var		parWin,parLayer;
+	function CIriyaCharaSelOKDialog( _pr_win, _pr_layer )
+	{
+		parWin   = _pr_win;
+		parLayer = _pr_layer;
+		init_buffer();
+	}
+	function finalize()
+	{
+		release_buffer();
+	}
+
+
+	var		LAYER_CURSOR		=100;
+	var		LAYER_YN			=50;
+	var		LAYER_WINDOW		=10;
+
+	var		PRN_YES_PX			=160;
+	var		PRN_YES_PY			= 80;
+	var		PRN_NO_PX			=160;
+	var		PRN_NO_PY			=112;
+	var		MENU_HIT_W			=124;
+	var		MENU_HIT_H			= 32;
+
+
+	var		select_id;
+			var		SEL_NONE	=-1;
+			var		SEL_YES		= 0;
+			var		SEL_NO		= 1;
+
+	var		prn_fade;
+	var		prn_window;
+	var		prn_cursor;
+	var		prn_hit;
+	function init_buffer()
+	{
+		prn_fade = void;
+		prn_cursor = void;
+		prn_window = void;
+		prn_hit = void;
+		select_id = SEL_NONE;
+		return;
+	}
+	function release_buffer()
+	{
+	var		i;
+
+		Stop();
+		for (i=0;  i<prn_hit.count;  i++) {
+			delete prn_hit[i].id;
+			EasyReleaseLayer( prn_hit[i] );
+		}
+		prn_hit = void;
+
+		EasyReleaseLayer( prn_cursor );
+		prn_cursor = void;
+
+		EasyReleaseLayer( prn_window );
+		prn_window = void;
+
+		if (CheckValid(prn_fade)  ==  true) {
+			delete prn_fade.id;
+			EasyReleaseLayer( prn_fade );
+			prn_fade = void;
+		}
+		return;
+	}
+
+	function Init( _priority )
+	{
+	var		i;
+
+		with (prn_fade = new CSpriteLayer(parWin,parLayer))
+		{
+			.setSize( SCREEN_SIZE_W, SCREEN_SIZE_H );
+			.fill( RGBA_MAKE(0,0,0,128) );
+			.absolute = _priority;
+			.left = 0;
+			.top  = 0;
+			.id = SEL_NONE;
+		}
+
+		prn_window = EasyCreateLayerObject( parWin,prn_fade, "ir_csel_dialog",
+							clNone, false, 0, 0, LAYER_WINDOW );
+		prn_cursor = EasyCreateLayerObject( parWin,prn_fade, "ir_csel_cursor_dl00",
+							clAdapt, false, 0, 0, LAYER_CURSOR );
+
+		prn_hit = new Array();
+		for (i=0;  i<2;  i++) {
+			with (prn_hit[i] = new CSpriteLayer(parWin,prn_fade))
+			{
+				.absolute = LAYER_YN;
+				.setSize( MENU_HIT_W, MENU_HIT_H );
+				.fill( RGBA_MAKE(0,0,0,0) );
+				prn_hit[i].id = i;
+			}
+		}
+		return;
+	}
+
+	function Print()
+	{
+		prn_fade.visible = true;
+		with ( prn_window )
+		{
+			.left = CalcCenterPosX( parLayer, prn_window );
+			.top  = CalcCenterPosY( parLayer, prn_window );
+			prn_hit[0].setPos( .left+PRN_YES_PX, .top+PRN_YES_PY );
+			prn_hit[1].setPos( .left+PRN_NO_PX,  .top+PRN_NO_PY );
+			.visible = true;
+		}
+
+		prn_cursor.visible = false;
+		return;
+	}
+	function Start()
+	{
+	var		i;
+		for (i=0;  i<prn_hit.count;  i++) {
+			with ( prn_hit[i] )
+			{
+				.setMouseEnterCallback( button_focus );
+				.setMouseLeaveCallback( button_unfocus );
+				.setMouseDownCallback( button_click_down );
+				.setHitCheckAlphaLimit( "ALL" );
+				.visible = true;
+			}
+
+		}
+		with ( prn_fade )
+		{
+			.setMouseDownCallback( button_click_down );
+			.setHitCheckAlphaLimit( "ALL" );
+		}
+		select_id = SEL_NONE;
+		prn_cursor.visible = false;
+		UpdateCursorPos2( parLayer );
+		return;
+	}
+	function Stop()
+	{
+	var		i;
+		for (i=0;  i<prn_hit.count;  i++) {
+			with ( prn_hit[i] )
+			{
+				.setMouseEnterCallback( void );
+				.setMouseLeaveCallback( void );
+				.setMouseDownCallback( void );
+				.setHitCheckAlphaLimit( "NONE" );
+				.visible = false;
+			}
+		}
+
+		with ( prn_fade )
+		{
+			.setMouseDownCallback( void );
+			.setHitCheckAlphaLimit( "NONE" );
+		}
+		return;
+	}
+
+	function select_yes_data()
+	{
+		Stop();
+		select_id = SEL_YES;
+		PlaySE( SE_CHARASEL_YN_CLICK );
+		return;
+	}
+	function select_no_data()
+	{
+		Stop();
+		select_id = SEL_NO;
+		PlaySE( SE_CHARASEL_YN_CANCEL );
+		return;
+	}
+
+	function button_click_down( _layer, _x,_y, _button,_shift )
+	{
+		if (_button  !=  mbLeft) {
+			if (_button  ==  mbRight) {
+				select_no_data();
+			}
+			return;
+		}
+		if (_layer.id  ==  SEL_NONE)
+			return;
+
+		if (_layer.id  ==  SEL_YES)
+				select_yes_data();
+		else	select_no_data();
+		return;
+	}
+	function button_focus( _layer )
+	{
+		if (CheckPlaySESTack(SE_CHARASEL_YN_FOCUS)  ==  false)
+			PlaySE( SE_CHARASEL_YN_FOCUS, , , , , FOCUS_SE_VOLUME_AVE );
+	//	PlaySE( SE_CHARASEL_YN_FOCUS );
+
+		with ( prn_cursor )
+		{
+			.visible = true;
+			.left = _layer.left - .width;
+			.top  = _layer.top  + (_layer.height)/2 - .height/2;
+		}
+		return;
+	}
+	function button_unfocus( _layer )
+	{
+		prn_cursor.visible = false;
+		return;
+	}
+
+	function GetSelectID()
+	{
+		return ( select_id );
+	}
+}
+
+
+
+
+
+
+class CIriyaCharaSelAnime extends CIriyaCharaAnimeBase
+{
+	var		chara_id;
+
+	var		select;
+
+
+	function CIriyaCharaSelAnime()
+	{
+		super.CIriyaCharaAnimeBase();
+	}
+	function funalize()
+	{
+		super.finalize();
+	}
+
+
+
+	var		focus_callback;
+	var		unfocus_callback;
+	var		select_callback;
+	var		cancel_callback;
+
+
+	function SetCallbackData( _id, _focus_callback, _unfocus_callback, _select_callback, _cancel_callback )
+	{
+		chara_id = _id;
+		focus_callback   = _focus_callback;
+		unfocus_callback = _unfocus_callback;
+		select_callback  = _select_callback;
+		cancel_callback  = _cancel_callback;
+		return;
+	}
+
+	function InitFirstData()
+	{
+		select = false;
+
+		super.InitFirstData();
+		set_data_assign( 1 );
+		Print();
+		return;
+	}
+
+	function Start()
+	{
+		if ((CheckValid(prn_layer)   ==  false)
+		||	(CheckValid(cg_list)    ==  false))
+			return;
+
+		with ( prn_layer )
+		{
+//			.setMouseDownCallback( layer_click );
+			.setMouseUpCallback( layer_click );
+			.setMouseEnterCallback( layer_focus );
+			.setMouseLeaveCallback( layer_unfocus );
+			.setHitCheckAlphaLimit( "ALL" );
+		}
+		return;
+	}
+	function Stop()
+	{
+		if ((CheckValid(prn_layer)   ==  false)
+		||	(CheckValid(cg_list)    ==  false))
+			return;
+		with ( prn_layer )
+		{
+//			.setMouseDownCallback( void );
+			.setMouseUpCallback( void );
+			.setMouseEnterCallback( void );
+			.setMouseLeaveCallback( void );
+			.setHitCheckAlphaLimit( "NONE" );
+		}
+		return;
+	}
+
+
+	function layer_focus( _layer )
+	{
+		if (select  ==  true)
+			return;
+		SetAnimeFlag( true );
+		set_data_assign( 0, 1 );
+
+		if (CheckValid(focus_callback)  ==  true)
+			focus_callback( chara_id );
+		return;
+	}
+	function layer_unfocus( _layer )
+	{
+		if (select  ==  true)
+			return;
+		SetAnimeFlag( false );
+		set_data_assign( 0 );
+		if (CheckValid(unfocus_callback)  ==  true)
+			unfocus_callback( chara_id );
+		return;
+	}
+	function layer_click( _layer, _x,_y, _button,_shift )
+	{
+		if (_button  ==  mbRight) {
+			if (CheckValid(select_callback)  ==  true)
+				cancel_callback();
+			return;
+		}
+
+		if (_button  !=  mbLeft)
+			return;
+		select = true;
+		if (CheckValid(select_callback)  ==  true)
+			select_callback( chara_id );
+		return;
+	}
+
+
+	function UnlockSelect()
+	{
+		select = false;
+		layer_unfocus( prn_layer );
+		return;
+	}
+}
+
+
+class CIriyaSelect extends CIriyaScene
+{
+
+	@if (DEBUG_MODE  ==  1)
+	var		key_state;
+	@endif;
+
+
+	function CIriyaSelect( parent, scene_id )
+	{
+		@if( DEBUG_MODE )
+			dm( "キャラセレクト" );
+		@endif
+		super.CIriyaScene( ... );
+
+		parentLayer.resetStageScore();
+
+		init_buffer();
+		Init();
+		if (parentLayer.isAutoPlayMode()  ==  false)
+			BgmPlay( BGM_SELECT );
+
+
+		@if (DEBUG_MODE  ==  1)
+		key_state = new CIriyaKeyState();
+		key_state.UpdateState();
+		@endif
+	}
+	function finalize()
+	{
+		@if (DEBUG_MODE  ==  1)
+		if (CheckValid(key_state)  ==  true) {
+			EasyObjectInvalidate( key_state );
+			key_state = void;
+		}
+		@endif
+
+		Release();
+		super.finalize( ... );
+	}
+
+
+	// 表示レイヤ情報
+	var		LAYER_FADE				=  0;
+	var		LAYER_SCREEN_FLASH		=-50;
+
+	var		LAYER_YN_MENU			=-75;
+
+	var		LAYER_EMOTION			=-50;
+	var		LAYER_SEL_CURSOR		=-100;
+	var		LAYER_MASTER_OFFSET		=-500;
+	var		LAYER_SERVANT_OFFSET	=-600;
+	var		LAYER_BG_BASE			=-1000;
+
+	// 表示位置情報
+	var		PRN_MASTER_BASE_PX	=328;
+	var		PRN_MASTER_BASE_PY	=96;
+	var		PRN_MASTER_STEP_W	=144;
+
+	var		PRN_SERVANT_BASE_PX	=72;
+	var		PRN_SERVANT_BASE_PY	=372;
+	var		PRN_SERVANT_STEP_W	=132;
+
+
+
+
+	// 選択マスター＆サーバントのID
+	var		SelectMasterID,
+			SelectServantID;
+
+	// 各CG用レイヤ
+	var		prn_bg;
+	var		back_bg;
+	var		prn_ms_cursor;
+	var		prn_sv_cursor;
+
+	var		prn_master;
+	var		prn_servant;
+
+	var		master_cg;
+	var		servant_cg;
+
+	var		ms_cursor_cg;
+	var		sv_cursor_cg;
+
+	var		master_anime;
+	var		servant_anime;
+	var		anime_time_table;
+
+	var		ms_cur_flash;
+	var		sv_cur_flash;
+
+	var		screenflash_layer;
+	var		screenflash_data;
+
+	var		sys_fade;
+
+	var		sv_emotion,ms_emotion;
+
+	var		tmp_counter;
+
+	var		mode;
+		var		MODE_INIT					=0;
+		var		MODE_FADE_IN				=10;
+		var		MODE_START					=20;
+		var		MODE_SELECT_OK_WAIT			=30;
+		var		MODE_SELECT_YN				=35;
+		var		MODE_SELECT_YN_WAIT			=38;
+				var		SELECT_YN_WAIT			=10;
+		var		MODE_SELECT_NO_RESET		=40;
+		var		MODE_SELECT_CHARA_CENCEL	=41;
+		var		MODE_SELECT_OK_FLASH		=45;
+		var		MODE_SELECT_OK_END			=50;
+		var		MODE_SELECT_OK_FADE_OUT		=60;
+		var		MODE_RET_FADE_OUT			=70;
+
+		var		MODE_AVD_SELECT_START_WAIT	=80;
+		var		MODE_AVD_FOCUS_CHARA		=85;
+		var		MODE_AVD_SELECT_CHARA		=90;
+
+
+
+	var		FIRST_FADE_WAIT			=6;
+	var		SELECT_OK_WAIT			=20;		// 選択後のウェイト
+	var		SCREEN_FLASH_TIME		=2*4+1;	// フラッシュ時間(必ず奇数回に)
+	var		FLASH_CYCLE_WAIT		= 5;		// フラッシュウェイト
+	var		SELECT_OK_END_WAIT		=40;			// フェードアウト前のウェイト
+	var		SCREEN_FADE_TIME		=30;		// フェード時間
+
+	// 位置調節用
+	var		GAME_CHARA_CENTER_OFF_X = 64;
+	var		GAME_CHARA_CENTER_OFF_Y = 121;
+
+
+	function init_select_chara_id()
+	{
+		// とりあえず選択バッファの初期化
+		SelectMasterID  = -1;
+		SelectServantID = -1;
+		return;
+	}
+	// マスター＆サーバントが選択されたか
+	function check_select_ok()
+	{
+		if ((SelectMasterID ==  -1)
+		||	(SelectServantID  == -1))
+			return ( false );
+		return ( true );
+	}
+
+
+
+	function init_buffer()
+	{
+
+		init_select_chara_id();
+
+
+		prn_bg  = void;
+		back_bg = void;
+		prn_ms_cursor = void;
+		prn_sv_cursor = void;
+
+		prn_master  = void;
+		prn_servant = void;
+
+		master_cg  = void;
+		servant_cg = void;
+
+		ms_cursor_cg = void;
+		sv_cursor_cg = void;
+
+		master_anime  = void;
+		servant_anime = void;
+
+		anime_time_table = void;
+
+		ms_cur_flash = void;
+		sv_cur_flash = void;
+
+		screenflash_layer = void;
+		screenflash_data  = void;
+		set_tmp_counter( 0 );
+
+		sys_fade = void;
+
+		sv_emotion = void;
+		ms_emotion = void;
+
+
+		init_yn_menu();
+		mode = MODE_INIT;
+		return;
+	}
+
+
+	function Release()
+	{
+	var		i,i;
+
+
+		if (CheckValid(prn_bg)  ==  true) {
+			EasyReleaseLayer( prn_bg );
+			prn_bg = void;
+		}
+		if (CheckValid(back_bg)  ==  true) {
+			ReleaseArray( back_bg );
+			back_bg = void;
+		}
+
+		if (CheckValid(ms_cursor_cg)  ==  true) {
+			ReleaseArray( ms_cursor_cg );
+			ms_cursor_cg = void;
+		}
+		if (CheckValid(sv_cursor_cg)  ==  true) {
+			ReleaseArray( sv_cursor_cg );
+			sv_cursor_cg = void;
+		}
+
+		if (CheckValid(prn_ms_cursor)  ==  true) {
+			EasyReleaseLayer( prn_ms_cursor );
+			prn_ms_cursor = void;
+		}
+		if (CheckValid(prn_sv_cursor)  ==  true) {
+			EasyReleaseLayer( prn_sv_cursor );
+			prn_sv_cursor = void;
+		}
+
+		DeleteArrayObject( prn_master, 1 );
+		prn_master = void;
+		DeleteArrayObject( prn_servant, 1 );
+		prn_servant = void;
+
+		DeleteArrayObject( master_cg, 3 );
+		master_cg   = void;
+		DeleteArrayObject( servant_cg, 3 );
+		servant_cg = void;
+
+		if (CheckValid(master_anime)  ==  true) {
+			ReleaseArray( master_anime );
+			master_anime = void;
+		}
+		if (CheckValid(servant_anime)  ==  true) {
+			ReleaseArray( servant_anime );
+			servant_anime = void;
+		}
+		if (CheckValid(anime_time_table)  ==  true) {
+			ReleaseArray( anime_time_table );
+			anime_time_table = void;
+		}
+
+
+		if (CheckValid(ms_cur_flash)  ==  true) {
+			EasyObjectInvalidate( ms_cur_flash );
+			ms_cur_flash = void;
+		}
+		if (CheckValid(sv_cur_flash)  ==  true) {
+			EasyObjectInvalidate( sv_cur_flash );
+			sv_cur_flash = void;
+		}
+
+		if (CheckValid(screenflash_layer)  ==  true) {
+			EasyReleaseLayer( screenflash_layer );
+			screenflash_layer = void;
+		}
+		if (CheckValid(screenflash_data)  ==  true) {
+			EasyObjectInvalidate( screenflash_data );
+			screenflash_data = void;
+		}
+
+		EasyReleaseLayer( sv_emotion );
+		EasyReleaseLayer( ms_emotion );
+
+		release_yn_menu();
+
+		release_sys_fade();
+		return;
+	}
+
+	function release_sys_fade()
+	{
+		if (CheckValid(sys_fade)  ==  true) {
+			ReleaseFadeAnime( sys_fade );
+			EasyReleaseLayer( sys_fade );
+			sys_fade = void;
+		}
+		return;
+	}
+
+
+
+
+	function load_select_chara_cg( type )
+	{
+	var		cg_list;
+//	var		image_lib;
+	var		file_name;
+	var		load_buf;
+	var		load_num;
+	var		id_offset;
+	var		name_offset;
+//	var		get_chip_set_func;
+	var		i,j;
+
+//		image_lib = new CIriyaImageLibrary( parentWindow, parentLayer );
+
+
+		if (type  ==  "LOAD_MASTER") {
+			load_num  = DEF_MASTER_CHARA_NUM;
+			id_offset = CHARA_ID_MASTER;
+			name_offset = "ir_csel_ms";
+//			get_chip_set_func = image_lib.getMasterChipsetName;
+		} else {
+			load_num  = DEF_SERVANT_CHARA_NUM;
+			id_offset = CHARA_ID_SERVANT;
+			name_offset = "ir_csel_sv";
+//			get_chip_set_func = image_lib.getServantChipsetName;
+		}
+
+
+
+
+		// キャラCGの読み込み
+		cg_list = new Array();
+		for (i=0;  i<load_num;  i++) {
+			cg_list[i] = new Array();
+			cg_list[i][0] = new Array();
+			for (j=0; ;  j++) {
+				file_name = name_offset+"%02d_f%1d".sprintf( i, j );
+				if (isImageFile(file_name)  ==  false)
+					break;
+				cg_list[i][0][j] = EasyCreateLayerObject( parentWindow,parentLayer, file_name, clAdapt, false, 0,0, 0 );
+			}
+			cg_list[i][1] = new Array();
+			for (j=0; ;  j++) {
+				file_name = name_offset+"%02d_u%1d".sprintf( i, j );
+				if (isImageFile(file_name)  ==  false)
+					break;
+				cg_list[i][1][j] = EasyCreateLayerObject( parentWindow,parentLayer, file_name, clAdapt, false, 0,0, 0 );
+			}
+			cg_list[i][2] = new Array();
+			for (j=0; ;  j++) {
+				EasyObjectInvalidate( file_name );
+				file_name = getCharacterImageFileInfo( id_offset|i, IMAGEID_WIN|j, MUKI_LEFT );
+
+				load_buf = GetLoadCharaData( file_name, parentWindow,parentLayer, GAME_CHARA_CENTER_OFF_X,GAME_CHARA_CENTER_OFF_Y );
+				if (CheckValid(load_buf)  ==  false) {
+					break;
+				}
+				cg_list[i][2][j] = load_buf;
+			}
+			EasyObjectInvalidate( file_name );
+			file_name = void;
+
+			cg_list[i][3] = new Array();
+			file_name = getCharacterImageFileInfo( id_offset|i, IMAGEID_DOWN|0, MUKI_LEFT );
+			if (CheckValid(file_name)  ==  true) {
+				load_buf = GetLoadCharaData( file_name, parentWindow,parentLayer, GAME_CHARA_CENTER_OFF_X,GAME_CHARA_CENTER_OFF_Y );
+
+				if (CheckValid(load_buf)  !=  false) {
+					cg_list[i][3][0] = load_buf;
+				}
+			}
+			EasyObjectInvalidate( file_name );
+			file_name = void;
+		}
+
+
+//		invalidate image_lib;
+//		image_lib = void;
+		return ( cg_list );
+	}
+
+
+	function Init()
+	{
+	var		i,j;
+	var		file_name;
+	var		load_buf;
+
+/*
+		// ADVパートからの呼び出しだった場合
+		if (parentLayer.getCallType()  ==  CALLTYPE_ADV) {
+			SelectMasterID  = ConvertMasterCharaIDtoMasterNo( CHARA_ID_SHIROU );
+			SelectServantID = ConvertServantCharaIDtoServantNo( CHARA_ID_SABER );
+			set_select_chara_data();
+
+			proc = proc_skip_call;
+			return;
+		}
+*/		// オートモードの呼び出しだった場合
+		if (parentLayer.isAutoPlayMode()  ==  true) {
+			SelectMasterID  = ConvertMasterCharaIDtoMasterNo( ConvertMasterNotoMasterCharaID(rand_ave(DEF_MASTER_CHARA_NUM)) );
+			SelectServantID = ConvertServantCharaIDtoServantNo( ConvertServantNotoServantCharaID(rand_ave(DEF_SERVANT_CHARA_NUM)) );
+			set_select_chara_data();
+
+			proc = proc_skip_call;
+			return;
+		}
+
+		if (parentLayer.getCallType()  ==  CALLTYPE_ADV)
+				proc = proc_adv;
+		else	proc = proc_normal;
+
+
+		with (prn_bg = new CSpriteLayer(parentWindow,parentLayer))
+		{
+			.setPriority( LAYER_BG_BASE );
+			.setPos( 0, 0 );
+		}
+
+		back_bg = new Array();
+		for (i=0;  ;  i++) {
+			file_name = "ir_csel_bg%02d".sprintf( i );
+			if (isImageFile(file_name)  ==  false) {
+				break;
+			}
+			back_bg[i] = EasyCreateLayerObject( parentWindow,parentLayer, file_name,
+						clNone, false, 0,0, 0 );
+		}
+		prn_ms_cursor = new CSpriteLayer( parentWindow,parentLayer );
+		prn_ms_cursor.setPriority( LAYER_SEL_CURSOR );
+		ms_cursor_cg = new Array();
+		for (i=0;  ;  i++) {
+			file_name = "ir_csel_cursor_ms%02d".sprintf( i );
+			if (isImageFile(file_name)  ==  false)
+				break;
+			ms_cursor_cg[i] = EasyCreateLayerObject( parentWindow,parentLayer, file_name, clAdapt, false, 0,0,  );
+		}
+		prn_sv_cursor = new CSpriteLayer( parentWindow,parentLayer );
+		prn_sv_cursor.setPriority( LAYER_SEL_CURSOR );
+		sv_cursor_cg = new Array();
+		for (i=0;  ;  i++) {
+			file_name = "ir_csel_cursor_sv%02d".sprintf( i );
+			if (isImageFile(file_name)  ==  false)
+				break;
+			sv_cursor_cg[i] = EasyCreateLayerObject( parentWindow,parentLayer, file_name, clAdapt, false, 0,0,  );
+		}
+
+
+
+		// 各表示キャラのバッファの確保
+		prn_master = new Array();
+		for (i=0;  i<DEF_MASTER_CHARA_NUM;  i++) {
+			with (prn_master[i] = new CSpriteLayer(parentWindow, parentLayer))
+			{
+				.setPriority( LAYER_MASTER_OFFSET-i );
+				.setPos( PRN_MASTER_BASE_PX+i*PRN_MASTER_STEP_W, PRN_MASTER_BASE_PY );
+				.setSize( 0, 0 );
+			}
+		}
+		prn_servant = new Array();
+		for (i=0;  i<DEF_SERVANT_CHARA_NUM;  i++) {
+			with (prn_servant[i] = new CSpriteLayer(parentWindow, parentLayer))
+			{
+				.setPriority( LAYER_SERVANT_OFFSET-i );
+				.setPos( PRN_SERVANT_BASE_PX+i*PRN_SERVANT_STEP_W, PRN_SERVANT_BASE_PY );
+				.setSize(0,0);
+			}
+		}
+
+
+
+		// キャラCGの読み込み
+		master_cg = load_select_chara_cg( "LOAD_MASTER" );
+		servant_cg = load_select_chara_cg( "LOAD_SERVANT" );
+
+		anime_time_table = new Array();
+		anime_time_table[0] = 16;
+		anime_time_table[1] = 16;
+		anime_time_table[2] = 5;
+		anime_time_table[3] = 5;
+
+		master_anime  = new Array();
+		for (i=0;  i<DEF_MASTER_CHARA_NUM;  i++) {
+			with (master_anime[i] = new CIriyaCharaSelAnime())
+			{
+				.SetLayerData( prn_master[i], master_cg[i], anime_time_table );
+				.SetCallbackData( i, ms_focus_callback, ms_unfocus_callback, ms_select_callback, set_charasel_cancel_mode );
+			}
+		}
+		servant_anime = new Array();
+		for (i=0;  i<DEF_SERVANT_CHARA_NUM;  i++) {
+			with (servant_anime[i] = new CIriyaCharaSelAnime())
+			{
+				.SetLayerData( prn_servant[i], servant_cg[i], anime_time_table );
+				.SetCallbackData( i, sv_focus_callback, sv_unfocus_callback, sv_select_callback, set_charasel_cancel_mode );
+			}
+		}
+
+		ms_cur_flash = new CIriyaFlashData();
+		sv_cur_flash = new CIriyaFlashData();
+
+
+		with (screenflash_layer = new CSpriteLayer(parentWindow, parentLayer))
+		{
+			.layerImageFromFill( 0,0, parentLayer.width,parentLayer.height, RGBA_MAKE(255,255,255,255), false );
+			.setPriority( LAYER_SCREEN_FLASH );
+		}
+
+		screenflash_data  = new CIriyaFlashData();
+		return;
+	}
+
+
+
+	function setup_first_prn_ms_chara_data()
+	{
+	var		i;
+		prn_ms_cursor.visible = false;
+		for (i=0;  i<DEF_MASTER_CHARA_NUM;  i++) {
+			master_anime[i].InitFirstData();
+		}
+		return;
+	}
+	function setup_first_prn_sv_chara_data()
+	{
+	var		i;
+		prn_sv_cursor.visible = false;
+		for (i=0;  i<DEF_SERVANT_CHARA_NUM;  i++) {
+			servant_anime[i].InitFirstData();
+		}
+		return;
+	}
+
+	// 最初の表示用割り当て
+	function setup_first_prn_chara_data()
+	{
+		init_select_chara_id();
+
+		setup_first_prn_ms_chara_data();
+		setup_first_prn_sv_chara_data();
+		return;
+	}
+
+
+	function setup_ms_select_chara_data( _start_click=true )
+	{
+	var		i;
+		for (i=0;  i<DEF_MASTER_CHARA_NUM;  i++) {
+			master_anime[i].ChangeAnimeNo( 0 );
+			if (_start_click  ==  true)
+				master_anime[i].Start();
+		}
+		return;
+	}
+	function setup_sv_select_chara_data( _start_click=true )
+	{
+	var		i;
+		for (i=0;  i<DEF_SERVANT_CHARA_NUM;  i++) {
+			servant_anime[i].ChangeAnimeNo( 0 );
+			if (_start_click  ==  true)
+				servant_anime[i].Start();
+		}
+		return;
+	}
+	function setup_select_chara_data( _start_click=true )
+	{
+		setup_ms_select_chara_data( _start_click );
+		setup_sv_select_chara_data( _start_click );
+		UpdateCursorPos( this );
+		return;
+	}
+
+
+	// 判定処理の終了
+	function stop_master_select()
+	{
+	var		i;
+		for (i=0;  i<DEF_MASTER_CHARA_NUM;  i++)
+			master_anime[i].Stop();
+		return;
+	}
+	function stop_servant_select()
+	{
+	var		i;
+		for (i=0;  i<DEF_SERVANT_CHARA_NUM;  i++)
+			servant_anime[i].Stop();
+		return;
+	}
+
+	function set_cursor_pos( _cursor, _sel_layer )
+	{
+	var		px,py;
+
+		with ( _sel_layer )
+		{
+			px = .left + .width/2;
+			py = .top  + .height/2;
+		}
+		with ( _cursor )
+		{
+			px -= .width/2;
+			py -= .height/2;
+
+			.visible = true;
+			.setPos( px, py );
+		}
+		return;
+	}
+
+	function ms_focus_callback( _id )
+	{
+		if (SelectMasterID  !=  -1)
+			return;
+
+
+		if (CheckPlaySESTack(SE_CHARASEL_FOCUS)  ==  false)
+			PlaySE( SE_CHARASEL_FOCUS, , , , , FOCUS_SE_VOLUME_AVE );
+//		PlaySE( SE_CHARASEL_FOCUS );
+
+		SetLayerInfoParam( prn_ms_cursor, ms_cursor_cg[0], ,, );
+		set_cursor_pos( prn_ms_cursor, prn_master[_id] );
+		return;
+	}
+	function ms_unfocus_callback( _id )
+	{
+		if (SelectMasterID  !=  -1)
+			return;
+		prn_ms_cursor.visible = false;
+		return;
+	}
+	function ms_select_callback( _id )
+	{
+		if (SelectMasterID  !=  -1)
+			master_anime[SelectMasterID].UnlockSelect();
+		SelectMasterID = _id;
+
+
+		PlaySE( SE_CHARASEL_SELECT );
+
+		ms_cur_flash.StartFlash( -1, 1+(SKIP_COUNT-1), ms_cursor_cg.count );
+//		set_cursor_pos( prn_ms_cursor, prn_master[_id] );
+		stop_master_select();
+
+		if (check_select_ok()  ==  true)
+			stop_cancel_check();
+		return;
+	}
+	function sv_focus_callback( _id )
+	{
+		if (SelectServantID  !=  -1)
+			return;
+
+//		PlaySE( SE_CHARASEL_FOCUS );
+		if (CheckPlaySESTack(SE_CHARASEL_FOCUS)  ==  false)
+			PlaySE( SE_CHARASEL_FOCUS, , , , , FOCUS_SE_VOLUME_AVE );
+
+		SetLayerInfoParam( prn_sv_cursor, sv_cursor_cg[0], ,, );
+		set_cursor_pos( prn_sv_cursor, prn_servant[_id] );
+		return;
+	}
+	function sv_unfocus_callback( _id )
+	{
+		if (SelectServantID  !=  -1)
+			return;
+		prn_sv_cursor.visible = false;
+		return;
+	}
+	function sv_select_callback( _id )
+	{
+		if (SelectServantID  !=  -1)
+			servant_anime[SelectServantID].UnlockSelect();
+		SelectServantID = _id;
+
+		PlaySE( SE_CHARASEL_SELECT );
+
+		sv_cur_flash.StartFlash( -1, 1+(SKIP_COUNT-1), sv_cursor_cg.count );
+//		set_cursor_pos( prn_sv_cursor, prn_servant[_id] );
+		stop_servant_select();
+
+		if (check_select_ok()  ==  true)
+			stop_cancel_check();
+		return;
+	}
+
+
+
+	function set_screen_flash_data()
+	{
+		if (CheckValid(screenflash_data)  ==  false)
+			return;
+		screenflash_layer.visible = true;
+		screenflash_data.Init();
+		screenflash_data.StartFlash( SCREEN_FLASH_TIME, FLASH_CYCLE_WAIT, 2 );
+		return;
+	}
+	function update_sceeen_flash()
+	{
+	var		next_visible;
+		if (CheckValid(screenflash_data)  ==  false)
+			return ( true );
+		if (screenflash_data.Update()  ==  true) {
+			screenflash_layer.visible = false;
+			return ( true );
+		}
+
+		with ( screenflash_layer )
+		{
+			if (screenflash_data.GetPage()  ==  0)
+					next_visible = true;
+			else	next_visible = false;
+
+			if (next_visible  !=  .visible)
+				.visible = next_visible;
+		}
+		return ( false );
+	}
+
+
+
+	function set_tmp_counter( _count )
+	{
+		tmp_counter = _count;
+		return;
+	}
+	function step_tmp_counter()
+	{
+		tmp_counter -= 1;
+		if (tmp_counter  <=  0)
+			return ( true );
+		return ( false );
+	}
+
+
+	function set_sel_final_anime( _data_list, _sel_id )
+	{
+	var		i;
+
+		_data_list[_sel_id].ChangeAnimeNo( 2 );
+		for (i=0;  i<_data_list.count;  i++) {
+			if (i  ==  _sel_id)
+				continue;
+
+			if (CheckValid(_data_list[i])  ==  true) {
+				_data_list[i].ChangeAnimeNo( 3 );
+			}
+		}
+		return;
+	}
+	function print_emotion()
+	{
+	var	sv_emo,ms_emo;
+	var	emo_type;
+	var	emo_data;
+
+		// エモーション情報取得
+		emo_type = GetEmotionSet( EMOSCENE_SELECT,
+						ConvertMasterNotoMasterCharaID(SelectMasterID),
+						ConvertServantNotoServantCharaID(SelectServantID) );
+		with (emo_data = new CIrEmotion(,) )
+		{
+			ms_emo = .getImageFileInfo( emo_type.master );
+			sv_emo = .getImageFileInfo( emo_type.servant);
+		}
+		sv_emotion = GetLoadCharaData( sv_emo, parentWindow,parentLayer, 0,0 );
+		ms_emotion = GetLoadCharaData( ms_emo, parentWindow,parentLayer, 0,0 );
+
+		invalidate emo_type;
+		invalidate emo_data;
+		invalidate sv_emo;
+		invalidate ms_emo;
+
+
+		// エモーション表示
+		sv_emotion.visible = true;
+		ms_emotion.visible = true;
+		with ( ms_emotion )
+		{
+			.setPriority( LAYER_EMOTION );
+			.left = PRN_MASTER_BASE_PX+SelectMasterID*PRN_MASTER_STEP_W + .left +128/2;
+			.top = PRN_MASTER_BASE_PY + .top+40;
+		}
+		with ( sv_emotion )
+		{
+			.setPriority( LAYER_EMOTION );
+			.left = PRN_SERVANT_BASE_PX+SelectServantID*PRN_SERVANT_STEP_W + .left +128/2;
+			.top = PRN_SERVANT_BASE_PY + .top+40;
+		}
+
+		return;
+	}
+
+
+	function next_mode_init( _next )
+	{
+		switch ( _next )
+		{
+		case MODE_FADE_IN:
+			SetLayerInfoParam( prn_bg, back_bg[0], ,, );
+			prn_bg.visible = true;
+			mode = MODE_FADE_IN;
+			setup_first_prn_chara_data();
+			set_tmp_counter( FIRST_FADE_WAIT );
+			break;
+
+		case MODE_START:
+			mode = MODE_START;
+			SetLayerInfoParam( prn_bg, back_bg[1], ,, );
+//			BgmPlay( BGM_SELECT );
+			setup_select_chara_data();
+			start_cancel_check();
+			break;
+		case MODE_AVD_SELECT_START_WAIT:
+			mode = MODE_AVD_SELECT_START_WAIT;
+			setup_select_chara_data( false );
+			SetLayerInfoParam( prn_bg, back_bg[1], ,, );
+			set_tmp_counter( 10 );
+			break;
+
+		case MODE_SELECT_OK_WAIT:
+			mode = MODE_SELECT_OK_WAIT;
+			stop_cancel_check();
+			set_tmp_counter( SELECT_OK_WAIT );
+			break;
+		case MODE_AVD_FOCUS_CHARA:
+			mode = MODE_AVD_FOCUS_CHARA;
+//			SelectMasterID  = ConvertMasterCharaIDtoMasterNo( CHARA_ID_SHIROU );
+//			SelectServantID = ConvertServantCharaIDtoServantNo( CHARA_ID_SABER );
+//			set_select_chara_data();
+			var		tmp;
+			tmp = ConvertMasterCharaIDtoMasterNo( CHARA_ID_SHIROU );
+			master_anime[tmp].layer_focus( master_anime[tmp] );
+
+			tmp = ConvertServantCharaIDtoServantNo( CHARA_ID_SABER );
+			servant_anime[tmp].layer_focus( servant_anime[tmp] );
+
+			set_tmp_counter( 20 );
+			break;
+		case MODE_AVD_SELECT_CHARA:
+			var		tmp;
+			tmp = ConvertMasterCharaIDtoMasterNo( CHARA_ID_SHIROU );
+			master_anime[tmp].layer_click( master_anime[tmp], ,, mbLeft, );
+
+			tmp = ConvertServantCharaIDtoServantNo( CHARA_ID_SABER );
+			servant_anime[tmp].layer_click( servant_anime[tmp], ,, mbLeft, );
+			mode = MODE_AVD_SELECT_CHARA;
+			set_tmp_counter( 20 );
+			break;
+
+
+
+		case MODE_SELECT_YN:
+			mode = MODE_SELECT_YN;
+			start_yn_menu();
+			break;
+		case MODE_SELECT_YN_WAIT:
+			mode = MODE_SELECT_YN_WAIT;
+			set_tmp_counter( SELECT_YN_WAIT );
+			break;
+
+		case MODE_SELECT_NO_RESET:
+			mode = MODE_START;
+			ms_cur_flash.Init();
+			sv_cur_flash.Init();
+			setup_first_prn_chara_data();
+			start_cancel_check();
+			setup_select_chara_data();
+			break;
+		case MODE_SELECT_CHARA_CENCEL:
+			parentLayer.resetFrameSkipData();
+			mode = MODE_SELECT_CHARA_CENCEL;
+			sys_fade = EasyCreateFadeLayer( parentWindow, parentLayer, "WHITE","FADE_IN", 1 );
+			sys_fade.setHitCheckAlphaLimit( "ALL" );
+
+			SetLayerPriority( sys_fade, LAYER_FADE );
+			set_tmp_counter( 20 );
+			break;
+
+		case MODE_SELECT_OK_FLASH:
+			PlaySE( SE_CHARASEL_FLASH );
+
+			mode = MODE_SELECT_OK_FLASH;
+			set_screen_flash_data();
+			break;
+
+		case MODE_SELECT_OK_END:
+			mode = MODE_SELECT_OK_END;
+			set_tmp_counter( SELECT_OK_END_WAIT );
+			SetLayerInfoParam( prn_bg, back_bg[2], ,, );
+
+			prn_ms_cursor.visible = false;
+			prn_sv_cursor.visible = false;
+
+			set_sel_final_anime( master_anime, SelectMasterID );
+			set_sel_final_anime( servant_anime, SelectServantID );
+			print_emotion();
+			break;
+
+		case MODE_SELECT_OK_FADE_OUT:
+			mode = MODE_SELECT_OK_FADE_OUT;
+			release_sys_fade();
+			sys_fade = EasyCreateFadeLayer( parentWindow, parentLayer, "BLACK","FADE_IN", SCREEN_FADE_TIME );
+			SetLayerPriority( sys_fade, LAYER_FADE );
+			stopBGM( SCREEN_FADE_TIME*TIMER_INTERVAL, );
+			break;
+
+		case MODE_RET_FADE_OUT:
+			mode = MODE_RET_FADE_OUT;
+			release_sys_fade();
+			sys_fade = EasyCreateFadeLayer( parentWindow, parentLayer, "BLACK","FADE_IN", SCREEN_FADE_TIME );
+			SetLayerPriority( sys_fade, LAYER_FADE );
+			stopBGM( SCREEN_FADE_TIME*TIMER_INTERVAL, );
+			break;
+		}
+		return;
+	}
+
+	//キャラのアニメ
+	function update_chara_anime()
+	{
+	var		i;
+		for (i=0;  i<DEF_MASTER_CHARA_NUM;  i++)
+			master_anime[i].Update();
+		for (i=0;  i<DEF_SERVANT_CHARA_NUM;  i++)
+			servant_anime[i].Update();
+		return;
+	}
+	function update_cursor_anime()
+	{
+		if (prn_ms_cursor.visible  ==  true) {
+			if (ms_cur_flash.Update()  !=  -1)
+				SetLayerInfoParam( prn_ms_cursor, ms_cursor_cg[ms_cur_flash.page_no], ,, );
+		}
+		if (prn_sv_cursor.visible  ==  true) {
+			if (sv_cur_flash.Update()  !=  -1)
+				SetLayerInfoParam( prn_sv_cursor, sv_cursor_cg[sv_cur_flash.page_no], ,, );
+		}
+		return;
+	}
+
+	// 基本物
+	function update_chara_all()
+	{
+		update_chara_anime();
+		update_cursor_anime();
+		return;
+	}
+
+
+	function update_sys_fade()
+	{
+		// フェードアウトレイヤがある場合
+		if (CheckValid(sys_fade)  ==  false)
+			return ( true );
+		if (ProcessFadeAnime(sys_fade)  ==  "UPDATING")
+			return ( false );
+		return ( true );
+	}
+
+
+	var		yn_menu;
+	function init_yn_menu()
+	{
+		yn_menu = void;
+		return;
+	}
+	function release_yn_menu()
+	{
+		EasyObjectInvalidate( yn_menu );
+		yn_menu = void;
+		return;
+	}
+	function start_yn_menu()
+	{
+		release_yn_menu();
+		with (yn_menu =new CIriyaCharaSelOKDialog(parentWindow, parentLayer))
+		{
+			.Init( LAYER_YN_MENU );
+			.Print();
+			.Start();
+		}
+		return;
+	}
+	function wait_yn_select()
+	{
+		with ( yn_menu )
+		{
+			if (.select_id  ==  .SEL_NONE)
+				return ( true );
+			return ( false );
+		}
+	}
+	function check_yn_select_yes()
+	{
+		with ( yn_menu )
+		{
+			if (.select_id  ==  .SEL_YES)
+				return ( true );
+			return ( false );
+		}
+	}
+
+
+
+
+	// 選択されていないキャラをランダムで選択する
+	function get_select_rand_chara( _left_table )
+	{
+	var		chara_id;
+	var		i;
+	var		ret;
+		chara_id = rand_ave( _left_table.count );				// 仮決定
+		for (i=0;  i<_left_table.count;  i++) {
+			// 同じIDがいなかったら返している場合は次のIDにシフトする
+			if (_left_table[chara_id]  !== void) {
+				ret = _left_table[chara_id];
+				_left_table[chara_id] = void;
+				return ( ret );
+			}
+			chara_id = (chara_id+1) % _left_table.count;
+		}
+		return ( CHARA_ID_NONE );	// 選べなかった場合(ありえないですが)
+	}
+
+	// 選択キャラを管理バッファに反映する
+	function set_select_chara_data()
+	{
+	var		i;
+	var		left_master_id;
+	var		left_servant_id;
+	var		sel_master_id;
+	var		sel_servant_id;
+
+//		SelectMasterID  = MASTER_CHARA_ID_凛;
+//		SelectServantID = SERVANT_CHARA_ID_セイバー;
+
+		// マスター用IDテーブル作成
+		left_master_id = new Array();
+		for (i=0;  i<DEF_MASTER_CHARA_NUM;  i++)
+			left_master_id[i] = ConvertMasterNotoMasterCharaID(i);
+		for (i;  i<MAX_PLAYER_NUM;  i++)
+			left_master_id[i] = CHARA_ID_NONE;
+
+		// サーバント用IDテーブル作成
+		left_servant_id = new Array();
+		for (i=0;  i<DEF_SERVANT_CHARA_NUM;  i++)
+			left_servant_id[i] = ConvertServantNotoServantCharaID(i);
+
+
+
+		// とりあえず選択バッファの初期化
+		parentLayer.InitCharaStatus( -1 );
+
+		// Playerの選択キャラ情報を設定
+		sel_master_id  = ConvertMasterNotoMasterCharaID( SelectMasterID );
+		sel_servant_id = ConvertServantNotoServantCharaID( SelectServantID );
+		parentLayer.CharaStatus[0].SetMasterID( sel_master_id );
+		parentLayer.CharaStatus[0].SetServantID( sel_servant_id );
+
+
+		// プレイヤーが選択したものは使用済みにする
+		for (i=0;  i<left_master_id.count;  i++) {
+			if (left_master_id[i]  ==  sel_master_id) {
+				left_master_id[i] = void;
+				break;;
+			}
+		}
+		for (i=0;  i<left_servant_id.count;  i++) {
+			if (left_servant_id[i]  ==  sel_servant_id) {
+				left_servant_id[i] = void;
+				break;;
+			}
+		}
+
+
+
+		// 残りのプレイヤーをランダム決定
+		for (i=1;  i<MAX_PLAYER_NUM;  i++) {
+			parentLayer.CharaStatus[i].SetMasterID( get_select_rand_chara(left_master_id) );
+			parentLayer.CharaStatus[i].SetServantID( get_select_rand_chara(left_servant_id) );
+		}
+
+		// 選択キャラの表示
+    	@if( DEBUG_MODE )
+   		var		i;
+			dm( "--------------選択キャラ情報--------------" );
+			for (i=0;  i<MAX_PLAYER_NUM;  i++) {
+				dm( "プレイヤー"+i+":"+"マスターID    "+"["+GetCharaIDtoCharaName(parentLayer.CharaStatus[i].GetMasterID())+"]" );
+				dm( "プレイヤー"+i+":"+"サーヴァントID"+"["+GetCharaIDtoCharaName(parentLayer.CharaStatus[i].GetServantID())+"]" );
+			}
+			dm( "------------------------------------------" );
+		@endif
+
+		invalidate left_master_id;
+		invalidate left_servant_id;
+		return;
+	}
+
+
+	function get_charasel_next_scene()
+	{
+		with ( parentLayer )
+		{
+			if (.getStageSelectFlag()  ==  false) {
+				return ( SCENE_SELECT_NEXT );
+			}
+			switch ( .getStageSelectStageID() )
+			{
+			case SCENE_STAGE1:
+				return ( SCENE_STAGE1 );
+			case SCENE_STAGE2:
+				return ( SCENE_STAGE2 );
+			case SCENE_STAGE3:
+				return ( SCENE_STAGE3 );
+			case SCENE_BOSS:
+				return ( SCENE_BOSS );
+			}
+		}
+
+		return ( SCENE_SELECT_NEXT );
+	}
+
+
+	function proc_skip_call()
+	{
+		return ( SCENE_SELECT_ADV_NEXT );
+	}
+
+
+	function proc_adv()
+	{
+		switch ( mode )
+		{
+		case MODE_INIT:
+			next_mode_init( MODE_FADE_IN );
+			parentLayer.resetFrameSkipData();
+			break;
+		case MODE_FADE_IN:
+			if (step_tmp_counter()  ==  false)
+				break;
+			next_mode_init( MODE_AVD_SELECT_START_WAIT );
+			break;
+		case MODE_AVD_SELECT_START_WAIT:
+			update_chara_all();
+			if (step_tmp_counter()  ==  false)
+				break;
+			next_mode_init( MODE_AVD_FOCUS_CHARA );
+			break;
+		case MODE_AVD_FOCUS_CHARA:
+			update_chara_all();
+			if (step_tmp_counter()  ==  false)
+				break;
+			next_mode_init( MODE_AVD_SELECT_CHARA );
+			break;
+		case MODE_AVD_SELECT_CHARA:
+			update_chara_all();
+			if (step_tmp_counter()  ==  false)
+				break;
+			next_mode_init( MODE_SELECT_OK_FLASH );
+			break;
+
+
+		case MODE_SELECT_OK_FLASH:
+			update_chara_all();
+			if (update_sceeen_flash()  ==  false)
+				break;
+			next_mode_init( MODE_SELECT_OK_END );
+			break;
+
+		case MODE_SELECT_OK_END:
+			update_chara_all();
+			if (step_tmp_counter()  ==  false)
+				break;
+			next_mode_init( MODE_SELECT_OK_FADE_OUT );
+			break;
+		case MODE_SELECT_OK_FADE_OUT:
+			update_chara_all();
+			if (update_sys_fade()  ==  false)
+				break;
+			set_select_chara_data();
+			return ( get_charasel_next_scene() );
+		}
+		return SCENE_DEFAULT;
+	}
+
+	function proc_normal()
+	{
+
+		@if (DEBUG_MODE  ==  1)
+		with ( key_state )
+		{
+			.UpdateState();
+			if (.GetCtrlKeyState()  ==  .KEY_FIRAST) {
+				stopAll();
+
+				stop_master_select();
+				stop_servant_select();
+
+				if (SelectMasterID  ==  -1)
+					SelectMasterID  = ConvertMasterCharaIDtoMasterNo( CHARASEL_SKIP_SEL_MS );
+				if (SelectServantID  ==  -1)
+					SelectServantID = ConvertServantCharaIDtoServantNo( CHARASEL_SKIP_SEL_SV );
+				set_select_chara_data();
+				return ( get_charasel_next_scene() );
+//				return SCENE_SELECT;
+			}
+		}
+		@endif
+//				return SCENE_SELECT;
+//				return SCENE_SELECT_NEXT;
+
+		switch ( mode )
+		{
+		case MODE_INIT:
+			next_mode_init( MODE_FADE_IN );
+			parentLayer.resetFrameSkipData();
+			break;
+		case MODE_FADE_IN:
+			if (step_tmp_counter()  ==  false)
+				break;
+			next_mode_init( MODE_START );
+			break;
+		case MODE_START:
+			update_chara_all();
+			if (check_select_ok()  ==  false)
+				break;
+			next_mode_init( MODE_SELECT_OK_WAIT );
+			break;
+
+		case MODE_SELECT_OK_WAIT:
+			update_chara_all();
+			if (step_tmp_counter()  ==  false)
+				break;
+			next_mode_init( MODE_SELECT_YN );
+			break;
+		case MODE_SELECT_YN:
+			update_chara_all();
+			if (wait_yn_select()  ==  true)
+				break;
+			next_mode_init( MODE_SELECT_YN_WAIT );
+			break;
+
+		case MODE_SELECT_YN_WAIT:
+			update_chara_all();
+			if (step_tmp_counter()  ==  false)
+				break;
+			if (check_yn_select_yes()  ==  true)
+					next_mode_init( MODE_SELECT_OK_FLASH );
+			else	next_mode_init( MODE_SELECT_NO_RESET );
+			release_yn_menu();
+			break;
+
+		case MODE_SELECT_CHARA_CENCEL:
+			update_chara_all();
+			if (update_sys_fade()  ==  false)
+				break;
+			update_chara_all();
+			UpdateCursorPos2( sys_fade );
+			if (step_tmp_counter()  ==  false)
+				break;
+			sys_fade.setHitCheckAlphaLimit( "NONE" );
+			prn_ms_cursor.visible = false;
+			prn_sv_cursor.visible = false;
+			EasyReleaseFadeLayer( sys_fade );
+			next_mode_init( MODE_SELECT_NO_RESET );
+			break;
+
+
+
+
+		case MODE_SELECT_OK_FLASH:
+			update_chara_all();
+			if (update_sceeen_flash()  ==  false)
+				break;
+			next_mode_init( MODE_SELECT_OK_END );
+			break;
+
+		case MODE_SELECT_OK_END:
+			update_chara_all();
+			if (step_tmp_counter()  ==  false)
+				break;
+			next_mode_init( MODE_SELECT_OK_FADE_OUT );
+			break;
+		case MODE_SELECT_OK_FADE_OUT:
+			update_chara_all();
+			if (update_sys_fade()  ==  false)
+				break;
+			set_select_chara_data();
+			return ( get_charasel_next_scene() );
+
+		case MODE_RET_FADE_OUT:
+			update_chara_all();
+			if (update_sys_fade()  ==  false)
+				break;
+			return SCENE_TITLE;
+		}
+		return SCENE_DEFAULT;
+	}
+
+	function draw()
+	{
+	}
+
+
+
+
+	function set_charasel_cancel_mode()
+	{
+		PlaySE( SE_CHARASEL_CANCEL );
+
+if ((SelectMasterID  != -1)
+||	(SelectServantID  != -1)) {
+	if (SelectMasterID  !=  -1) {
+		SelectMasterID = -1;
+		ms_cur_flash.Init();
+		setup_first_prn_ms_chara_data();
+		setup_ms_select_chara_data();
+	}
+	if (SelectServantID  !=  -1) {
+		SelectServantID = -1;
+		sv_cur_flash.Init();
+		setup_first_prn_sv_chara_data();
+		setup_sv_select_chara_data();
+	}
+	UpdateCursorPos( this );
+
+//	stop_cancel_check();
+//	stop_master_select();
+//	stop_servant_select();
+//	next_mode_init( MODE_SELECT_CHARA_CENCEL );
+return;
+}
+
+
+
+		stop_cancel_check();
+		stop_master_select();
+		stop_servant_select();
+
+		next_mode_init( MODE_RET_FADE_OUT );
+		return;
+	}
+
+	function start_cancel_check()
+	{
+		if (CheckValid(prn_bg)  ==  false)
+			return;
+
+//		prn_bg.setMouseDownCallback( click_bg_callback );
+		prn_bg.setMouseUpCallback( click_bg_callback );
+		prn_bg.setHitCheckAlphaLimit( "ALL" );
+		return;
+	}
+	function stop_cancel_check()
+	{
+		if (CheckValid(prn_bg)  ==  false)
+			return;
+//		prn_bg.setMouseDownCallback( void );
+		prn_bg.setMouseUpCallback( void );
+		prn_bg.setHitCheckAlphaLimit( "NONE" );
+		return;
+	}
+	function click_bg_callback( _layer, _x,_y, _button,_shift )
+	{
+		if (_button  ==  mbRight) {
+			set_charasel_cancel_mode();
+			return;
+		}
+		return;
+	}
+
+
+}
+

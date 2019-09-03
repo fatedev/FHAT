@@ -1,0 +1,762 @@
+/*-----------------------------------------------------------------------------
+/	Copyright (C) TYPE-MOON All Rights Reserved.
+/		タイトルメニュー
+/----------------------------------------------------------------------------*/
+@if(__TITLEMENULAYER_DEFINED__==0)
+@set(__TITLEMENULAYER_DEFINED__=1)
+
+Scripts.execStorage("WallPaperMenuLayer.tjs");	//	checkWallPaperFlag()のため
+
+//	タイトルメニュー
+//	※ Layerと付いているが、実際は"kag.*.base"を使っている
+class TitleMenuLayer
+{
+	var	titlebuttondata	= [
+		//	ID			座標0,		座標1,		ヒント[5],													time, accel, delay,	移動先ストレージ, 移動先ラベル,	条件, 選ばれたときに実行するコマンド, 閉じない, 確認する(msg, condition, true to go)
+		[ "start",		[330, 364],	[300, 364],	"ゲームを最初から始めます。\n(フラグは継承されます)",		600, -2, 400,		"title.ks",		"*start",,,, [ "10月8日から開始しますか？\n(前回中断したところからやり直せなくなります)", "Storages.isExistentStorage(kag.getBookMarkFileNameAtNum(getTicketNo2BookMarkNo(CurrentTicketNo)))", true ] ],
+		[ "continue",	[331, 415],	[301, 415],	"前回中断した時点からゲームを始めます。",					600, -2, 500,		"title.ks",		"*continue",	"Storages.isExistentStorage(kag.getBookMarkFileNameAtNum(getTicketNo2BookMarkNo(CurrentTicketNo)))" ],
+		[ "config",		[374, 462],	[344, 462],	"ゲーム設定を変更します。",									600, -2, 600 ],
+//		[ "help",		[439, 514],	[409, 514],	"ゲーム進行のヒントが聞けます。",							600, -2, 700,		"title.ks",		"*help",		"global.tf['夜の聖杯戦争１'] && !global.tf['夜の聖杯戦争７']" ],
+		[ "eclipse",	[415, 514],	[385, 514],	"？？？",													600, -2, 700,		"title.ks",		"*eclipse",		"checkAnotherFlag()",,, [ "前回中断したところからやり直せなくなりますが、よろしいですか？", "Storages.isExistentStorage(kag.getBookMarkFileNameAtNum(getTicketNo2BookMarkNo(CurrentTicketNo)))", true ] ],	//	checkAnotherFlag()は"init.tjs"にある
+		[ "extra",		[576, 363],	[546, 363],	"拡張メニューを開きます。\n(ギャラリー、サウンドテスト等)",	600, -2, 800,		"title.ks",		"*extra",,, true ],
+		[ "special",	[597, 414],	[567, 414],	"スペシャルメニューを開きます。\n(ミニゲーム等)",			600, -2, 900,		"title.ks",		"*special",		"global.tf['トラぶる花札道中記']!==void||global.tf['風雲イリヤ城']!==void||global.tf['開運遠坂神社']!==void||checkWallPaperFlag()" ],
+		[ "entrance",	[611, 461],	[581, 461],	"入り口へ戻ります。",										600, -2,1000,		"title.ks",		"*entrance",, /* チケットデータの保存 */"global.saveTicketFile()" ],
+@if(DEBUG==1)
+		[ "playall",	[676, 576],	[646, 576],	"(デバッグ用)全てのシーンを再生します。",					600, -2,1200,		"first.ks",		"*playall" ],
+@endif
+		[ "quit",		[672, 511],	[642, 511],	"ゲームを終了します。\n(フラグは保存されます)",				600, -2,1100 ]
+	];
+	var	titlebuttondata2= [
+		//	ID			座標0,		座標1,		ヒント[5],													time, accel, delay,	移動先ストレージ, 移動先ラベル,	条件, 選ばれたときに実行するコマンド, 閉じない
+		[ "start",		[330, 364],	[300, 364],	"ゲームを最初から始めます。\n(フラグは継承されます)",		600, -2,0,		"title.ks",		"*start",,,, [ "10月8日から開始しますか？\n(前回中断したところからやり直せなくなります)", "Storages.isExistentStorage(kag.getBookMarkFileNameAtNum(getTicketNo2BookMarkNo(CurrentTicketNo)))", true ] ],
+		[ "continue",	[331, 415],	[301, 415],	"前回中断した時点からゲームを始めます。",					600, -2,0,		"title.ks",		"*continue",	"Storages.isExistentStorage(kag.getBookMarkFileNameAtNum(getTicketNo2BookMarkNo(CurrentTicketNo)))" ],
+		[ "config",		[374, 462],	[344, 462],	"ゲーム設定を変更します。",									600, -2,0 ],
+//		[ "help",		[439, 514],	[409, 514],	"ゲーム進行のヒントが聞けます。",							600, -2,0,		"title.ks",		"*help",		"global.tf['夜の聖杯戦争１'] && !global.tf['夜の聖杯戦争７']" ],
+		[ "eclipse",	[415, 514],	[385, 514],	"？？？",													600, -2,0,		"title.ks",		"*eclipse",		"checkAnotherFlag()",,, [ "前回中断したところからやり直せなくなりますが、よろしいですか？", "Storages.isExistentStorage(kag.getBookMarkFileNameAtNum(getTicketNo2BookMarkNo(CurrentTicketNo)))", true ] ],	//	checkAnotherFlag()は"init.tjs"にある
+		[ "extra",		[576, 363],	[546, 363],	"拡張メニューを開きます。\n(ギャラリー、サウンドテスト等)",	600, -2,0,		"title.ks",		"*extra",,, true ],
+		[ "special",	[597, 414],	[567, 414],	"スペシャルメニューを開きます。\n(ミニゲーム等)",			600, -2,0,		"title.ks",		"*special",		"global.tf['トラぶる花札道中記']!==void||global.tf['風雲イリヤ城']!==void||global.tf['開運遠坂神社']!==void||checkWallPaperFlag()" ],
+		[ "entrance",	[611, 461],	[581, 461],	"入り口へ戻ります。",										600, -2,0,		"title.ks",		"*entrance",, /* チケットデータの保存 */"global.saveTicketFile()" ],
+@if(DEBUG==1)
+		[ "playall",	[676, 576],	[646, 576],	"(デバッグ用)全てのシーンを再生します。",					600, -2,1200,		"first.ks",		"*playall" ],
+@endif
+		[ "quit",		[672, 511],	[642, 511],	"ゲームを終了します。\n(フラグは保存されます)",				600, -2,0 ]
+	];
+	var	extrabuttondata	= [
+		[ "gallery",	[125, 467, 0],[ 95, 467],	"イベント画像を閲覧できます。",	600, -2, 0,	"title.ks",	"*gallery"	],
+		[ "music",		[291, 467, 0],[271, 467],	"BGM、効果音を聴けます。",		600, -2, 0,	"title.ks",	"*music"	],
+		[ "movie",		[417, 467, 0],[437, 467],	"ムービーを視聴できます。",		600, -2, 0,	"title.ks",	"*movie"	],
+		[ "scene",		[580, 467, 0],[610, 467],	"シーン回想が行えます。",		600, -2, 0,	"title.ks",	"*scene"	],
+		[ "back",		[681, 548, 0],[681, 548],	"タイトルメニューへ戻ります。",	600, -2, 0,	"title.ks",	"*extra2title",,,true	]
+	];
+	var	specialbuttondata	= [
+		[ "花札",		[  5,   9],	[  5,   9],	"『トラぶる花札道中記』のタイトルへ移動します。",	0, 0, 0,	"hanafuda.ks",	"*title",		"global.tf['トラぶる花札道中記']!==void",	"global.tf['トラぶる花札道中記']++" ],
+		[ "イリヤ城",	[ 10, 275],	[ 10, 275],	"『風雲！イリヤ城』のタイトルへ移動します。",		0, 0, 0,	"title.ks",		"*iriya",		"global.tf['風雲イリヤ城']!==void",			"global.tf['風雲イリヤ城']++" ],
+		[ "遠坂神社",	[397,   8],	[397,   8],	"『遠坂神社』のタイトルへ移動します。",				0, 0, 0,	"jinja.ks",		"*title",		"global.tf['開運遠坂神社']!==void",			"global.tf['開運遠坂神社']++" ],
+		[ "壁紙",		[403, 270],	[403, 270],	"壁紙ギャラリーを開きます。",						0, 0, 0,	"title.ks",		"*wallpaper",	"checkWallPaperFlag()",						"global.tf['壁紙_update']=System.getTickCount() if global.tf['壁紙_update']==void" ],
+		[ "back",		[681, 548],	[681, 548],	"タイトルメニューへ戻ります。",						0, 0, 0,	"title.ks",		"*retitle"	]
+	];
+	var	initspecial_func	= function(obj)
+	{//	出現した順番で前後に並べる(古いポスターの上に新しいポスターが貼られる)
+		dm("ポスター並び替え(出現時期が新しいものほど手前へ)");
+
+		//	更新日時順にキーを並べる
+		var	flags	= global.tf;
+		var	keys	= [ "トラぶる花札道中記", "風雲イリヤ城", "開運遠坂神社", "壁紙" ];
+		for(var i=0; i<keys.count; i++)
+			keys[i]	= [ keys[i], flags[keys[i]+"_update"] ];//	キー → [ キー, 更新日時 ]
+		keys.sort(function(a, b) { return a[1] > b[1]; });	//	更新日時を元に降順に並べる
+
+		//	キーを元にして、前後位置を調整
+		var	btns	= obj.buttons;
+		var	abs		= 1000;
+		for(var i=0; i<keys.count; i++)
+		{
+			if(btns[i] == void)	continue;
+			btns[i].absolute	= abs;
+			abs++;
+		}
+	};
+	var createdata	= %[
+		title:	[
+/*0*/		"tl_bg",//	背景画像
+/*1*/		"tl_",	//	画像のキー
+/*2*/		titlebuttondata,	//	ボタンリスト
+/*3*/		[ 1, 0 ],	//	カーソルあわせの優先順位順
+/*4*/		[//	その他アイテムリスト
+				//	ID			最初		最後,		予約,	time, accel, delay
+//				[ "tl_swlogo",	[150,  31],	[150,  31],	,		 800, 0,  800 ],
+				[ "tl_fraga",	[ 347,228,45,2,0.02,64,278,28, 347,228,45,1.2,0.2,255,278,28, 347,228,45,1,1,255,278,28], void,	,		1200, 8, 400 ],
+				[ "tl_halogo",	[ 59, 174],	[ 39, 174],	,		 800, -5,  600 ],
+				[ "tl_fatelogo",[ 69,  24],	[ 89,  24],	,		 800, -5,  400 ],
+				[ "tl_kanalogo",[ 79, 319],	[ 79, 319],	,		 800, 0, 1000 ],
+				[ "tl_title",	[ 30,  15],	[ 30,  15],	,		 300, 0, 1600 ],
+				[ "tl_typemoon",[270, 580],	[270, 580],	,		 600, 0, 1300 ]
+			],
+/*5*/		"global.titlemenu.onCommand('quit')",	//	右クリック時の処理(ゲーム終了)
+/*6*/		"bgm118",		//	BGM
+			,
+			"",		//	ボタンにEnter
+			""		//	ボタンをクリック
+		],
+		//	エクストラメニューから戻ったときのタイトル
+		extra2title:	[
+			"tl_bg",//	背景画像
+			"tl_",	//	画像のキー
+			titlebuttondata2,	//	ボタンリスト
+			[ 1, 0 ],	//	カーソルあわせの優先順位順
+			[//	その他アイテムリスト
+				//	ID			最初		最後,		予約,	time, accel, delay
+				[ "tl_title",	[ 30,  15, 128],	[ 30,  15, 255],	,		 600, 0, 0 ],
+				[ "tl_typemoon",[270, 580],			[270, 580],	,		 600, 0, 0 ]
+			],
+			"global.titlemenu.onCommand('quit')",	//	右クリック時の処理(ゲーム終了)
+			"bgm118",		//	BGM
+			,
+			"",		//	ボタンにEnter
+			""		//	ボタンをクリック
+		],
+		//	クリア後のタイトル
+		cleartitle:	[
+			"tl2_bg",	//	背景画像
+			"tl_",		//	画像のキー
+			titlebuttondata,	//	ボタンリスト
+			[ 1, 0 ],	//	カーソルあわせの優先順位順
+			[//	その他アイテムリスト
+				[ "tl2_swlogo",		[150,  31],	[150,  31],	,		1200, 0,  400 ],
+				[ "tl2_halogo",		[ 39, 174],	[ 39, 174],	,		 800, 0,  600 ],
+				[ "tl2_fatelogo",	[ 89,  24],	[ 89,  24],	,		 800, 0,  400 ],
+				[ "tl2_kanalogo",	[ 78, 318],	[ 78, 318],	,		 800, 0, 1000 ],
+				[ "tl2_title",		[ 30,  15],	[ 30,  15],	,		 300, 0, 1600 ],
+				[ "tl_typemoon",	[270, 580],	[270, 580],	,		 600, 0, 1300 ]
+			],
+			"global.titlemenu.onCommand('quit')",	//	右クリック時の処理(ゲーム終了)
+			"bgm114",		//	BGM
+			,
+			"",		//	ボタンにEnter
+			""		//	ボタンをクリック
+		],
+		extra2cleartitle:	[
+			"tl2_bg",	//	背景画像
+			"tl_",		//	画像のキー
+			titlebuttondata2,	//	ボタンリスト
+			[ 1, 0 ],	//	カーソルあわせの優先順位順
+			[//	その他アイテムリスト
+				[ "tl2_title",		[ 30,  15],	[ 30,  15],	,		 600, 0, 0 ],
+				[ "tl_typemoon",	[270, 580],	[270, 580],	,		 600, 0, 0 ]
+			],
+			"global.titlemenu.onCommand('quit')",	//	右クリック時の処理(ゲーム終了)
+			"bgm114",		//	BGM
+			,
+			"",		//	ボタンにEnter
+			""		//	ボタンをクリック
+		],
+		extra:	[
+			"tl_bg",
+			"ex_",
+			extrabuttondata,
+			,
+			[
+				[ "ex_title",	[263, 372],		[263, 372],,		600, 0, 0 ],
+				[ "tl_title",	[ 30,  15],		[ 30,  15, 128],,	600, 0, 0],
+				[ "ex_bar",		[  0, 447],		[  0, 508],,		600, -2, 0 ],
+				[ "tl_typemoon",[270, 580],		[270, 580],,		600, 0, 0 ]
+			],
+			"global.titlemenu.onCommand('back')",	//	右クリックで"タイトルメニューへ戻る"
+			"bgm118",
+		],
+		clearextra:	[
+			"tl2_bg",
+			"ex_",
+			extrabuttondata,
+			,
+			[
+				[ "ex_title",	[263, 372],		[263, 372],,		600, 0, 0 ],
+				[ "tl2_title",	[ 30,  15],		[ 30,  15, 128],,	600, 0, 0],
+				[ "ex_bar",		[  0, 447],		[  0, 508],,		600, -2, 0 ],
+				[ "tl_typemoon",[270, 580],		[270, 580],,		600, 0, 0 ]
+			],
+			"global.titlemenu.onCommand('back')",	//	右クリックで"タイトルメニューへ戻る"
+			"bgm114",
+		],
+		special:[
+			"sp_bg",
+			"sp_",
+			specialbuttondata,
+			,
+			[
+				[ "sp_title",	[ 23,  15],	[ 23,  15],	,	0, 0, 0 ],
+				[ "bar",		[250,  36],	[250,  36],	,	0, 0, 0 ]
+			],
+			"global.titlemenu.onCommand('back')",	//	右クリックで"タイトルメニューへ戻る"
+			"bgm118",		//	BGM
+			initspecial_func,
+			"",		//	ボタンにEnter
+			""		//	ボタンをクリック
+		],
+		clearspecial:[
+			"sp_bg",
+			"sp_",
+			specialbuttondata,
+			,
+			[
+				[ "sp_title",	[ 23,  15],	[ 23,  15],	,	0, 0, 0 ],
+				[ "bar",		[250,  36],	[250,  36],	,	0, 0, 0 ]
+			],
+			"global.titlemenu.onCommand('back')",	//	右クリックで"タイトルメニューへ戻る"
+			"bgm114",		//	BGM
+			initspecial_func,
+			"",		//	ボタンにEnter
+			""		//	ボタンをクリック
+		]
+	];
+	var name	= "TitleMenu(Manager)";
+
+	var window;
+	var mode;
+	var instant, notime;
+	var return_storage, return_label;
+
+	var layer;
+	var buttons;
+	var others;
+	var timer;
+	var lastfunc;
+	var lastbutton;			//	最後に押したボタン
+	var nextfocusbutton;	//	トランジション後にフォーカスするボタン
+
+	var acceptable;
+
+	var previousbuttons;
+	var previousothers;
+
+	var firsttime;	//	初回か？
+
+	var enterse;
+	var clickse;
+
+	function TitleMenuLayer(win, par, mode, instant=false, notime=false)
+	{
+		window	= win;
+		firsttime	= true;
+		if(notime)
+			layer	= win.fore.base;
+		else
+			layer	= win.back.base;
+
+		init(mode);
+		this.instant	= instant;
+		this.notime		= notime;
+	}
+
+	function finalize()
+	{
+		releaseArray(buttons);
+		releaseArray(others);
+	}
+
+	function init(mode)
+	{
+		this.mode	= mode;
+		var data	= createdata[mode];
+		enterse		= data[8];
+		clickse		= data[9];
+
+		//	背景
+		if(layer.storage != data[0] || firsttime)
+		{
+			with(layer)
+			{
+				.loadImages(%[storage:data[0]]);
+				.setSize(window.scWidth, window.scHeight);
+			}
+		}
+
+		//	ボタン
+		lastbutton	= void;
+		var imgkey = data[1];
+		var bd = data[2];
+		previousbuttons	= %[];
+		if(buttons != void)
+		{
+			for(var i=0; i<buttons.count; i++)
+				previousbuttons[buttons[i].id]	= buttons[i] if buttons[i];
+		}
+		buttons	= [];
+		var index	= 1000;
+		var btns;
+		for(var i=0; i<bd.count; i++)
+		{
+			var d	= bd[i];
+			dm("button: "+d[0]);
+			if(d[9] != void && !(d[9]!))
+			{//	条件を満たしていなければ、表示しない
+				buttons.add(void);
+				continue;
+			}
+
+			var btn;
+			if(btns == void)
+				btn = btns = new global.ExButtonLayer(window, layer, d[0], d[1][0], d[1][1], imgkey+d[0], d[3]);
+			else
+				btn = btns.add(d[0], d[1][0], d[1][1], imgkey+d[0], d[3]);
+			with(btn)
+			{
+				.mode		= 3;
+				.entersound	= enterse;
+				.hitThreshold= 0;
+				.focusable	= false;
+				.absolute	= index++;
+				.opacity	= d[1][2];
+				.visible	= false;
+				.target		= this;	//	メッセージ送り先
+			}
+			btn["no"]				= i;
+			btn["return_storage"]	= d[7];
+			btn["return_label"]		= d[8];
+			btn["eval"]				= d[10];
+			btn["dontclose"]		= d[11];
+			btn["confirm"]			= d[12];
+			btn["acceptable"]		= true;
+			buttons.add(btn);
+		}
+
+		//	その他
+		var od = data[4];
+		previousothers	= %[];
+		if(others != void)
+		{
+			for(var i=0; i<others.count; i++)
+				previousothers[others[i].name]	= others[i];
+		}
+		others	= [];
+		for(var i=0; i<od.count; i++)
+		{
+			var d	= od[i];
+			if(previousothers[d[0]] != void)
+			{//	表示中のアイテムに同名のものがあれば再利用
+				var o	= previousothers[d[0]];
+				others.add(o);
+				delete previousothers[d[0]];
+//				o.setPos(d[1][0], d[1][1]);
+//				o.opacity	= d[1][2];
+			}
+			else
+			{
+				var o	= new global.FadeLayer(window, layer);
+				with(o)
+				{
+					.name	= d[0];
+					.loadImages(d[0]);
+					.setSizeToImageSize();
+					.setPos(d[1][0], d[1][1]);
+					.hitThreshold	= 256;
+					.absolute		= index++;
+					.opacity		= d[1][2];
+					.visible		= false;
+				}
+				others.add(o);
+			}
+		}
+
+		//	BGM
+		if(data[6] != "" && kag.bgm.playingStorage != data[6])
+			playBGM(data[6], 0);
+
+		//	その後の処理
+		if(data[7] != void)
+			data[7](this);
+	}
+
+	//	表示(トランジションで切り替える)
+	function show(time=400, method="crossfade")
+	{
+		//	ゲームメニューを無効にする
+		.gamemenu.enabled	= false;
+
+		//	ボタン等を無効にする(トランジションの間だけ)
+//		enabled	= false;
+		enabled = acceptable = true;
+
+		//	トランジションする/notime=trueならしない
+		var data	= createdata[mode];
+		if(notime)
+			time	= 200;
+		else if(window.fore.base.storage != data[0] || firsttime)
+		{
+			with(window)
+			{
+				.stopAllTransitions();
+				.fore.base.beginTransition(%[time:time,method:method]);
+			}
+		}
+
+		//	表示中のアイテムを消す
+		var itemss	= [ previousbuttons, previousothers ];
+		for(var i=0; i<itemss.count; i++)
+		{
+			var items	= [];
+			items.assign(itemss[i]);
+			for(var i=1; i<items.count; i+=2)
+			{
+				if(instant)
+					invalidate items[i];
+				else
+					with(items[i])
+					{
+						.stopMove();	//	現在の動作を停止
+						.move(.left, .top, 0, time, 0, invalidateThis, 0);	//	消去動作開始
+						.acceptable	= false if typeof .acceptable != "undefined";
+					}
+			}
+			invalidate itemss[i];
+		}
+		previousbuttons = previousothers = void;
+
+		//	ボタン・他のアイテムを、フェードしたり移動させたり
+		var items	= [ buttons, data[2], others, data[4] ];
+		for(var j=0; j<items.count; j+=2)
+		{
+			var item	= items[j];
+			var bd		= items[j+1];
+			for(var i=0; i<item.count; i++)
+			{
+				if(item[i] == void)
+					continue;
+				var d = bd[i];
+				with(item[i])
+				{
+					if(d[2] == void)
+					{//	with magx, magy, rotate
+						var time	= instant ? 0 : d[4];
+						.orglayer	= new global.Layer(window, item[i]);
+						.orglayer.setSize(.width, .height);
+						.orglayer.copyRect(0, 0, item[i], 0, 0, .width, .height);
+						.orglayer.type	= ltOpaque;
+						.type	= ltAlpha;
+						.moveObject	= new LinearMoverWithAffine2(item[i], d[1], time, d[5], item[i].moveFinalFunction,, item[i].orglayer, window.currentInterpolationMode);
+						window.moveCount++;
+						.moveObject.startMove(d[6]);
+					}
+					else
+					{//	move & opacity only
+						if(instant)
+						{
+							.setPos(d[2][0], d[2][1]);
+							.opacity = d[2][2] === void ? 255 : d[2][2], .visible = true;
+						}
+						else
+						{
+							var l = d[2][0] == void ? .left : d[2][0];
+							var t = d[2][1] == void ? .top : d[2][1];
+							.move(l, t, d[2][2] === void ? 255 : d[2][2], d[4], d[5],, d[6]);
+						}
+					}
+				}
+			}
+		}
+
+		//	extra2titleの時は、titleとして呼び出す
+		var ls = title_lastselected[mode == "extra2title" ? "title" : mode];
+		if(ls !== void && buttons[ls] != void)
+		{
+			//	マウスを前回の位置へ
+			mouseMoveTo(ls, time, instant);
+			nextfocusbutton	= buttons[ls];
+		}
+		else
+		{
+			//	マウスを所定の位置へ
+			var md = data[3];
+			if(md != void)
+			{
+				for(var i=0; i<md.count; i++)
+				{
+					var btn = buttons[md[i]];
+					if(btn == void)
+						continue;
+					mouseMoveTo(md[i], time, instant);
+					nextfocusbutton	= btn;	//	表示後にフォーカスするボタン
+					break;
+				}
+			}
+		}
+
+		//	トランジション後の処理を予約
+		with(timer = new Timer(postshow, ""))
+			.interval = time, .enabled = true;
+
+		firsttime	= false;
+	}
+
+	//	指定の番号のボタンへマウスを移動させる
+	function mouseMoveTo(no, time=400, instant=false)
+	{
+		var btn	= buttons[no];
+		if(btn != void)
+		{
+			var d	= createdata[mode][2][no];
+			var tm	= instant ? time : d[4] + d[6];	//	すぐに表示なら、トランジションの時間だけ移動にかける
+			moveCursor(btn, btn.width>>1, btn.height>>1, tm, d[5]);
+		}
+	}
+
+	//	show終了後の処理
+	function postshow()
+	{
+		//	メニューを有効にする
+		with(window)
+			.stopAllTransitions();
+		enabled	= acceptable = true;
+		nextfocusbutton.focus() if nextfocusbutton != void && nextfocusbutton isvalid;
+
+		//	右クリックを、「ゲームを終了」「前に戻る」等に割り当てる
+		setRClickExp(createdata[mode][5]) if createdata[mode][5] != "";
+
+		//	タイマー削除
+		invalidate timer;
+		timer	= void;
+	}
+
+	//	消去(ただし、後片付けのみ行う。トランジションは次でやってもらう)
+	function hide(time=400, func)
+	{
+		//	ゲームメニューを無効にする
+		.gamemenu.enabled	= false;
+
+		//	ボタン等を無効にする
+		enabled	= acceptable = false;
+		window.stopAllTransitions();	//	実行中のトランジションを停止
+		var itemlists	= [ buttons, others ];
+		for(var i=0; i<itemlists.count; i++)
+		{
+			var items	= itemlists[i];
+			for(var i=0; i<items.count; i++)
+			{
+				var item	= items[i];
+				if(item == void)
+					continue;
+				if(item.moveObject != void)
+					item.moveObject.stopMove();
+				else
+					item.finish();
+			}
+		}
+
+		//	右クリックコマンドをリセット
+		resetRClickExp();
+
+		func() if func != void;	//	片付け
+
+		//	次へ進む
+		window.process(return_storage, return_label);
+	}
+
+	function closeThis(dontclose)
+	{
+		//	ボタンを押せなくする
+		acceptable	= false;
+
+		if(dontclose)
+			window.process(return_storage, return_label);	//	閉じずに次へ
+		else
+			hideTitleMenu();
+	}
+
+	function invalidateThis(item)
+	{
+		invalidate item;
+	}
+
+	function onMouseDown(x, y, button, shift)
+	{
+		if(!acceptable)
+			return;
+		if(button == mbRight)
+			createdata[mode][5]!;
+	}
+
+	//	ボタンが押された
+	function onButtonDown(btn)
+	{
+		if(!acceptable || !btn.acceptable)
+			return;
+		if(btn.return_storage != "" || btn.return_label != "")
+		{
+			playSound(clickse);
+			if(btn.confirm && btn.confirm[1]!)
+			{//	確認ダイアログが表示される
+				if(askYesNo(btn.confirm[0]) != btn.confirm[2])
+					return;
+			}
+//			dm("btn.eval: "+btn.eval);
+			btn.eval! if btn.eval != "";
+			return_storage	= btn.return_storage;
+			return_label	= btn.return_label;
+			closeThis(btn.dontclose);	//	メニューを閉じて、指定のラベルへ移動する
+		}
+		else
+			onCommand(btn.id);
+		lastbutton	= btn;
+
+		//	extra2titleの時は、titleとして記録
+		title_lastselected[mode == "extra2title" ? "title" : mode]	= btn.no;
+	}
+
+	//	コマンド実行指令
+	function onCommand(cmd)
+	{
+		if(!acceptable)
+			return;
+		dm("on command: "+cmd);
+		playSound(clickse);
+		switch(cmd)
+		{
+		//	タイトル用
+		case "quit":
+			kag.onCloseQuery();
+			break;
+		case "config":
+			enabled	= false;
+			showConfigMenu("", "", onCloseConfigMenu);
+			break;
+
+		//	エクストラ/スペシャル用
+		case "back":
+			for(var i=0; i<buttons.count; i++)
+			{
+				if(buttons[i] != void && buttons[i].id == "back")
+				{
+					return_storage	= buttons[i].return_storage;
+					return_label	= buttons[i].return_label;
+//					dm("buttons[i].eval: "+buttons[i].eval);
+					buttons[i].eval! if buttons[i].eval;	//	選択されたときに実行されるコマンド
+					closeThis(buttons[i].dontclose);
+					break;
+				}
+			}
+			break;
+		}
+	}
+
+	function onCloseConfigMenu()
+	{
+		enabled	= true;
+	}
+
+	var _enabled;
+	property enabled
+	{
+		setter(e)
+		{
+//			if(e !== _enabled)
+			{
+				_enabled	= e;
+				for(var i=0; i<buttons.count; i++)
+					buttons[i].focusable	= e if buttons[i] != void;
+				if(lastbutton != void && lastbutton isvalid)
+				{
+					lastbutton.focus();
+					mouseMoveTo(lastbutton.no,, true);
+				}
+			}
+		}
+		getter	{ return _enabled; }
+	}
+}
+
+//	拡大率を各辺で変更できるLinearMover
+class LinearMoverWithAffine2 extends LinearMoverWithAffine
+{
+	function LinearMoverWithAffine2(layer, path, time, accel, ff, rl, src, interpolationMode=stNearest)
+	{
+		super.LinearMoverWithAffine(...);
+	}
+
+	function finalize()
+	{
+		super.finalize(...);
+	}
+
+	function createInterpolater(path)
+	{
+		return new LinearInterpolater(path, 7+1);	//	mag -> magx, magy
+	}
+
+	function calc(tick)
+	{
+		//	線形補間
+		var	per	= time == 0 ? 1 : tick / time;
+//		dm(@"tick = ${tick} / time = ${time} / per = ${per}");
+		per		= calcAccel(per, accel);
+		var l, t, deg, magx, magy, opa, cx, cy;
+
+		with(interpolater)
+		{
+			var ir = .getPointAndRatio(per);
+			l	= .calc(ir, 0);
+			t	= .calc(ir, 1);
+			deg	= .calc(ir, 2);
+			magx= .calc(ir, 3);
+			magy= .calc(ir, 4);
+			opa	= .calc(ir, 5);
+			cx	= .calc(ir, 6);
+			cy	= .calc(ir, 7);
+//			dm(per+": l="+l+", t="+t+", deg="+deg+", magx="+magx+", magy="+magy+", cx="+cx+", cy="+cy);
+		}
+		return [ l, t, deg, magx, magy, opa, cx, cy ];
+	}
+
+	function move(tick)
+	{
+//		var st = System.getTickCount();
+		var val	= calc(tick);
+
+		//	レイヤー処理
+		with(layer)
+		{
+			.rotate		= val[2] * Math.PI/180;	//	度からラジアンへ
+			.magnify	= val[3];
+			.magnify2	= val[4];
+			.setMagnifyCenterPos(val[6], val[7]);
+			.redraw(int(val[0]+0.5), int(val[1]+0.5));	//	描画
+
+			.type		= ltAlpha;
+			.opacity	= val[5];
+			.visible	= true;
+		}
+		setAnother();
+
+//		dm((System.getTickCount() - st)+"ms");
+	}
+}
+
+//	タイトルメニューを開く
+var titlemenu;
+var title_lastselected = %[];	//	前回選択した項目
+function showTitleMenu(mode, instant, notime)
+{
+	if(titlemenu != void)
+		titlemenu.init(mode), titlemenu.instant = instant, titlemenu.notime = notime;
+	else
+		titlemenu = new TitleMenuLayer(kag, kag.back.base, mode, instant, notime);
+
+	titlemenu.show();
+}
+
+//	タイトルメニューを閉じる
+function hideTitleMenu(time)
+{
+	if(titlemenu == void)
+		return;
+
+	titlemenu.hide(time, closeTitleMenu);
+}
+
+function closeTitleMenu()
+{
+//	dispose(titlemenu);
+	heapGarbage(titlemenu);
+	titlemenu	= void;
+}
+
+@endif

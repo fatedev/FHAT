@@ -1,0 +1,323 @@
+/*-----------------------------------------------------------------------------
+/	Copyright (C) TYPE-MOON All Rights Reserved.
+/		フラグリストメニューレイヤー
+/----------------------------------------------------------------------------*/
+@if(__FLAGLISTMENULAYER_DEFINED__==0)
+@set(__FLAGLISTMENULAYER_DEFINED__=1)
+
+Scripts.execStorage("ExtendMenuLayer.tjs");
+Scripts.execStorage("MenuTitleLayer.tjs");
+Scripts.execStorage("MenuBackButtonLayer.tjs");
+
+class FlagListMenuLayer extends ExtendMenuLayer
+{
+	var enterse	= "";
+	var clickse	= "";
+	var defaulttime	= 400;
+	var listpos	= %[
+		xstart:	27,		//	x座標開始位置
+		xstep:	152,	//	y座標スキップ
+		xcount:	5,		//	列数
+		ystart:	77,		//	y座標開始位置
+		ystep:	38,		//	y座標ステップ
+		ycount:	10,		//	行数
+	];
+	var	commentpos	= %[
+		left:27,
+		top:471,
+		width:631,
+		height:99
+	];
+	var	margin		= 12;
+	var	fontHeight	= 21;
+	var	lineSpacing	= 6;
+	var	color		= 0xCFCFCF;
+	var	interval	= 30;
+
+	var	mainFlags	= [
+		"夜の聖杯戦争１",	"四日目の夜、何が起きているかを知らなくてはいけない。",
+		"夜の聖杯戦争２",	"サーヴァントたちに聖杯戦争について訪ねるべし。\n姿を現さないサーヴァントは、夜の橋にて如実に語る。\nまた、剣と共に四日目の夜を迎えるべし",
+		"夜の聖杯戦争３",	"夜の土蔵と、教会の導き。\n裏山にて宣戦を布告し、決戦の橋へ。",
+		"アーチャー撃破",	"……剣と共に夜の教会へ。",
+		"夜の聖杯戦争４",	"解説者なくして解決はない。\n遠坂邸を調べ上げ、召喚状を送るべし。",
+		"夜の聖杯戦争５",	"始まりの鍵を回せ。弓道部と生徒会。",
+		"景山の一夜",		"教会へ足を運び続け、裏切りの魔女の真実を知れ。",
+		"夜の聖杯戦争６",	"教会の導きから、帰国者から土産話を。\n二つの館の真相から、港で戦いの角笛を鳴らせ。\n備考：汝の半身を学園に連れて行くこと。",
+		"夜の聖杯戦争７",	"アインツベルン城へ。",
+		"天の逆月",			"大橋にて二人の守護者と出会え。教会にて別離を終えよ。\n最後の夜、単身で聖杯へ向かえ。"
+	];
+	var	subFlags;
+
+	var title;
+	var commentbg;	//	背景から拾う
+	var back;
+	var	buttons;
+
+	var	commentLines;
+	var	commentLeft;
+	var	commentTop;
+	var	drawCharTimer;
+
+	var showed, acceptable;
+
+	function FlagListMenuLayer(win, par)
+	{
+		super.ExtendMenuLayer(...);
+		name	= "フラグリストメニュレイヤー";
+
+		//	背景への画像読み込み
+		var w = win.scWidth, h = win.scHeight;
+		setSize(w, h);
+		fillRect(0, 0, w, h, 0x80000000);
+		loadImages("fl_bg");	//	共通背景を使用
+		setSizeToImageSize();
+		hitThreshold	= 0;	//	クリック非透過
+		font.height		= fontHeight;
+
+		//	コメントをクリアする為の画像
+		with(commentbg = new global.Layer(win, this))
+		{
+			.setSize(commentpos.width, commentpos.height);
+			.copyRect(0, 0, this, commentpos.left, commentpos.top, .width, .height);
+		}
+
+		//	タイトル作成
+//		title	= new MenuTitleLayer(win, this, "flaglist_title", 27, 20, 1, 11);
+		var layer	= new global.Layer(win, this);
+		with(layer)
+		{
+			.name	= "画像読み込み用レイヤー";
+			.loadImages("flaglist_title");
+			operateRect(26, 14, layer, 0, 0, .imageWidth, .imageHeight);
+			.loadImages("bar");
+			operateRect(239, 36, layer, 0, 0, .imageWidth, .imageHeight);
+		}
+		invalidate layer;
+
+		//	"Back"ボタン作成
+		with(back = new global.ExButtonLayer(win, this, "back", 681, 548, "gl_back", "一つ戻ります。"))
+		{
+			.mode	= 3;
+			.entersound	= enterse;
+			.hitThreshold	= 0;
+			.readyVisible();
+		}
+
+		//	フラグ一覧を読み込む
+		var flags	= [].load("進行フラグ一覧.txt");
+		subFlags	= %[];
+		var	flist;
+
+		//	進行度にあわせた解説を追加する
+		flist	= mainFlags;
+		for(var i=0; i<flist.count; i+=2)
+			subFlags[flist[i]]	= flist[i+1];
+
+		//	フラグポップアップのデータを読み込む
+		flist	= flagPopupList;
+		for(var i=0; i<flist.count && flist[i]; i++)
+		{
+			subFlags[flist[i][0]]	= flist[i][1]+"\n";
+			subFlags[flist[i][0]]	+= "　"+flist[i][2].replace(/\n/, "\n　");
+		}
+
+		//	取得済みフラグを背景に書き込む
+		var l, t;
+		buttons	= [];
+		for(var i=0; i<flags.count; i++)
+		{
+			if(.tf[flags[i]] < 1)
+				continue;
+
+			l	= listpos.xstart + listpos.xstep * (i \ listpos.ycount);
+			t	= listpos.ystart + listpos.ystep * (i % listpos.ycount);
+
+			with(buttons[buttons.count] = new PushButtonLayer(win, this, "fl_"+flags[i]))
+			{
+				.setPos(l, t);
+				.id		= flags[i];
+				.visible= true;
+				.enabled= subFlags[flags[i]] != void;
+@if(DEBUG==1)
+				.onKeyDown	= onKeyDown;
+@endif
+			}
+		}
+
+		//	コメント欄の文字を描画するタイマー
+		with(drawCharTimer = new Timer(onDrawChar, ""))
+			.interval	= interval;
+
+		//	現在の状況を書き込む
+		flist	= mainFlags;
+		for(var i=flist.count-2; i>=0; i-=2)
+		{
+//			dm("check: "+flist[i]);
+			if(tf[flist[i]] > 0)
+			{
+				startComment(flist[i+1]);
+				break;
+			}
+		}
+	}
+
+	function finalize()
+	{
+		drawCharTimer.enabled	= false;
+		release(drawCharTimer);
+		releaseArray(buttons);
+		release(back);
+		release(title);
+		super.finalize(...);
+	}
+
+	//	コメントを書き込む
+	function startComment(comment, needclear=true)
+	{
+		//	改行位置を見つける
+		var	cw		= commentpos.width - (margin << 1);
+		var	lines	= comment.split("\n");
+		for(var i=0; i<lines.count; i++)
+		{
+			var	fw;
+			if((fw = font.getTextWidth(lines[i])) > cw)
+			{
+				var	pos	= int(lines[i].length * fw / cw) - 1;
+				var	line	= lines[i].substr(pos);
+				lines[i]	= lines[i].substr(0, pos);
+				lines.insert(i + 1, line);
+			}
+		}
+		commentLines	= lines;
+
+		//	コメントの描画を開始する
+		commentLeft	= commentpos.left + margin;
+		commentTop	= commentpos.top + margin;
+		drawCharTimer.enabled	= true;
+	}
+
+	function onDrawChar()
+	{
+		//	文字を描画
+		drawText(commentLeft, commentTop, commentLines[0][0], color, 255,, 1024, 0x000000, 2, 0, 0);
+		commentLeft	+= font.getTextWidth(commentLines[0][0]);
+
+		//	描画した文字を削除
+		commentLines[0]	= commentLines[0].substr(1);
+		if(commentLines[0] == "")
+		{//	この行の文字が無くなったら、次の行へ
+			commentLeft	= commentpos.left + margin;
+			commentTop	+= fontHeight + lineSpacing;
+			commentLines.erase(0);
+			if(commentLines.count == 0)
+			{//	書くものが無くなったら終了
+				drawCharTimer.enabled	= false;
+			}
+		}
+	}
+
+	//	コメントを消去
+	function clearComment()
+	{
+		drawCharTimer.enabled	= false;
+		copyRect(commentpos.left, commentpos.top, commentbg, 0, 0, commentpos.width, commentpos.height);
+	}
+
+	function show()
+	{
+		if(!showed)
+		{
+			showed	= acceptable = true;
+
+			super.show();
+			back.focus();
+		}
+	}
+
+	function hide()
+	{
+		if(showed)
+		{
+			showed	= acceptable = false;
+			super.hide();
+		}
+	}
+	function closeThis()
+	{
+		//	全てのボタンを押せなくする
+		acceptable	= false;
+
+		if(typeof parent.closeChild != "undefined")
+			parent.closeChild(this);
+		else
+			hideFlagListMenu();
+	}
+
+	function onMouseDown(x, y, button, shift)
+	{
+		if(!showed || !acceptable)	return;
+		if(button==mbRight)
+			closeThis();
+	}
+
+	function onButtonDown(btn)
+	{
+		if(!showed || !acceptable)	return;
+
+		switch(btn.id)
+		{
+		case "back":
+			closeThis();
+			return;
+		}
+
+		//	フラグのボタン
+		clearComment();
+		if(subFlags[btn.id] != void)
+			startComment(subFlags[btn.id]);
+	}
+@if(DEBUG==1)
+	function onKeyDown(key, shift)
+	{
+		var	no	= key - VK_0;
+		dm("key = "+key+" / no = "+no);
+		if(no >= 0 && no < (mainFlags.count >> 1))
+		{
+			clearComment();
+			startComment(mainFlags[no * 2 + 1]);
+		}
+	}
+@endif
+}
+
+//	KAGから開く
+var flaglist_menu;
+function showFlagListMenu(st, ret)
+{
+	if(flaglist_menu !== void)
+//		return false;
+		invalidate flaglist_menu;
+
+	flaglist_menu	= new FlagListMenuLayer(kag, kag.fore.base);
+	flaglist_menu.show();
+	flaglist_menu["return_storage"]= st;
+	flaglist_menu["return_label"]	= ret;
+	return true;
+}
+
+function hideFlagListMenu()
+{
+	if(flaglist_menu === void)
+		return false;
+
+	//	次の処理を実行開始
+	kag.process(flaglist_menu.return_storage, flaglist_menu.return_label);
+
+	//	閉じる
+	flaglist_menu.hide();
+}
+
+/*----------------------------------------------------------------------------/
+/	
+/----------------------------------------------------------------------------*/
+@endif

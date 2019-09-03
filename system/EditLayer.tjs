@@ -1,0 +1,803 @@
+// EditLayer.tjs - 一行編集用コントロールレイヤ
+// Copyright (C)2001-2005, W.Dee and contributors  改変・配布は自由です
+
+/*
+単一行の編集コントロールとして動作するレイヤです。
+
+書式  new EditLayer(<window>, <parent>)
+*/
+
+//	redoはちゃんと実装できてない
+@set(ENABLE_EDIT_REDO=0)
+
+class EditLayer extends Layer
+{
+	var Edit_text = ""; // 編集中のテキスト
+	var Edit_selStart = 0; // カーソル位置
+	var Edit_selLength = 0; // 選択長さ
+	var Edit_scrollPos = 0; // 表示されている左端の文字位置
+	var Edit_caretLayer; // キャレット用レイヤ
+	var Edit_color = clWindow; // 背景色
+	var Edit_antialiased = true; // アンチエイリアスをかけるか
+	var Edit_opacity = 192; // 不透明度
+	var Edit_maxChars = 0; // 最大文字数 ( 0 = 無制限 )
+	var Edit_textColor = clWindowText;
+	var Edit_shadowLevel = 0;
+	var Edit_shadowColor = 0;
+	var Edit_shadowWidth = 0;
+	var Edit_spacing = 3;
+	var Edit_blinkTimer;
+	var Edit_vertical = false;
+	var Edit_readonly = false; // 読み込み専用か？
+	var Edit_maxUndo	= 256;		//	UNDOの可能回数
+	var Edit_onchanged;	// 変更されたときに呼び出されるメソッド
+
+	var undoBuffer;	//	アンドゥバッファ
+	var curBufPos;	//	バッファの現在位置
+	var undoPos;	//	元に戻すの位置
+@if(ENABLE_EDIT_REDO==1)
+	var redoPos;	//	やり直しの位置
+@endif
+
+	function EditLayer(win, par, vert = false)
+	{
+		super.Layer(win, par);
+
+		Edit_vertical = vert;
+
+		hitType = htMask;
+		hitThreshold = 0; // 全域でマウスイベントは不透明
+		focusable = true; // フォーカスは受け取る
+		useAttention = true; // 注視ポイントを使用する
+
+		with(Edit_caretLayer = new global.Layer(win, this))
+		{
+			.hitType = htMask;
+			.hitThreshold = 256; // 完全にマウスイベントは透明
+		}
+		resizeCaret();
+
+		imeMode = imDontCare; // IME 使用可
+
+		// 点滅用タイマを用意
+		Edit_blinkTimer = new Timer(onBlink, '');
+
+		cursor = vert ? crHBeam : crIBeam;
+
+		initUndoBuffer();
+
+		update();
+	}
+
+	function finalize()
+	{
+		invalidate Edit_caretLayer;
+		invalidate Edit_blinkTimer;
+		super.finalize(...);
+	}
+
+	function assign(src)
+	{
+		assignImages(src, true);
+		Edit_text = src.Edit_text;
+		Edit_selStart = src.Edit_selStart;
+		Edit_selLength = src.Edit_selLength;
+		Edit_scrollPos = src.Edit_scrollPos;
+		Edit_color = src.Edit_color;
+		Edit_textColor = src.Edit_textColor;
+		Edit_antialiased = src.Edit_antialiased;
+		Edit_opacity = src.Edit_opacity;
+		Edit_vertical = src.Edit_vertical;
+		Edit_maxChars = src.Edit_maxChars;
+		Edit_shadowLevel = src.Edit_shadowLevel;
+		Edit_shadowColor = src.Edit_shadowColor;
+		Edit_shadowWidth = src.Edit_shadowWidth;
+		Edit_spacing = src.Edit_spacing;
+		var f = font;
+		var sf = src.font;
+		f.face = sf.face;
+		f.angle = sf.angle;
+		f.bold = sf.bold;
+		f.italic = sf.italic;
+		f.height = sf.height;
+		cursor = src.cursor;
+		resizeCaret();
+		update();
+	}
+
+	function resizeCaret()
+	{
+		// キャレットのサイズの初期化
+		if(Edit_vertical)
+		{
+			var h = 2; // 2 固定
+			var w = font.height;
+			w = -w if(w<0);
+			Edit_caretLayer.setImageSize(w, h);
+			Edit_caretLayer.setSizeToImageSize();
+			Edit_caretLayer.colorRect(0, 0, w, h, Edit_textColor);
+		}
+		else
+		{
+			var w = 2; // 2 固定
+			var h = font.height;
+			h = -h if(h<0);
+			Edit_caretLayer.setImageSize(w, h);
+			Edit_caretLayer.setSizeToImageSize();
+			Edit_caretLayer.colorRect(0, 0, w, h, Edit_textColor);
+		}
+	}
+
+	function getCaretXPos()
+	{
+		// キャレットの位置を取得
+		var bch = Edit_text.substring(0, Edit_selStart); // キャレット以前の文字列
+		var bchw = font.getTextWidth(bch);
+		var sch = Edit_text.substring(0, Edit_scrollPos); // 表示以前の文字
+		var schw = font.getTextWidth(sch);
+		return bchw - schw + 3;
+	}
+
+	function ensureCaretVisible(step = 1)
+	{
+		// キャレットが確実に表示される位置までスクロールする
+		var sp_save = Edit_scrollPos;
+		var txtlen = Edit_text.length;
+		if(Edit_selStart == txtlen)
+			while(Edit_scrollPos >= 0 && getCaretXPos() <= 3) Edit_scrollPos-=step;
+		else
+			while(Edit_scrollPos >= 0 && getCaretXPos() < 3) Edit_scrollPos-=step;
+		var lim = Edit_vertical ? imageHeight : imageWidth;
+		while(Edit_scrollPos < txtlen && getCaretXPos() >= lim -3) Edit_scrollPos+=step;
+		if(Edit_scrollPos < 0) Edit_scrollPos = 0;
+		if(Edit_scrollPos > txtlen) Edit_scrollPos = txtlen;
+		if(sp_save != Edit_scrollPos) update();
+	}
+
+	function setCaretLayerPos()
+	{
+		resizeCaret();
+		var xpos = getCaretXPos() -1;
+		if(Edit_vertical)
+		{
+			Edit_caretLayer.top = xpos;
+			Edit_caretLayer.left = imageWidth - 3 - Edit_caretLayer.imageWidth;
+			setAttentionPos(imageWidth - 3 , Edit_caretLayer.top);
+		}
+		else
+		{
+			Edit_caretLayer.top = 3;
+			Edit_caretLayer.left = xpos;
+			setAttentionPos(xpos, 3);
+		}
+	}
+
+	function showCaret()
+	{
+		setCaretLayerPos();
+		Edit_caretLayer.visible = true;
+		Edit_blinkTimer.interval = 500;
+		Edit_blinkTimer.enabled = true;
+	}
+
+	function hideCaret()
+	{
+		Edit_blinkTimer.enabled = false;
+		Edit_caretLayer.visible = false;
+	}
+
+	function onBlink()
+	{
+		Edit_caretLayer.visible = ! Edit_caretLayer.visible;
+	}
+
+	function stepLeft(ex)
+	{
+		// キャレットを左へ
+		if(Edit_selLength && ex == 0) Edit_selLength = 0, update();
+		if(Edit_selStart > 0)
+		{
+			Edit_selStart --, ensureCaretVisible(3);
+			Edit_selLength ++ if ex;
+		}
+		showCaret();
+		update() if ex;
+	}
+
+	function stepRight(ex)
+	{
+		// キャレットを右へ
+		if(Edit_selLength && ex == 0) Edit_selLength = 0, update();
+		if(Edit_selStart < Edit_text.length)
+		{
+			Edit_selStart ++, ensureCaretVisible(3);
+			Edit_selLength -- if ex;
+		}
+		showCaret();
+		update() if ex;
+	}
+
+	function getCaretPosFromX(x)
+	{
+		// クリックされた位置を割り出す
+		x -= Edit_spacing;
+		var text = Edit_text.substring(Edit_scrollPos);
+		var i = 0;
+		for(;;)
+		{
+			var tx = text.substring(0, i);
+			var cw;
+			if((cw = font.getTextWidth(tx)) > x)
+			{
+				i --;
+				var cc = text.substring(i, 1);
+				var ccw = font.getTextWidth(cc);
+				cw -= ccw;
+				if(x > cw + (ccw>>1)) i++;
+				if(i < 0) i = 0;
+				if(i > text.length) i = text.length;
+				return i + Edit_scrollPos;
+			}
+			i++;
+			if(i > text.length) return text.length + Edit_scrollPos;
+		}
+	}
+
+	function getSelection()
+	{
+		var selstart = Edit_selStart;
+		var selend = Edit_selLength + selstart;
+		selstart <-> selend if selstart > selend;
+//		dm("get selection: "+selstart+" to "+selend);
+		return [selstart, selend];
+	}
+
+	function deleteSelection()
+	{
+		if(Edit_readonly) return;
+		if(Edit_selLength == 0) return;
+
+		//	選択範囲を削除
+		var lt = Edit_text;
+		var sel = getSelection();
+		var bcr = Edit_text.substring(0, sel[0]); // 選択領域以前
+		var acr = Edit_text.substring(sel[1]); // 選択領域以後
+		recordChangeString(Edit_text.substr(sel[0], sel[1] - sel[0]));
+		Edit_text = bcr + acr;
+		Edit_selStart = sel[0];
+		Edit_selLength = 0;
+		ensureCaretVisible();
+		showCaret();
+		update();
+		Edit_onchanged(this) if Edit_onchanged != void;
+	}
+
+	function insertCharacter(ch)
+	{
+		if(Edit_readonly) return;
+
+		// ch をカーソル位置に挿入
+		var lt = Edit_text;
+		var sel = getSelection();
+		var bcr = Edit_text.substring(0, sel[0]); // 選択領域以前
+		var acr = Edit_text.substring(sel[1]); // 選択領域以後
+		recordChangeString(Edit_text.substr(sel[0], sel[1] - sel[0]), ch.length);
+		Edit_text = bcr + ch + acr;
+		Edit_selStart = sel[0] + ch.length;
+		Edit_selLength = 0;
+		ensureCaretVisible();
+		showCaret();
+		update();
+		Edit_onchanged(this) if Edit_onchanged != void;
+	}
+
+	function deleteBeforeCaret()
+	{
+		if(Edit_readonly) return;
+
+		// キャレットの手前の文字を一文字削除する
+		if(Edit_selLength) return deleteSelection();
+		if(Edit_selStart > 0)
+		{
+			var lt = Edit_text;
+			var sel = getSelection();
+			var bcr = Edit_text.substring(0, sel[0]-1);
+			var acr = Edit_text.substring(sel[0]);
+			recordChangeString(Edit_text.substr(sel[0]-1, 1));
+			Edit_text = bcr + acr;
+			Edit_selStart = sel[0]-1;
+			Edit_selLength = 0;
+			ensureCaretVisible(5);
+			showCaret();
+			update();
+			Edit_onchanged(this) if Edit_onchanged != void;
+		}
+	}
+
+	function deleteAfterCaret()
+	{
+		if(Edit_readonly) return;
+
+		// キャレットの次の一文字を削除する
+		if(Edit_selLength) return deleteSelection();
+		if(Edit_selStart < Edit_text.length)
+		{
+			var lt = Edit_text;
+			var sel = getSelection();
+			var bcr = Edit_text.substring(0, sel[0]);
+			var acr = Edit_text.substring(sel[0] + 1);
+			recordChangeString(Edit_text.substr(sel[0], 1));
+			Edit_text = bcr + acr;
+			Edit_selStart = sel[0];
+			Edit_selLength = 0;
+			ensureCaretVisible();
+			showCaret();
+			update();
+			Edit_onchanged(this) if Edit_onchanged != void;
+		}
+	}
+
+	//	クリップボードへ選択部分をコピー
+	function copyClipboard()
+	{
+		if(!Edit_selLength) return;
+		if(Edit_selStart < Edit_text.length)
+		{
+			var sel	= getSelection();
+			Clipboard.asText	= Edit_text.substr(sel[0], sel[1] - sel[0]);
+		}
+	}
+
+	//	クリップボードへ選択部分をコピーして、選択部分を削除する
+	function cutClipboard()
+	{
+		copyClipboard();
+		deleteSelection();
+	}
+
+	//	クリップボードの内容を選択部分へペーストする
+	function pasteClipboard()
+	{
+		if(!Clipboard.hasFormat(cbfText)) return;
+		insertCharacter(Clipboard.asText);
+	}
+
+	//	アンドゥバッファ管理
+	function initUndoBuffer()
+	{
+		undoBuffer	= [];
+		curBufPos = undoPos = 0;
+@if(ENABLE_EDIT_REDO==1)
+		redoPos = 0;
+@endif
+	}
+
+	//	変更を記録
+	function record(data)
+	{
+		undoBuffer[curBufPos]	= data;
+		curBufPos++;
+		curBufPos	= 0 if curBufPos >= Edit_maxUndo;
+
+@if(ENABLE_EDIT_REDO==1)
+		redoPos		= curBufPos;								//	復元できる位置
+@endif
+		undoPos		= curBufPos + 1 if undoPos == curBufPos;	//	遡れる位置
+		undoPos		= 0 if undoPos >= Edit_maxUndo;
+	}
+
+	//	元に戻す
+	function undo()
+	{
+		if(undoPos == curBufPos)
+			return;	//	これ以上元に戻せない
+
+		var last	= curBufPos;
+		curBufPos--;
+		curBufPos	= Edit_maxUndo - 1 if curBufPos < 0;
+		var data	= undoBuffer[curBufPos];
+		data[0](data, last);		//	undo実行(redeの記録)
+	}
+
+	//	やり直し
+@if(ENABLE_EDIT_REDO==1)
+	function redo()
+	{
+		if(redoPos == curBufPos)
+			return;	//	これ以上やり直しできない
+
+		var last	= curBufPos;
+		curBufPos++;
+		curBufPos	= 0 if curBufPos >= Edit_maxUndo;
+		var data	= undoBuffer[curBufPos];
+		data[0](data, last);		//	redo実行(undoの記録)
+	}
+@endif
+
+	//	アンドゥ処理用のメソッド
+	//	文字列に対する変更処理を記録する
+	//	in	: erasetext		削除された文字列
+	//		: insertlength	挿入された文字列の長さ
+	function recordChangeString(erasetext="", insertlength=0)
+	{
+		record([repairString, Edit_selStart, Edit_selLength, erasetext, insertlength]);
+	}
+
+	//	記録された変更処理に合わせて元に戻す
+	function repairString(data, recpos)
+	{
+		//	基準位置
+		var	st	= data[1];
+		st	+= data[2] if data[2] < 0;
+
+		//	変更部分
+@if(ENABLE_EDIT_REDO==1)
+		var erasetext	= Edit_text.substr(st, data[4]), insertlength	= data[3].length;
+@endif
+		//	復元処理
+		var	bcr	= Edit_text.substr(0, st);
+		var	acr	= Edit_text.substr(st + data[4]);
+		Edit_text	= bcr + data[3] + acr;
+		Edit_selStart	= data[1];
+		Edit_selLength	= data[2];
+		ensureCaretVisible();
+		showCaret();
+		update();
+		Edit_onchanged(this) if Edit_onchanged != void;
+
+		//	記録
+@if(ENABLE_EDIT_REDO==1)
+		undoBuffer[recpos]	= [repairString, Edit_selStart, Edit_selLength, erasetext, insertlength];
+@endif
+	}
+
+	var Edit_clickPos;
+	function onMouseDown(x, y)
+	{
+		// クリックされた
+		var spc = Edit_spacing;
+		if(x >= spc && y >= spc && x < imageWidth - spc && y < imageHeight - spc)
+		{
+			if(Edit_vertical)
+				Edit_selStart = getCaretPosFromX(y);
+			else
+				Edit_selStart = getCaretPosFromX(x);
+			Edit_clickPos	= Edit_selStart;
+			ensureCaretVisible();
+			showCaret();
+		}
+
+		focus();
+		super.onMouseDown(...);
+	}
+
+	function onMouseMove(x, y)
+	{
+		//	クリックした状態でマウス移動(ドラッグ)
+		if(Edit_clickPos !== void)
+		{
+			var spc = Edit_spacing;
+			if(x >= spc && y >= spc && x < imageWidth - spc && y < imageHeight - spc)
+			{
+				Edit_selStart = getCaretPosFromX(Edit_vertical ? y : x);
+				Edit_selLength = Edit_clickPos - Edit_selStart;
+				ensureCaretVisible();
+				showCaret();
+				update();
+			}
+		}
+		super.onMouseMove(...);
+	}
+
+	function onMouseUp(x, y, button)
+	{
+		//	マウスボタンを離した
+		if(Edit_clickPos !== void)
+		{
+			if(Edit_selStart == Edit_clickPos)
+			{
+				Edit_selLength	= 0;
+				update();
+			}
+			Edit_clickPos	= void;
+		}
+		super.onMouseUp(...);
+	}
+
+	function onKeyPress(key)
+	{
+		// キーが押された
+		if(#key >= 32)
+		{
+			// 普通の文字
+			if(!Edit_maxChars || Edit_text.length < Edit_maxChars)
+				insertCharacter(key);
+		}
+		else super.onKeyPress(...);
+	}
+
+	function onKeyDown(key, shift)
+	{
+		if(key == (Edit_vertical?VK_UP:VK_LEFT)) stepLeft(shift & ssShift);
+		else if(key == (Edit_vertical?VK_DOWN:VK_RIGHT)) stepRight(shift & ssShift);
+		else if(key == VK_DELETE) deleteAfterCaret();
+		else if(key == VK_BACK) deleteBeforeCaret();
+		else if(key == VK_ESCAPE || key == VK_RETURN) window.focusedLayer = null;
+		else if(shift & ssCtrl)
+		{
+			if(key == VK_Z) undo();
+@if(ENABLE_EDIT_REDO==1)
+			else if(key == VK_Y) redo();
+@endif
+			else if(key == VK_C) copyClipboard();
+			else if(key == VK_X) cutClipboard();
+			else if(key == VK_V) pasteClipboard();
+			else super.onKeyDown(...);
+		}
+		else super.onKeyDown(...);
+	}
+
+
+	function onFocus()
+	{
+		// フォーカスを得た
+		super.onFocus(...);
+		showCaret();
+	}
+
+	function onBlur()
+	{
+		// フォーカスを失った
+		super.onBlur(...);
+		hideCaret();
+	}
+
+	function drawFrame()
+	{
+		// 枠を描画
+		colorRect(0, 0, imageWidth, 1, 0x000000, 128);
+		colorRect(0, 1, 1, imageHeight-2, 0x000000, 128);
+		colorRect(imageWidth-1, 1, 1, imageHeight-1, 0xffffff, 128);
+		colorRect(1, imageHeight-1, imageWidth-2, 1, 0xffffff, 128);
+	}
+
+	function onPaint()
+	{
+		// 描画の直前に呼ばれる
+		// 内容を描画する
+		// とりあえずクリア
+		var vert = Edit_vertical;
+		var imwidth = vert?imageHeight:imageWidth;
+		fillRect(0, 0, imageWidth, imageHeight, 0);
+		colorRect(0, 0, imageWidth, imageHeight, Edit_color, Edit_opacity);
+		// 文字を描画
+		// グローバル変数や、オブジェクト内変数はアクセスが遅いので、
+		// よく使う変数はローカルに持ってくる
+		var h = font.height;
+		h = -h if(h<0);
+		var spc = Edit_spacing;
+		var x = vert ? imageWidth - spc : spc;
+		var y = spc;
+		var chpos = Edit_scrollPos;
+		var text = Edit_text;
+		var textlen = text.length;
+		var sel = getSelection();
+		var highlightbg = 0xff000000 | clHighlight;
+		var highlighttext = clHighlightText;
+		var anti = Edit_antialiased;
+		var textcolor = Edit_textColor;
+		var shadowlevel = Edit_shadowLevel;
+		var shadowcolor = Edit_shadowColor;
+		var shadowwidth = Edit_shadowWidth;
+		var tx = "";
+		if(vert)
+		{
+			for(;;)
+			{
+				y = spc + font.getTextWidth(tx);
+				if(y > imwidth) break;
+				if(chpos >= textlen) break;
+				var ch = text[chpos];
+				var chw = font.getTextWidth(ch);
+				if(chpos >= sel[0] && chpos < sel[1])
+				{
+					// 選択領域内
+					// 背景を塗る
+					fillRect(x, y, h, chw, highlightbg);
+					// 文字を書く
+					drawText(x, y, ch, highlighttext, 255, anti, shadowlevel, shadowcolor, shadowwidth);
+				}
+				else
+				{
+					// 選択領域外
+					drawText(x, y, ch, textcolor, 255, anti, shadowlevel, shadowcolor, shadowwidth);
+				}
+				chpos++;
+				tx += ch;
+			}
+		}
+		else
+		{
+			for(;;)
+			{
+				x = spc + font.getTextWidth(tx);
+				if(x > imwidth) break;
+				if(chpos >= textlen) break;
+				var ch = text[chpos];
+				var chw = font.getTextWidth(ch);
+				if(chpos >= sel[0] && chpos < sel[1])
+				{
+					// 背景を塗る
+					fillRect(x, y, chw, h, highlightbg);
+					// 文字を書く
+					drawText(x, y, ch, highlighttext, 255, anti, shadowlevel, shadowcolor, shadowwidth);
+				}
+				else
+				{
+					// 選択領域外
+					drawText(x, y, ch, textcolor, 255, anti, shadowlevel, shadowcolor, shadowwidth);
+				}
+				chpos++;
+				tx += ch;
+			}
+		}
+		// 文字領域外をもう一度クリア
+		if(vert)
+		{
+			fillRect(0, imageHeight - spc, imageWidth, spc, 0);
+			colorRect(0, imageHeight - spc, imageWidth, spc, Edit_color, Edit_opacity);
+		}
+		else
+		{
+			fillRect(imageWidth - spc, 0, spc, imageHeight, 0);
+			colorRect(imageWidth - spc, 0, spc, imageHeight, Edit_color, Edit_opacity);
+		}
+
+		//	枠を描画
+		drawFrame();
+	}
+
+	property text
+	{
+		setter(x)
+		{
+			x = "" if x === void;
+			if(Edit_text != string x)
+			{
+				Edit_text = string x;
+				Edit_selStart = 0;
+				Edit_selLength = 0;
+				Edit_scrollPos = 0;
+				setCaretLayerPos();
+				update();
+				Edit_onchanged(this) if Edit_onchanged != void;
+				initUndoBuffer();	//	undoバッファの初期化
+			}
+		}
+		getter
+		{
+			return Edit_text;
+		}
+	}
+
+	property maxChars
+	{
+		setter(x)
+		{
+			Edit_maxChars = int x;
+			Edit_selStart = 0;
+			Edit_selLength = 0;
+			Edit_scrollPos = 0;
+			if(Edit_maxChars && Edit_text.length >= Edit_maxChars)
+				Edit_text = Edit_text.substring(0, Edit_maxChars);
+			setCaretLayerPos();
+			update();
+		}
+		getter
+		{
+			return Edit_maxChars;
+		}
+	}
+
+	property width
+	{
+		setter(x)
+		{
+			super.width = x;
+			imageWidth = x;
+			update();
+		}
+		getter
+		{
+			return super.width;
+		}
+	}
+
+	property height
+	{
+		setter(x)
+		{
+			super.height = x;
+			imageHeight = x;
+			update();
+		}
+		getter
+		{
+			return super.height;
+		}
+	}
+
+	function setSize(w, h)
+	{
+		super.setSize(w, h);
+		setImageSize(w, h);
+		update();
+	}
+
+	property vertical
+	{
+		setter(x)
+		{
+			Edit_vertical = int x;
+			update();
+		}
+		getter
+		{
+			return Edit_vertical;
+		}
+	}
+
+	property color
+	{
+		setter(x)
+		{
+			Edit_color = int x;
+			update();
+		}
+		getter
+		{
+			return Edit_color;
+		}
+	}
+
+	property textColor
+	{
+		setter(x)
+		{
+			Edit_textColor = int x;
+			update();
+		}
+		getter
+		{
+			return Edit_textColor;
+		}
+	}
+
+	property antialiased
+	{
+		setter(x)
+		{
+			Edit_antialiased = int x;
+			update();
+		}
+		getter
+		{
+			return Edit_antialiased;
+		}
+	}
+
+	property bgOpacity
+	{
+		setter(x)
+		{
+			Edit_opacity = int x;
+			update();
+		}
+		getter
+		{
+			return Edit_opacity;
+		}
+	}
+}
+
+

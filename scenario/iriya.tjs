@@ -1,0 +1,3792 @@
+
+//==============================================================================
+//	コンパイラ指令
+//==============================================================================
+@set ( FINAL_VER = 0 )
+
+// タイトルのアニメをしないようにするか
+@set ( SKIP_TITLE_ANIME = 0 )
+
+@set( RELEASE_MODE = 1 ) // 0 または 1 で指定すること
+@set( DEBUG_MODE = ! RELEASE_MODE )
+
+// レイヤ情報をプリントするかどうか
+var debugShowLayerInfo = false;
+
+// デバッグコンソールを表示
+@set ( OPEN_DEBUG_CONSOLE = 1 )
+// デバッグコントローラーを表示
+@set ( OPEN_DEBUG_CONTROLLER = 1 )
+
+@if( !RELEASE_MODE )
+	@set ( PRN_BUTTON_MESSAGE = 0 )
+	@set ( PRN_CSPRITE_COUNT = 0 )
+	@set ( PRN_CSIN_COUNT = 0 )
+	@set ( PRN_CNUM_COUNT = 0 )
+	@set ( PRN_CIMAGE_COUNT = 0 )
+	@set ( NOPLAY_SE = 0 )
+	@set ( PRN_ALL_ITEM = 0 )
+	@set ( NEW_CREATE_GETITEM_DATA = 0 )
+	@set ( NEW_CREATE_RESULT_DATA = 0 )
+	@set ( CREATE_RESULT_TIMEDATA_SET_TIME = 0 )
+	@set ( CREATE_RESULT_TIMEDATA_SET_SV_ID = 0 )
+	@set ( CREATE_RESULT_TIMEDATA_SET_MS_ID = 0 )
+	@set ( CREATE_RESULT_SCOREDATA_SET_SCORE = 0 )
+	@set ( CREATE_RESULT_SCOREDATA_SET_SV_ID = 0 )
+	@set ( CREATE_RESULT_SCOREDATA_SET_MS_ID = 0 )
+@endif
+
+// 遅れたフレームの描画をスキップするか
+@set(__SKIP_DELAY_FRAME__ = 1)
+// スキップされるフレームの最大数
+var MAX_SKIP_COUNT = 2;
+
+
+/*******************************************************************************
+
+	風雲イリヤ城 共通クラス・関数ライブラリ
+	
+********************************************************************************/
+//Storages.addAutoPath( "/iriya/" );
+Storages.addAutoPath( "bgm/iriya/" );
+Storages.addAutoPath( "se/iriya/" );
+
+Storages.addAutoPath( "image/iriya/キャラドット絵/archer/" );
+Storages.addAutoPath( "image/iriya/キャラドット絵/caster/" );
+Storages.addAutoPath( "image/iriya/キャラドット絵/rider/" );
+Storages.addAutoPath( "image/iriya/キャラドット絵/lancer/" );
+Storages.addAutoPath( "image/iriya/キャラドット絵/saber/" );
+Storages.addAutoPath( "image/iriya/キャラドット絵/rin/" );
+Storages.addAutoPath( "image/iriya/キャラドット絵/shirou/" );
+Storages.addAutoPath( "image/iriya/キャラドット絵/sakura/" );
+Storages.addAutoPath( "image/iriya/キャラドット絵/enemy/" );
+Storages.addAutoPath( "image/iriya/キャラドット絵/kinoko/" );
+Storages.addAutoPath( "image/iriya/キャラドット絵/gilgamesh/" );
+Storages.addAutoPath( "image/iriya/キャラドット絵/serariz/" );
+Storages.addAutoPath( "image/iriya/キャラドット絵/bersercar/" );
+Storages.addAutoPath( "image/iriya/キャラドット絵/iriya/" );
+Storages.addAutoPath( "image/iriya/キャラドット絵/fuji/" );
+
+Storages.addAutoPath( "image/iriya/エフェクト/" );
+Storages.addAutoPath( "image/iriya/エフェクト/archer/" );
+Storages.addAutoPath( "image/iriya/エフェクト/caster/" );
+Storages.addAutoPath( "image/iriya/エフェクト/lancer/" );
+Storages.addAutoPath( "image/iriya/エフェクト/rider/" );
+Storages.addAutoPath( "image/iriya/エフェクト/saber/" );
+Storages.addAutoPath( "image/iriya/エフェクト/gilgamesh/" );
+Storages.addAutoPath( "image/iriya/エフェクト/serariz/" );
+Storages.addAutoPath( "image/iriya/エフェクト/bersercar/" );
+Storages.addAutoPath( "image/iriya/エフェクト/enemy/" );
+Storages.addAutoPath( "image/iriya/エフェクト/煙/" );
+Storages.addAutoPath( "image/iriya/エフェクト/水しぶき/" );
+Storages.addAutoPath( "image/iriya/エフェクト/影/" );
+Storages.addAutoPath( "image/iriya/エフェクト/メンチビ〜ム/" );
+Storages.addAutoPath( "image/iriya/エフェクト/バウンド/" );
+Storages.addAutoPath( "image/iriya/エフェクト/爆発/" );
+Storages.addAutoPath( "image/iriya/エフェクト/打点/" );
+Storages.addAutoPath( "image/iriya/エフェクト/泥はね/" );
+Storages.addAutoPath( "image/iriya/エフェクト/悲鳴/" );
+Storages.addAutoPath( "image/iriya/エフェクト/ガード/" );
+
+
+Storages.addAutoPath( "image/iriya/ステージタイトル/st1/" );
+Storages.addAutoPath( "image/iriya/ステージタイトル/st2/" );
+Storages.addAutoPath( "image/iriya/ステージタイトル/st3/" );
+Storages.addAutoPath( "image/iriya/ステージタイトル/boss/" );
+
+Storages.addAutoPath( "image/iriya/オブジェクト/" );
+Storages.addAutoPath( "image/iriya/オブジェクト/危険/" );
+Storages.addAutoPath( "image/iriya/オブジェクト/足場/" );
+Storages.addAutoPath( "image/iriya/オブジェクト/ミサイル/" );
+Storages.addAutoPath( "image/iriya/オブジェクト/ボール/" );
+Storages.addAutoPath( "image/iriya/オブジェクト/ショット/" );
+Storages.addAutoPath( "image/iriya/オブジェクト/砲台/" );
+Storages.addAutoPath( "image/iriya/オブジェクト/ショット/" );
+Storages.addAutoPath( "image/iriya/オブジェクト/自爆ボタン/" );
+Storages.addAutoPath( "image/iriya/オブジェクト/アイテム/" );
+Storages.addAutoPath( "image/iriya/オブジェクト/道場猫/" );
+
+Storages.addAutoPath( "image/iriya/エモーション/" );
+Storages.addAutoPath( "image/iriya/宝具カットイン/" );
+
+Storages.addAutoPath( "image/iriya/システム/" );
+Storages.addAutoPath( "image/iriya/システム/readygo/" );
+Storages.addAutoPath( "image/iriya/システム/goal/" );
+Storages.addAutoPath( "image/iriya/システム/retire/" );
+Storages.addAutoPath( "image/iriya/システム/etc/" );
+Storages.addAutoPath( "image/iriya/システム/オメデトウ/" );
+Storages.addAutoPath( "image/iriya/システム/ボタン連打/" );
+Storages.addAutoPath( "image/iriya/システム/カーソル/" );
+Storages.addAutoPath( "image/iriya/システム/ミサイル危険/" );
+Storages.addAutoPath( "image/iriya/システム/ジャンプ/" );
+Storages.addAutoPath( "image/iriya/システム/きのこカーソル/" );
+Storages.addAutoPath( "image/iriya/システム/勝利/" );
+Storages.addAutoPath( "image/iriya/システム/正解/" );
+Storages.addAutoPath( "image/iriya/システム/timeover/" );
+
+Storages.addAutoPath( "image/iriya/背景/st1/" );
+Storages.addAutoPath( "image/iriya/背景/st2/" );
+Storages.addAutoPath( "image/iriya/背景/st3/" );
+Storages.addAutoPath( "image/iriya/背景/boss/" );
+Storages.addAutoPath( "image/iriya/背景/quiz/" );
+Storages.addAutoPath( "image/iriya/背景/talk/" );
+
+Storages.addAutoPath( "image/iriya/title/" );
+Storages.addAutoPath( "image/iriya/csel/" );
+Storages.addAutoPath( "image/iriya/ending/" );
+Storages.addAutoPath( "image/iriya/ending_last/" );
+Storages.addAutoPath( "image/iriya/quiz/" );
+Storages.addAutoPath( "image/iriya/option_menu/" );
+Storages.addAutoPath( "image/iriya/game_help/" );
+Storages.addAutoPath( "image/iriya/goal_rank/" );
+Storages.addAutoPath( "image/iriya/gameover/" );
+Storages.addAutoPath( "image/iriya/item_viewer/" );
+Storages.addAutoPath( "image/iriya/rank_stselect/" );
+
+
+
+Scripts.execStorage( "ir_def.tjs" );
+Scripts.execStorage( "ir_sub.tjs" );
+Scripts.execStorage( "ir_images.tjs" );
+Scripts.execStorage( "ir_objects.tjs" );
+Scripts.execStorage( "ir_sub_function_f.tjs" );
+Scripts.execStorage( "ir_hougu.tjs" );
+Scripts.execStorage( "ir_quiz.tjs" );
+Scripts.execStorage( "ir_routines.tjs" );
+Scripts.execStorage( "ir_goal_rank.tjs" );
+Scripts.execStorage( "ir_game_help.tjs" );
+Scripts.execStorage( "ir_rank.tjs" );
+
+Scripts.execStorage( "ir_title.tjs" );
+Scripts.execStorage( "ir_charasel.tjs" );
+Scripts.execStorage( "ir_talk.tjs" );
+Scripts.execStorage( "ir_stage1.tjs" );
+Scripts.execStorage( "ir_stage2.tjs" );
+Scripts.execStorage( "ir_stage3.tjs" );
+Scripts.execStorage( "ir_stage5.tjs" );
+Scripts.execStorage( "ir_ending.tjs" );
+Scripts.execStorage( "ir_gameover.tjs" );
+Scripts.execStorage( "subroutine.tjs" );
+Scripts.execStorage( "ir_staff_roll.tjs" );
+
+var QUIZ_FILENAME = "ir_quiz.txt";
+
+
+
+@if ( DEBUG_MODE )
+	@if ( OPEN_DEBUG_CONSOLE )
+	Debug.console.visible = true;
+	@endif
+	@if ( OPEN_DEBUG_CONTROLLER )
+	Debug.controller.visible = true;
+	@endif
+@endif
+
+
+//------------------------------------------------------------------------------
+// 外部アクセス用
+//------------------------------------------------------------------------------
+
+
+// 風雲イリヤ城オブジェクト
+var iriyacastle_object;
+
+
+
+//	イリヤ城開始
+//	in	: st	移動先KAGスクリプトファイル(ex: a.ks)
+//		: ret	st内のラベル名(ex: *start)
+//		: advmode	ADVモードとして呼出されたか？
+function showIriyaCastle(st, ret, advmode=false)
+{
+	if(iriyacastle_object !== void)
+		return false;
+	// 風雲イリヤ城オブジェクトの作成
+	iriyacastle_object = new CIriyaLayer( kag, kag.fore.base, advmode );
+	iriyacastle_object.show();
+	iriyacastle_object["return_storage"]= st;
+	iriyacastle_object["return_label"]	= ret;
+	return true;
+}
+
+//	イリヤ城終了
+//	memo: メニュー自体からも、これを呼び出して閉じさせる
+function hideIriyaCastle()
+{
+	if(iriyacastle_object === void)
+		return false;
+	var st = iriyacastle_object.return_storage;
+	var lbl= iriyacastle_object.return_label;
+	
+	iriyacastle_object.hide( closeIriyaCastle );
+	//	次の処理を実行開始
+	kag.process(st, lbl);	//	[jump]と同義
+	return true;
+}
+
+//	イリヤ城が終了したときの処理
+function closeIriyaCastle()
+{
+	//	次の処理を実行開始(完全の閉じた後に次へ移行)
+//	kag.process(movie_menu.return_storage, movie_menu.return_label);
+	dispose(iriyacastle_object);	//	ガベージコレクタへ登録
+	iriyacastle_object = void;		//	メニューなし
+}
+
+
+
+
+//------------------------------------------------------------------------------
+//	KAGタグ登録
+//------------------------------------------------------------------------------
+//	メニューを開く
+//	in	: storage	移動先KAGスクリプトファイル(ex: a.ks)
+//		: target	storage内のラベル名(ex: *start)
+//		: advmode	ADVモードとして呼出されたか？
+kag.tagHandlers.showiriyacastle	= function(elm)
+{
+	if(showIriyaCastle(elm.storage, elm.target, elm.advmode))
+		return tagHandlers.s(%[]);	//	KAGスクリプト進行を停止する
+	else
+		return 0;	//	続行
+} incontextof kag;
+
+//	メニューを閉じる(破棄)
+kag.tagHandlers.closeiriyacastle = function(elm)
+{
+	closeIriyaCastle();
+	return 0;
+} incontextof kag;
+
+
+// セラリズ海峡で、リズがハルバートを使うかどうか
+function getRizuHalberdFlag()
+{
+	if (CheckValid(global.tf.useHalberd)  ==  false)
+		return ( false );
+	if (global.tf.useHalberd  >  0)
+			return ( true );
+	else	return ( false );
+}
+
+
+
+var dm = Debug.message;
+
+
+
+//------------------------------------------------------------------------------
+// サーバント情報
+//------------------------------------------------------------------------------
+var DEF_HITRECT_SX = -15;
+var DEF_HITRECT_SY = -80;
+var DEF_HITRECT_EX = 15;
+var DEF_HITRECT_EY = -10;
+var DEF_CENTER_ARCHER_X = 60;
+var DEF_CENTER_ARCHER_Y = 121;
+var DEF_CENTER_CASTER_X = 60;
+var DEF_CENTER_CASTER_Y = 121;
+var DEF_CENTER_LANCER_X = 70;
+var DEF_CENTER_LANCER_Y = 133;
+var DEF_CENTER_RIDER_X = 91;
+var DEF_CENTER_RIDER_Y = 128;
+var DEF_CENTER_SABER_X = 60;
+var DEF_CENTER_SABER_Y = 121;
+var DEF_CENTER_RIN_X = 68;
+var DEF_CENTER_RIN_Y = 100;
+var DEF_CENTER_SAKURA_X = 54;
+var DEF_CENTER_SAKURA_Y = 112;
+var DEF_CENTER_SHIROU_X = 64;
+var DEF_CENTER_SHIROU_Y = 116;
+
+
+function 移動力( level )		{ return 4.0+0.50*level; } // level は基本的に０〜５で指定すること
+function ダメージ率( level )	{ return 1.0-0.05*level; } // level は基本的に０〜５で指定すること
+function 魔法力( level )		{ return 0.2+0.04*level; } // level は基本的に０〜５で指定すること
+function 攻撃力( level )		{ return 0.8+0.10*level; } // level は基本的に０〜５で指定すること
+function ジャンプ力X( level )	{ return 6.0+1.00*level; } // level は基本的に０〜５で指定すること
+function ジャンプ力Y( level )	{ return -10-1.00*level; } // level は基本的に０〜５で指定すること
+
+var ARCHER = %[
+	NAME:				"archer",
+	FIGHT_DAMAGE_SCALE:	1.8,			// 小競り合いで相手に与えるダメージ割合. 小競り合いゲージの値にこの値をかける
+	FIGHT_GAUGE_VAL:	攻撃力(3),		// １クリックあたりの小競り合いゲージ増加量
+	DEFENCE:			ダメージ率(4),	// ダメージを受けた際、ダメージ値にダメージ率をかけた値をＨＰから引く
+	MOVESPEED:			移動力(3),		// 移動速度
+	MP_CURE_SPEED:		魔法力(2),		// MPの回復速度（フレーム毎）
+	HP_CURE_SPEED:		0.2,			// HPの回復速度（フレーム毎）
+	HP_CURE_DELAY:		10,				// HPが回復し始めるまでの時間
+	JUMP_HOSEI:			3,				// ジャンプの着地補正
+	JUMP_SPEEDX:		ジャンプ力X(3),	// ジャンプ初速度
+	JUMP_SPEEDY:		ジャンプ力Y(3),	
+	EAT_SPEED:			3,				// 食事速度
+	HOUGU_DAMAGE:		40,				// 宝具のダメージ量
+	HOUGU_CONDITION:			CONDITION_NORMAL,	// 宝具使用時の効果（自分）
+	HOUGU_CONDITIONTIME:		0,					// 宝具使用時の効果持続時間（自分）
+	HOUGU_TARGETCONDITION:		CONDITION_NORMAL,	// 宝具使用時の効果（相手）
+	HOUGU_TARGETCONDITIONTIME:	0,					// 宝具使用時の効果持続時間（相手）
+	IMAGEFILENAME:		"ir_char_archer",
+	IMAGECENTER_X:		DEF_CENTER_ARCHER_X,
+	IMAGECENTER_Y:		DEF_CENTER_ARCHER_Y,
+];
+
+var CASTER = %[
+	NAME:				"caster",
+	FIGHT_DAMAGE_SCALE:	1.8,
+	FIGHT_GAUGE_VAL:	攻撃力(2),
+	DEFENCE:			ダメージ率(1),
+	MOVESPEED:			移動力(3),
+	MP_CURE_SPEED:		魔法力(5),
+	HP_CURE_SPEED:		0.1,
+	HP_CURE_DELAY:		30,
+	JUMP_HOSEI:			3,
+	JUMP_SPEEDX:		ジャンプ力X(3),
+	JUMP_SPEEDY:		ジャンプ力Y(3),
+	EAT_SPEED:			3,
+	HOUGU_DAMAGE:		50,
+	HOUGU_CONDITION:			CONDITION_NORMAL,//CONDITION_RAPID,
+	HOUGU_CONDITIONTIME:		0,//FRAME_PER_SEC*8,
+	HOUGU_TARGETCONDITION:		CONDITION_NORMAL,//CONDITION_CONFUSE,
+	HOUGU_TARGETCONDITIONTIME:	0,//FRAME_PER_SEC*6,
+	IMAGEFILENAME:		"ir_char_caster",
+	IMAGECENTER_X:		DEF_CENTER_CASTER_X,
+	IMAGECENTER_Y:		DEF_CENTER_CASTER_Y,
+];
+
+// lancer
+var LANCER = %[
+	NAME:				"lancer",
+	FIGHT_DAMAGE_SCALE:	1.8,
+	FIGHT_GAUGE_VAL:	攻撃力(2),
+	DEFENCE:			ダメージ率(3),
+	MOVESPEED:			移動力(4),
+	MP_CURE_SPEED:		魔法力(3),
+	HP_CURE_SPEED:		0.1,
+	HP_CURE_DELAY:		30,
+	JUMP_HOSEI:			3,
+	JUMP_SPEEDX:		ジャンプ力X(4),
+	JUMP_SPEEDY:		ジャンプ力Y(4),
+	EAT_SPEED:			3,
+	HOUGU_DAMAGE:		40,
+	HOUGU_CONDITION:			CONDITION_NORMAL,
+	HOUGU_CONDITIONTIME:		0,//FRAME_PER_SEC*8,
+	HOUGU_TARGETCONDITION:		CONDITION_NORMAL,
+	HOUGU_TARGETCONDITIONTIME:	0,//FRAME_PER_SEC*6,
+	IMAGEFILENAME:		"ir_char_lancer",
+	IMAGECENTER_X:		DEF_CENTER_LANCER_X,
+	IMAGECENTER_Y:		DEF_CENTER_LANCER_Y,
+];
+
+// rider
+var RIDER = %[
+	NAME:				"rider",
+	FIGHT_DAMAGE_SCALE:	1.8,
+	FIGHT_GAUGE_VAL:	攻撃力(3),
+	DEFENCE:			ダメージ率(2),
+	MOVESPEED:			移動力(5),
+	MP_CURE_SPEED:		魔法力(1),
+	HP_CURE_SPEED:		0.1,
+	HP_CURE_DELAY:		30,
+	JUMP_HOSEI:			3,
+	JUMP_SPEEDX:		ジャンプ力X(5),
+	JUMP_SPEEDY:		ジャンプ力Y(5),
+	EAT_SPEED:			3,
+	HOUGU_DAMAGE:		40,
+	HOUGU_CONDITION:			CONDITION_NORMAL,
+	HOUGU_CONDITIONTIME:		0,//FRAME_PER_SEC*8,
+	HOUGU_TARGETCONDITION:		CONDITION_NORMAL,
+	HOUGU_TARGETCONDITIONTIME:	0,//FRAME_PER_SEC*6,
+	IMAGEFILENAME:		"ir_char_rider",
+	IMAGECENTER_X:		DEF_CENTER_RIDER_X,
+	IMAGECENTER_Y:		DEF_CENTER_RIDER_Y,
+];
+
+// saber
+var SABER = %[
+	NAME:				"saber",
+	FIGHT_DAMAGE_SCALE:	1.8,
+	FIGHT_GAUGE_VAL:	攻撃力(4),
+	DEFENCE:			ダメージ率(3),
+	MOVESPEED:			移動力(4),
+	MP_CURE_SPEED:		魔法力(4),
+	HP_CURE_SPEED:		0.1,
+	HP_CURE_DELAY:		30,
+	JUMP_HOSEI:			5,
+	JUMP_SPEEDX:		ジャンプ力X(4),
+	JUMP_SPEEDY:		ジャンプ力Y(4),
+	EAT_SPEED:			5,
+	HOUGU_DAMAGE:		40,
+	HOUGU_CONDITION:			CONDITION_NORMAL, //CONDITION_NODAMAGE,
+	HOUGU_CONDITIONTIME:		0,//FRAME_PER_SEC*8,
+	HOUGU_TARGETCONDITION:		CONDITION_NORMAL, //CONDITION_PARALYZE,
+	HOUGU_TARGETCONDITIONTIME:	0,//FRAME_PER_SEC*6,
+	IMAGEFILENAME:		"ir_char_saber",
+	IMAGECENTER_X:		DEF_CENTER_SABER_X,
+	IMAGECENTER_Y:		DEF_CENTER_SABER_Y,
+];
+
+
+var RIN = %[
+	IMAGEFILENAME:	"ir_char_rin",
+	IMAGECENTER_X:	DEF_CENTER_RIN_X,
+	IMAGECENTER_Y:	DEF_CENTER_RIN_Y,
+];
+
+var SAKURA = %[
+	IMAGEFILENAME:	"ir_char_sakura",
+	IMAGECENTER_X:	DEF_CENTER_SAKURA_X,
+	IMAGECENTER_Y:	DEF_CENTER_SAKURA_Y,
+];
+
+var SHIROU = %[
+	IMAGEFILENAME:	"ir_char_shirou",
+	IMAGECENTER_X:	DEF_CENTER_SHIROU_X,
+	IMAGECENTER_Y:	DEF_CENTER_SHIROU_Y,
+];
+
+var GILGAMESH = %[
+	NAME:				"gilgamesh",
+	DEFENCE:			1.00
+];
+
+var BERSERCAR = %[
+	NAME:				"bersercar",
+	DEFENCE:			1.00
+];
+
+//==============================================================================
+//	オブジェクト描画のためのレイヤ
+//==============================================================================
+
+@if (PRN_CSPRITE_COUNT  ==  1)
+var		CSpriteLayerMakeCount=0;
+@endif
+class CSpriteLayer extends Layer
+{
+	//	window	:	parent window
+	//	layer	:	parent layer
+	function CSpriteLayer( window, layer )
+	{
+@if (PRN_CSPRITE_COUNT  ==  1)
+CSpriteLayerMakeCount += 1;
+dm("constract CSpriteLayerMakeCount:"+CSpriteLayerMakeCount);
+@endif
+/*		// check
+		if ( ! window instanceof "Window" )
+			throw new Exception( "不正なパラメータ window : "+window );
+		if ( ! layer instanceof "Layer" )
+			throw new Exception( "不正なパラメータ layer : "+layer );
+*/		type = ltAlpha;
+		face = dfBoth;
+		//
+		setHitCheckAlphaLimit( "NONE", 0 );
+		//
+		super.Layer( ... );
+	}
+
+	function finalize()
+	{
+		super.finalize( ... );
+@if (PRN_CSPRITE_COUNT  ==  1)
+CSpriteLayerMakeCount -= 1;
+dm("destract CSpriteLayerMakeCount:"+CSpriteLayerMakeCount);
+@endif
+	}
+
+
+	//--------------------------------------------------------------------------
+	//	レイヤ全体を指定した色で塗りつぶす
+	//--------------------------------------------------------------------------
+	function fill( argb )
+	{
+		fillRect( 0, 0, width, height, argb );
+	}
+
+	//--------------------------------------------------------------------------
+	// 画像を反転してコピーする
+	//		source	:	元画像レイヤ
+	//		x, y	:	転送範囲の左上座標
+	//		width	:	転送範囲の幅
+	//		height	: 	転送範囲の高さ
+	//--------------------------------------------------------------------------
+	function mirrorCopy( source, x=0, y=0, width=void, height=void )
+	{
+		if ( width === void )
+			width = source.width;
+		if ( height === void )
+			height = source.height;
+	
+		var a = new easyAffineTransform();
+		a.addMirrorLRMatrix();
+		a.addTransferMatrix( width-0.5, 0 );
+		a.transformByProgram( this, source, x, y, width, height );
+		invalidate a;
+	}
+
+	//--------------------------------------------------------------------------
+	//	画像が左右反転した状態でレイヤのコピーを作る
+	//		source:	元のレイヤ
+	//--------------------------------------------------------------------------
+	function assignMirror( source )
+	{
+		setSize( source.width, source.height );
+		setImageSize( source.imageWidth, source.imageHeight );
+		setImagePos( 0, 0 );
+		mirrorCopy( source );
+	}
+
+	//--------------------------------------------------------------------------
+	//	レイヤのコピーを作る. 画像バッファもコピーされる
+	//		source:	元のレイヤ
+	//--------------------------------------------------------------------------
+	function assign( source )
+	{
+		setSize( source.width, source.height );
+		setImageSize( source.imageWidth, source.imageHeight );
+		setImagePos( 0, 0 );
+		copyRect( 0, 0, source, 0, 0, source.width, source.height );
+	}
+	
+	//--------------------------------------------------------------------------
+	//	縁取りされた文字を描画する
+	//		x:		文字座標
+	//		y:
+	//		text:	描画文字列
+	//		body:	本体の文字色
+	//		border:	文字の境界部分の色
+	//		_width:	境界の幅
+	//--------------------------------------------------------------------------
+	function drawBorderText( x, y, text, body=0xffffff, border=0x000000, _width=1 )
+	{
+		var i;
+		var j;
+		for ( i=-_width; i<=_width; i++ )
+			for ( j=-_width; j<=_width; j++ )
+				if ( i==0 && j==0 )
+					continue;
+				else
+					this.drawText( x+i, y+j, text, border, 255, false );
+		this.drawText( x, y, text, body, 255, false );
+	}
+
+	var	guid;
+	var	onMouseEnterCallback,
+		onMouseLeaveCallback,
+		onMouseDownCallback,
+		onMouseUpCallback,
+		onMouseMoveCallback;
+	//------------------------------------------------
+	//
+	// 簡易Layer生成(CGファイルから生成する)
+	//
+	//------------------------------------------------
+	// cl_type		clNone:不透過,clAdapt:左上の色を透過色
+	function layerImageFromCG( file_name, cl_type=clNone, _visible=true )
+	{
+		loadImages( file_name, cl_type );
+		setImagePos( 0, 0 );
+		setSize( imageWidth, imageHeight );
+		visible = _visible;
+		return;
+	}
+	//------------------------------------------------
+	//
+	// 簡易Layer生成(FillColorから生成する)
+	//
+	//------------------------------------------------
+	function layerImageFromFill( px, py, width, height, color_rgba, _visible=true )
+	{
+		setSize( width, height );
+		setPos( px, py );
+		fillRect( 0, 0, width, height,color_rgba );
+		visible = _visible;
+		return;
+	}
+	//------------------------------------------------
+	//
+	// Layerのアルファチェックによるヒットテスト用しきい値の設定
+	//	・"NORMAL"		0以外はすべてHitする
+	//	・"ALL"			レイヤ全体がHitする
+	//	・"NONE"		レイヤがHitしなくなる
+	//	・"DIRECT"		limitにしきい値を指定する(0:すべてHit,1〜255:指定値以上でヒット,256:すべてヒットしない)
+	//------------------------------------------------
+	function setHitCheckAlphaLimit( limit_type, limit )
+	{
+		hitType = htMask;
+		switch ( limit_type )
+		{
+		case "NORMAL":
+			hitThreshold = 1;
+			break;
+		case "ALL":
+			hitThreshold = 0;
+			break;
+		case "NONE":
+			hitThreshold = 256;
+			break;
+		case "DIRECT":
+			hitThreshold = limit;
+			break;
+		}
+		return;
+	}
+	//------------------------------------------------
+	//
+	// GUID(LayerID)を設定
+	//
+	//------------------------------------------------
+	function setGUID( id )
+	{
+		guid = id;
+		return;
+	}
+	//------------------------------------------------
+	//
+	// GUID(LayerID)の取得
+	//
+	//------------------------------------------------
+	function getGUID( id )
+	{
+		return ( guid );
+	}
+
+	//------------------------------------------------
+	//
+	// マウスがレイヤ内に入ってきた時に呼び出すCallback関数を定義
+	//
+	//------------------------------------------------
+	function setMouseEnterCallback( func )
+	{
+		onMouseEnterCallback = func;
+		return;
+	}
+	//------------------------------------------------
+	//
+	// マウスがレイヤ外に出ていった時に呼び出すCallback関数を定義
+	//
+	//------------------------------------------------
+	function setMouseLeaveCallback( func )
+	{
+		onMouseLeaveCallback = func;
+		return;
+	}
+	//------------------------------------------------
+	//
+	// マウスボタンが押された時に呼び出すCallback関数を定義
+	//	Callback関数の引数
+	//	・x		マウスのボタンが押された位置の x 座標 ( レイヤの表示座標での ) の値です。
+	//	・y		マウスのボタンが押された位置の y 座標 ( レイヤの表示座標での ) の値です。
+	//	・button	押されたマウスボタンです。以下のいずれかの値になります。
+	//		mbLeft	: マウスの左ボタンが押された
+	//		mbMiddle: マウスの中ボタンが押された
+	//		mbRight	: マウスの右ボタンが押された
+	// 	・shift	マウスボタンが押されたときに同時に押されていたシフト系のキーの状態です。 以下の値のビット OR による組み合わせになります。
+	//		ssAlt	: ALT キーが押されていた
+	//		ssShift	: SHIFT キーが押されていた
+	//		ssCtrl	: CTRL キーが押されていた 
+	//------------------------------------------------
+	function setMouseDownCallback( func )
+	{
+		onMouseDownCallback = func;
+		return;
+	}
+	function setMouseUpCallback( func )
+	{
+		onMouseUpCallback = func;
+		return;
+	}
+	//------------------------------------------------
+	//
+	// マウスが移動した時に発生する割り込み
+	//	Callback関数の引数
+	//	・x		マウスのボタンが押された位置の x 座標 ( レイヤの表示座標での ) の値です。
+	//	・y		マウスのボタンが押された位置の y 座標 ( レイヤの表示座標での ) の値です。
+	//	・button	押されたマウスボタンです。以下のいずれかの値になります。
+	//		ssAlt    : ALT キーが押されていた
+	//		ssShift  : SHIFT キーが押されていた
+	//		ssCtrl   : CTRL キーが押されていた
+	//		ssLeft   : マウスの左ボタンが押されていた
+	//		ssMiddle : マウスの中ボタンが押されていた
+	//		ssRight  : マウスの右ボタンが押されていた
+	//------------------------------------------------
+	function setMouseMoveCallback( func )
+	{
+		onMouseMoveCallback = func;
+		return;
+	}
+
+
+
+	// マウスがレイヤの領域内に入ってきたときに発生する割り込み
+	function onMouseEnter()
+	{
+		if (CheckValid(onMouseEnterCallback)  ==  false)
+			return;
+		onMouseEnterCallback( this );
+		//super.onMouseEnter( ... );
+		return;
+	}
+	// マウスがレイヤの領域内から出ていったときに発生する割り込み
+	function onMouseLeave()
+	{
+		if (CheckValid(onMouseLeaveCallback)  ==  false)
+			return;
+		onMouseLeaveCallback( this );
+		//super.onMouseLeave( ... );
+		return;
+	}
+	// マウスボタンが押された時に発生する割り込み
+	function onMouseDown( x,y, button,shift )
+	{
+		if (CheckValid(onMouseDownCallback)  ==  false)
+			return;
+		onMouseDownCallback( this, x,y, button,shift );
+		//super.onMouseDown( ... );
+		return;
+	}
+	function onMouseUp( x,y, button,shift )
+	{
+		if (CheckValid(onMouseUpCallback)  ==  false)
+			return;
+		onMouseUpCallback( this, x,y, button,shift );
+		//super.onMouseDown( ... );
+		return;
+	}
+	// マウスが移動した時に発生する割り込み
+	function onMouseMove( x,y, button,shift )
+	{
+		if (CheckValid(onMouseMoveCallback)  ==  false)
+			return;
+		onMouseMoveCallback( this, x,y, button );
+		//super.onMouseMove( ... );
+		return;
+	}
+
+
+
+
+	//------------------------------------------------
+	// レイヤプライオリティを設定する(0(top) 〜  (bottom))
+	//------------------------------------------------
+	function setPriority( prio )
+	{
+		absolute = prio;
+		return;
+	}
+	//------------------------------------------------
+	// レイヤプライオリティを取得する(0(top) 〜  (bottom))
+	//------------------------------------------------
+	function getPriority( prio )
+	{
+		return ( absolute );
+	}
+
+	//------------------------------------------------
+	// 親レイヤに対してセンタリングを行う
+	//------------------------------------------------
+	function CenteringPosX()
+	{
+		left = (parent.width - width) / 2;
+		return;
+	}
+	function CenteringPosY()
+	{
+		top = (parent.height - height) / 2;
+		return;
+	}
+
+	//------------------------------------------------
+	// レイヤ画像のUVを設定する
+	//------------------------------------------------
+	function setUV( _u, _v )
+	{
+		setImagePos( -_u, -_v );
+		return;
+	}
+
+}
+
+
+
+
+
+//==============================================================================
+//	それぞれのゲームシーンのための基本クラス
+//==============================================================================
+class CIriyaScene
+{
+	var parentLayer;
+	var parentWindow;
+	var timerCount;		// シーンが生成されてからの経過フレーム数
+	var id;
+	var proc; // 実行関数 (abstract method)
+	var draw; // 描画関数 (abstract method)
+	var oldSceneId;
+	
+	function CIriyaScene( layer, scene_id, old_id )
+	{
+		if ( ! layer instanceof "CIriyaLayer" )
+			throw new Exception( "シーンのコンストラクタ引数が正しくない" );
+		parentLayer = layer;
+		parentWindow = layer.window;
+		timerCount = 0;
+		id = scene_id;
+		oldSceneId = old_id;
+	}
+	
+	function finalize()
+	{
+	}
+
+	// フレーム単位の実行
+	function sceneproc()
+	{
+		var result;
+		result = proc(); // proc 関数は下位クラスで実装される
+		timerCount++;
+		return result;
+	}
+	
+	function scenedraw()
+	{
+		draw();
+	}
+	
+	function isAutoPlayMode()
+	{
+		return parentLayer.isAutoPlayMode();
+	} 
+}
+
+
+// 選択キャラクター情報
+class CIriyaCharaStatusInfo
+{
+var		MasterID;
+var		ServantID;
+var		HouguIDOffset,HouguNum;
+
+var		RankPoint;
+var		TotalTime;
+
+var		LastAliveFlag;
+
+var		total_time;
+
+	function CIriyaCharaStatusInfo()
+	{
+		total_time = new CIriyaStageTimeConvert();
+		Init();
+	}
+	function finalize()
+	{
+	}
+
+	function Init()
+	{
+		MasterID  = CHARA_ID_NONE;
+		ServantID = CHARA_ID_NONE;
+
+		HouguIDOffset = HOUGU_ID_NONE;
+		HouguNum      = 0;
+
+		RankPoint = 0;
+
+		TotalTime = 0;
+		total_time.Convert( 0 );
+
+		LastAliveFlag = true;
+		return;
+	}
+
+	// 選択マスターを設定する
+	function SetMasterID( master_id )
+	{
+		MasterID = master_id;
+		return;
+	}
+	// 選択マスターを取得する
+	function GetMasterID()
+	{
+		return ( MasterID );
+	}
+	// 選択サーヴァントを設定する
+	function SetServantID( servant_id )
+	{
+		ServantID = servant_id;
+		switch ( ServantID )
+		{
+		case CHARA_ID_SABER:
+			HouguIDOffset = HOUGU_ID_OFFSET_SABER;
+			HouguNum      = HOUGU_ID_SABER_NUM;
+			break;
+		case CHARA_ID_ARCHER:
+			HouguIDOffset = HOUGU_ID_OFFSET_ARCHER;
+			HouguNum      = HOUGU_ID_ARCHER_NUM;
+			break;
+		case CHARA_ID_RIDER:
+			HouguIDOffset = HOUGU_ID_OFFSET_RIDER;
+			HouguNum      = HOUGU_ID_RIDER_NUM;
+			break;
+		case CHARA_ID_LANCER:
+			HouguIDOffset = HOUGU_ID_OFFSET_LANCER;
+			HouguNum      = HOUGU_ID_LANCER_NUM;
+			break;
+		case CHARA_ID_CASTER:
+			HouguIDOffset = HOUGU_ID_OFFSET_CASTER;
+			HouguNum      = HOUGU_ID_CASTER_NUM;
+			break;
+		case CHARA_ID_NONE:
+			HouguIDOffset = HOUGU_ID_NONE;
+			HouguNum      = 0;
+			break;
+		}
+		return;
+	}
+	// 選択サーヴァントを取得する
+	function GetServantID()
+	{
+		return ( ServantID );
+	}
+
+
+	// 宝具が使用できるかチェックする
+	function CheckUseHougu()
+	{
+		// マスターがいない場合は宝具は使用できない
+		switch ( MasterID )
+		{
+		case CHARA_ID_RIN:
+		case CHARA_ID_SAKURA:
+		case CHARA_ID_SHIROU:
+			return ( true );
+
+		default:
+			return ( false );
+		}
+		return ( false );
+	}
+
+	// ランダムで使用する宝具を決定する
+	function GetUseRandHougu()
+	{
+		if (CheckUseHougu()  ==  false)
+			return ( HOUGU_ID_NONE );
+
+		return ( HouguIDOffset+rand_ave(HouguNum) );
+	}
+
+	function ResetRankPoint()
+	{
+		RankPoint = 0;
+		return;
+	}
+	function AddRankPoint( _add )
+	{
+		RankPoint += _add;
+		return;
+	}
+	
+	function GetRankPoint()
+	{
+		return ( RankPoint );
+	}
+
+	function AddTotalTime( _add )
+	{
+	var		_tm_conv;
+
+
+		@if (DEBUG_MODE)
+		with ( total_time )
+		{
+			dm( "現在までの時間・・・・"
+				+ .time_data[.TIME_DATA_M10]+.time_data[.TIME_DATA_M01]
+				+ "’"
+				+ .time_data[.TIME_DATA_S10]+.time_data[.TIME_DATA_S01]
+				+ "”"
+				+ .time_data[.TIME_DATA_MS100]+.time_data[.TIME_DATA_MS010]+.time_data[.TIME_DATA_MS001] );
+		}
+		@endif
+
+		_tm_conv = new CIriyaStageTimeConvert();
+		_tm_conv.Convert( _add );
+
+		@if (DEBUG_MODE)
+		with ( _tm_conv )
+		{
+			dm( "加算する時間・・・・・"
+				+ .time_data[.TIME_DATA_M10]+.time_data[.TIME_DATA_M01]
+				+ "’"
+				+ .time_data[.TIME_DATA_S10]+.time_data[.TIME_DATA_S01]
+				+ "”"
+				+ .time_data[.TIME_DATA_MS100]+.time_data[.TIME_DATA_MS010]+.time_data[.TIME_DATA_MS001] );
+		}
+		@endif
+
+		total_time.Add( _tm_conv );
+
+		@if (DEBUG_MODE)
+		with ( total_time )
+		{
+			dm( "合計時間・・・・・・・"
+				+ .time_data[.TIME_DATA_M10]+.time_data[.TIME_DATA_M01]
+				+ "’"
+				+ .time_data[.TIME_DATA_S10]+.time_data[.TIME_DATA_S01]
+				+ "”"
+				+ .time_data[.TIME_DATA_MS100]+.time_data[.TIME_DATA_MS010]+.time_data[.TIME_DATA_MS001] );
+		}
+		@endif
+		return;
+	}
+	function GetTotalTimeCode()
+	{
+		return ( total_time.GetTimeCode() );
+	}
+	function GetTotalTimeData()
+	{
+		return ( total_time );
+	}
+
+	function SetLastAliveFlag( _flag )
+	{
+		LastAliveFlag = _flag;
+		return;
+	}
+	function GetLastAliveFlag()
+	{
+		return ( LastAliveFlag );
+	}
+
+
+}
+
+
+
+
+
+
+
+
+
+
+var REPLAYMODE_NONE = 0;
+var REPLAYMODE_WRITE = 1;
+var REPLAYMODE_PLAY = 2;
+
+var REPLAY_SAVE_INTERVAL = 60;
+
+class CIrInput
+{
+	var keylog;
+	var input;
+	var replaymode;
+	var index;
+	var id;
+	var parentLayer;
+
+	function CIrInput( _layer, _id, _replaymode=REPLAYMODE_NONE, randomseed=void )
+	{
+		// 初期化
+		keylog = [];
+		input = %[];
+		index = 0;
+		parentLayer = _layer;
+		id = _id;		
+		replaymode = _replaymode;
+		
+		// リリースモードではリプレイ機能を使えないようにする
+		@if( RELEASE_MODE )
+			replaymode = REPLAYMODE_NONE;
+		@endif
+		
+		// 乱数初期値が指定されていない場合は適当な値を設定する
+		// random32関数内で使用している乱数ジェネレータは、
+		// 既に適当な値で初期化されているはずなので、同じ値になることはない（はず）
+		if( randomseed === void )
+			randomseed = random32();
+		// 特定のシーンでのみ、リプレイを有効にする
+		if( replaymode != REPLAYMODE_NONE )
+		{
+			if ( [SCENE_STAGE1,SCENE_STAGE2,SCENE_STAGE3,SCENE_BOSS].find( id ) < 0 )
+			{
+				dm( "■リプレイの記録・再生を有効にできないシーンです. リプレイ記録無しの通常モードに変更しました" );
+				replaymode = REPLAYMODE_NONE;
+			}
+		}
+		dm( "■乱数の初期化 "+randomseed );
+		dm( "■リプレイモード "+replaymode );
+		// リプレイ保存モードの場合は初期値を保存する
+		if( replaymode == REPLAYMODE_WRITE )
+		{
+			_randObj.randomize( randomseed );
+			// バージョンを記録する
+			keylog[index++] = VERSION_INFO;
+			// 乱数の初期値を記録する
+			keylog[index++] = randomseed;
+			// シーン番号を記録する
+			keylog[index++] = id;
+			// マスターとサーバントの組み合わせを記録する
+			var i;
+			for ( i=0; i<5; i++ )
+			{
+				keylog[index++] = parentLayer.CharaStatus[i].GetMasterID();
+				keylog[index++] = parentLayer.CharaStatus[i].GetServantID();
+			}
+			return;
+		}
+		// リプレイ再生モードの場合は初期値を読み出す
+		if ( replaymode == REPLAYMODE_PLAY )
+		{
+			// ファイルを読み込む
+			dm( "■リプレイファイルをロードします - keylog.txt" );
+			keylog.load( "keylog"+id+".txt" );
+			// 記録されているバージョンと現在のバージョンが一致するかどうかを確認する
+			if ( VERSION_INFO != keylog[index++] )
+			{
+				dm( "■バージョンが異なるため、リプレイファイルを再生できません. リプレイ記録無しの通常モードに変更しました" );
+				replaymode = REPLAYMODE_NONE;
+				return;
+			}
+			// 乱数系列を再現する
+			randomseed = keylog[index++];
+			_randObj.randomize( randomseed );
+			dm( "■乱数系列の再現 "+randomseed );
+			// 記録されているシーン番号と現在のシーンが一致するかどうかを確認する
+			if ( id != keylog[index++] )
+			{
+				dm( "■シーンが異なるため、リプレイ記録無しの通常モードに変更しました" );
+				replaymode = REPLAYMODE_NONE;
+				return;
+			}
+			// マスターとサーバントの組み合わせを再現する
+			var i;
+			for ( i=0; i<5; i++ )
+			{
+				parentLayer.CharaStatus[i].SetMasterID( (int)keylog[index++] );
+				parentLayer.CharaStatus[i].SetServantID( (int)keylog[index++] );
+			}
+		}
+	}
+	
+	var KEY_LBUTTON	= 0x01;
+	var KEY_RBUTTON	= 0x02;
+	var KEY_SHIFT	= 0x04;
+	var KEY_CONTROL	= 0x40;
+	var KEY_DELETE	= 0x10;
+	var KEY_RETURN	= 0x20;
+
+	var tracking = false;
+
+	function update()
+	{
+		var code=0;
+		var mousex=0;
+		var mousey=0;
+
+		// 押されたキーの組み合わせによるフラグを得る
+		switch( replaymode )
+		{
+		case REPLAYMODE_NONE:
+		case REPLAYMODE_WRITE:
+			if ( System.getKeyState( VK_LBUTTON ) )	code|=KEY_LBUTTON;
+			if ( System.getKeyState( VK_RBUTTON ) )	code|=KEY_RBUTTON;
+			if ( System.getKeyState( VK_SHIFT ) )	code|=KEY_SHIFT;
+			if ( System.getKeyState( VK_CONTROL ) )	code|=KEY_CONTROL;
+			if ( System.getKeyState( VK_DELETE ) )	code|=KEY_DELETE;
+			if ( System.getKeyState( VK_RETURN ) )	code|=KEY_RETURN;
+			mousex = parentLayer.cursorX;
+			mousey = parentLayer.cursorY;
+			break;
+		case REPLAYMODE_PLAY:
+			var param = [];
+			var line =  keylog[ index++ ];
+			param.split( ",", line );
+			code = (int)param[0];
+			mousex = (int)param[1];
+			mousey = (int)param[2];
+			break;
+		}
+		// keystate には、それぞれのキーが押されてからの経過時間が記録されている.
+		// 押していない場合は -1 がセットされている
+		if ( code & KEY_LBUTTON )	input.left++;	else input.left = -1;
+		if ( code & KEY_RBUTTON )	input.right++;	else input.right = -1;
+		if ( code & KEY_SHIFT )		input.shift++;	else input.shift = -1;
+		if ( code & KEY_CONTROL )	input.control++;else input.control = -1;
+		if ( code & KEY_DELETE )	input.del++;	else input.del = -1;
+		if ( code & KEY_RETURN )	input.ret++;	else input.ret = -1;
+		input.x = mousex;
+		input.y = mousey;
+		// トラッキングモードではマウスカーソルの動きも再現する
+		if ( replaymode == REPLAYMODE_PLAY )
+		{
+			if( System.getKeyState( VK_1 ) )
+				tracking = true;
+			if( System.getKeyState( VK_2 ) )
+				tracking = false;
+			if( tracking )
+			{
+				parentLayer.cursorX = input.x;
+				parentLayer.cursorY = input.y;
+			}
+		}
+		// 記録モードの場合はファイルに書き出す
+		if( replaymode == REPLAYMODE_WRITE )
+		{
+			keylog[index++] = "%d,%d,%d".sprintf(code,input.x,input.y);
+			if ( System.getKeyState( VK_F12 ) || input.control>=0 )
+			{
+				save( "keylog"+id+".txt" );
+			}
+		}
+		//
+		return input;
+	}
+	
+	function save( file )
+	{
+@if( DEBUG_MODE )
+		keylog.save( file );
+		dm( "■リプレイデータを保存しました "+file );
+@endif
+	}
+	
+	function finalize()
+	{
+		if( replaymode == REPLAYMODE_WRITE )
+			save( "keylog_autosave"+id+".txt" );
+	}
+}
+
+
+
+
+
+
+//==============================================================================
+//
+//	風雲イリヤ城全体を管理するクラス
+//
+//==============================================================================
+
+
+class CIriyaLayer extends Layer
+{
+// ---------------------------------
+// イリヤ城用各種情報保存用フラグ
+// ---------------------------------
+// HELP用ステージ進行状況
+var		STAGE_LOOK_DATA_VERSION		=0;		// データバージョン
+	// フラグ内容
+	var	LOOK_STAGE_NONE		=0;
+	var	LOOK_STAGE_LOOK		=1;
+	var	LOOK_STAGE_CLEAR	=2;
+
+
+var		NOW_RESULT_DATA_VERSION		=7;	// ゲームデータのバージョン
+
+
+// ゲームオプション
+var		DRAW_OPTION				="ir_draw_option";
+	// 描画設定
+	var	DRAW_OPTION_NORMAL	=0;
+	var	DRAW_OPTION_EASY	=1;
+	var	MAX_DRAW_OPTION		=2;
+
+var		MEMORY_TYPE				="ir_memory_type";
+	var	MEMORY_TYPE_LESS	=0;
+	var	MEMORY_TYPE_LARGE	=1;
+	var	MAX_MEMORY_TYPE		=2;
+
+	var closeDialogShowing; // 終了ダイアログが表示中かどうか
+
+
+	// 通常クリアごほうびCG表示用フラグ
+	var	ご褒美CG_クリア				= 0;
+	var	ご褒美CG_ITEMコンプリート	= 1;
+
+	var	ご褒美CGフラグ =
+	[
+		"ir_gohoubi_cg1",
+		"ir_gohoubi_cg2"
+	];
+
+	function init_gohoubi_cg()
+	{
+	var		i;
+
+		for (i=0;  i<ご褒美CGフラグ.count;  i++) {
+			if (CheckValid(global.tf[ご褒美CGフラグ[i]])  ==  false) {
+				@if (DEBUG_MODE)
+				dm( "ご褒美CGフラグ[" + ご褒美CGフラグ[i] + "]を新規に作成しますします。" );
+				@endif
+				global.tf[ご褒美CGフラグ[i]] = false;
+			}
+		}
+		return;
+	}
+	function setGohoubiCG( flag )
+	{
+		global.tf[ご褒美CGフラグ[flag]] = true;
+		@if (DEBUG_MODE)
+		dm( "ご褒美CGフラグ[" + ご褒美CGフラグ[flag] + "]をONにしました。" );
+		@endif
+		return;
+	}
+	function getGohoubiCG( flag )
+	{
+		return ( global.tf[ご褒美CGフラグ[flag]] );
+	}
+
+
+	// (クイズ用かうんたバッファのリセット)
+//	var	QUIZ_COUNTER_FLAG_NAME	="ir_quiz_counter";
+	var	QUIZ_NUM_FLAG_NAME	="ir_total_quiz_num";
+	var	QUIZ_TABLE_FLAG_NAME	="ir_quiz_table";
+	var	QUIZ_OLD_NO_FLAG_NAME	="ir_old_quiz_no";
+	function quiz_table_clear()
+	{
+	var		i;
+		for (i=0;  i<global.tf[QUIZ_NUM_FLAG_NAME];  i++)
+			global.tf[QUIZ_TABLE_FLAG_NAME][i] = false;
+		return;
+	}
+	function init_quiz_counter_data( _total_quiz_num )
+	{
+//		global.tf[QUIZ_COUNTER_FLAG_NAME] = 0;
+		global.tf[QUIZ_NUM_FLAG_NAME] = _total_quiz_num;
+		global.tf[QUIZ_TABLE_FLAG_NAME] = new Array();
+		quiz_table_clear();
+		global.tf[QUIZ_OLD_NO_FLAG_NAME] = -1;
+		return;
+	}
+	
+	
+	function クイズ問題数()
+	{
+		var list=[];
+		var 問題数 = 0;
+		var i;
+		list.load( QUIZ_FILENAME );
+		for ( i=0; i<list.count; i++ )
+			if ( list[i] == "#q" )
+				問題数++;
+		return 問題数;
+	}
+	
+	
+
+	// クイズ用カウンタを初期化する
+	function init_quiz_counter()
+	{
+	var	total_quiz_num;
+
+		total_quiz_num = クイズ問題数();
+		dm( "問題数: "+total_quiz_num );
+		// カウンタが存在しないなら新規作成
+/*		if ((CheckValid(global.tf[QUIZ_COUNTER_FLAG_NAME])  ==  false)
+		||	(CheckValid(global.tf[QUIZ_NUM_FLAG_NAME])  ==  false)) {
+*/		if ((CheckValid(global.tf[QUIZ_TABLE_FLAG_NAME])  ==  false)
+		||	(CheckValid(global.tf[QUIZ_NUM_FLAG_NAME])  ==  false)) {
+			@if (DEBUG_MODE)
+			dm( "クイズバッファを新規に作成しますします。" );
+			@endif
+			init_quiz_counter_data( total_quiz_num );
+			return;
+		}
+
+		// クイズ数がちがうなら新規に設定
+		if (global.tf[QUIZ_NUM_FLAG_NAME]  !=  total_quiz_num) {
+			@if (DEBUG_MODE)
+			dm( "クイズバッファをリセットします。" );
+			@endif
+			init_quiz_counter_data( total_quiz_num );
+			return;
+		}
+		return;
+	}
+
+	// 現在のクイズカウンタ値を返す
+	@if (DEBUG_MODE)
+	var		quiz_count_ex=0;
+	@endif
+	function getQuizCounter( add=1 )
+	{
+	var		i;
+	var		quiz_no;
+	var		quiz_num;
+
+		quiz_num = global.tf[QUIZ_NUM_FLAG_NAME];
+		quiz_no = rand_ave( quiz_num );
+		for (i=0;  i<quiz_num;  i++) {
+			if ((global.tf[QUIZ_TABLE_FLAG_NAME][quiz_no]  ==  false)
+			&&	(global.tf[QUIZ_OLD_NO_FLAG_NAME]  !=  quiz_no)) {
+				global.tf[QUIZ_TABLE_FLAG_NAME][quiz_no] = true;
+				global.tf[QUIZ_OLD_NO_FLAG_NAME] = quiz_no;
+				@if (DEBUG_MODE)
+				quiz_count_ex += 1;
+				dm( "クイズ番号は" + quiz_no + "です。" + "(" + quiz_count_ex + "問目)" );
+				@endif
+				return ( quiz_no );
+			}
+			quiz_no = (quiz_no + 1) % quiz_num;
+		}
+
+		@if (DEBUG_MODE)
+		dm( "クイズがすべて出たのでカテーブルをリセットします。" );
+		quiz_count_ex = 0;
+		@endif
+		quiz_table_clear();
+		return ( getQuizCounter() );
+/*
+	var		now_count;
+		now_count = global.tf[QUIZ_COUNTER_FLAG_NAME];
+		@if (DEBUG_MODE)
+		dm( "現在のクイズカウンタ値は" + now_count + "です。" );
+		@endif
+		global.tf[QUIZ_COUNTER_FLAG_NAME] = (global.tf[QUIZ_COUNTER_FLAG_NAME]+add + total_quiz_num);
+		if (global.tf[QUIZ_COUNTER_FLAG_NAME]  <  0)
+			global.tf[QUIZ_COUNTER_FLAG_NAME] = 0;
+		global.tf[QUIZ_COUNTER_FLAG_NAME] %= global.tf[QUIZ_NUM_FLAG_NAME];
+		@if (DEBUG_MODE)
+		dm( "次回のクイズカウンタ値は" + global.tf[QUIZ_COUNTER_FLAG_NAME] + "です。" );
+		@endif
+		return ( now_count );
+*/	}
+
+
+
+
+
+	function set_stage_look_flag( _stage_no, _check_num, _set_num )
+	{
+		if (global.tf[_stage_no]  ==  _check_num)
+			global.tf[_stage_no] = _set_num;
+		return ( true );
+	}
+
+
+
+	function init_stage_look_data()
+	{
+	var		i;
+		global.tf.ir_stage_look_data_version = STAGE_LOOK_DATA_VERSION;
+
+		for (i=0;  i<MAX_SCENE_ID;  i++)
+			global.tf["ir_stage_flag"+i] = LOOK_STAGE_NONE;
+		return;
+	}
+	function InitStageLook()
+	{
+		if (CheckValid(global.tf.ir_stage_look_data_version)  ==  false) {
+			init_stage_look_data();
+			return;
+		}
+		if (global.tf.ir_stage_look_data_version  !=  STAGE_LOOK_DATA_VERSION) {
+			init_stage_look_data();
+			return;
+		}
+		return;
+	}
+	function CheckLook( _stage_no )
+	{
+		return ( global.tf[_stage_no] );
+	}
+	function SetStageLook( _stage_no )
+	{
+		if (AutoPlayFlag  ==  true)
+			return;
+		set_stage_look_flag( _stage_no, LOOK_STAGE_NONE, LOOK_STAGE_LOOK );
+		return;
+	}
+	function SetStageLookClear( _stage_no )
+	{
+		if (AutoPlayFlag  ==  true)
+			return;
+		set_stage_look_flag( _stage_no, LOOK_STAGE_LOOK, LOOK_STAGE_CLEAR );
+		return;
+	}
+
+
+
+	// キャクターステータス情報
+	var CharaStatus;
+
+	// キャクターステータスバッファを生成する
+	function CreateCharaStatus()
+	{
+	var		i;
+		// バッファの生成
+		CharaStatus = new Array();
+		for (i=0;  i<MAX_PLAYER_NUM;  i++)
+			CharaStatus[i] = new CIriyaCharaStatusInfo();
+		return;
+	}
+	// キャラクターステータスのバッファを初期化する(-1ですべて初期化)
+	function InitCharaStatus( player_id )
+	{
+	var		now,end;
+		if (player_id  ==  -1) {
+			now = 0;
+			end = MAX_PLAYER_NUM;
+		} else {
+			now = player_id;
+			end = player_id + 1;
+		}
+		for (;  now<end;  now++)
+			CharaStatus[now].Init();
+		return;
+	}
+	// ポイントリセット
+	function ResetCharaStageData()
+	{
+	var		i;
+		for (i=0;  i<MAX_PLAYER_NUM;  i++)
+			CharaStatus[i].ResetRankPoint();
+		return;
+	}
+
+
+	function ReleaseCharaStatus()
+	{
+		ReleaseArray( CharaStatus );
+		return;
+	}
+
+	// 指定プレイヤーの総合順位を調べる。
+	function GetPlayerTotalRank( _player_id )
+	{
+	var		_point;
+	var		i,_rank,_add;
+
+
+		_point = CharaStatus[_player_id].GetRankPoint();
+
+		// 通常通りの順位
+		_rank = 0;
+		for (i=0;  i<MAX_PLAYER_NUM;  i++) {
+			if (i  ==  _player_id)
+				continue;
+			if (_point  <  CharaStatus[i].GetRankPoint())
+				_rank += 1;
+		}
+//		return ( _rank );
+
+
+		// 同じ順位はプレイヤー番号でずらす(同順位を発生させない)
+		_add = 0;
+		for (i=0;  i<MAX_PLAYER_NUM;  i++) {
+			if (i  ==  _player_id)
+				break;
+			if (_point  ==  CharaStatus[i].GetRankPoint())
+				_add += 1;
+		}
+
+		return ( _rank+_add );
+	}
+
+
+	function InitGameOption()
+	{
+		if (global.tf[DRAW_OPTION]  ===  void)
+			global.tf[DRAW_OPTION] = DRAW_OPTION_NORMAL;
+		if (global.tf[MEMORY_TYPE]  ===  void)
+			global.tf[MEMORY_TYPE] = MEMORY_TYPE_LESS;
+
+
+		SetDrawOption( global.tf[DRAW_OPTION] );
+		SetMemoryType( global.tf[MEMORY_TYPE] );
+		return;
+	}
+
+	// 描画オプション設定＆取得
+	function SetDrawOption( _type )
+	{
+		global.tf[DRAW_OPTION] = _type;
+
+		SKIP_COUNT				= DrawOptionSKIP_COUNT[_type];
+		CREATE_MENU				= DrawOptionCREATE_MENU[_type];
+		CREATE_SMOKE			= DrawOptionCREATE_SMOKE[_type];
+		CREATE_BUTTON			= DrawOptionCREATE_BUTTON[_type];
+		CREATE_FIGHT_EFFECT		= DrawOptionCREATE_FIGHT_EFFECT[_type];
+		CREATE_HIT_EFFECT		= DrawOptionCREATE_HIT_EFFECT[_type];
+		CREATE_SHADOW			= DrawOptionCREATE_SHADOW[_type];
+		SHADOW_ANIMATION		= DrawOptionSHADOW_ANIMATION[_type];
+		FIGHT_BUTTON_ANIMATION	= DrawOptionFIGHT_BUTTON_ANIMATION[_type];
+		PLAYER_MARKER_ANIMATION	= DrawOptionPLAYER_MARKER_ANIMATION[_type];
+		DIVIDE_BACKGROUND_IMAGE	= DrawOptionDIVIDE_BACKGROUND_IMAGE[_type];
+		TITLE_FULLANIMATION		= DrawOptionTITLE_FULLANIMATION[_type];
+		ENABLE_HOUGU			= DrawOptionENABLE_HOUGU[_type];
+		ENABLE_RIVAL_ACTION		= DrawOptionENABLE_RIVAL_ACTION[_type];
+		ENABLE_FIGHT			= DrawOptionENABLE_FIGHT[_type];
+		USE_MSEC_TIMER			= DrawOptionUSE_MSEC_TIMER[_type];
+		ENABLE_SHOTHITEFF		= DrawOptionENABLE_SHOTHITEFF[_type];
+		ENABLE_HOUGUEFF			= DrawOptionENABLE_HOUGUEFF[_type];
+
+		STAGE1_STONE_COM		= DrawOptionSTAGE1_STONE_COM[_type];
+		STAGE1_SHOW_STONE		= DrawOptionSTAGE1_SHOW_STONE[_type];
+		STAGE1_CREATE_ENEMY		= DrawOptionSTAGE1_CREATE_ENEMY[_type];
+		STAGE1_ENABLE_ENEMYEFF	= DrawOptionSTAGE1_ENABLE_ENEMYEFF[_type];
+		STAGE1_STONE_ANIMATION	= DrawOptionSTAGE1_STONE_ANIMATION[_type];
+		STAGE1_STONE_FOCUS		= DrawOptionSTAGE1_STONE_FOCUS[_type];
+		STAGE2_KINOKO_FULLANIM	= DrawOptionSTAGE2_KINOKO_FULLANIM[_type];
+		STAGE3_ENABLE_SERARIZ	= DrawOptionSTAGE3_ENABLE_SERARIZ[_type];
+		STAGE3_ENABLE_CANNON	= DrawOptionSTAGE3_ENABLE_CANNON[_type];
+		STAGE3_ENABLE_ATTACK	= DrawOptionSTAGE3_ENABLE_ATTACK[_type];
+		STAGE3_BOUNCEEFF		= DrawOptionSTAGE3_BOUNCEEFF[_type];
+		STAGE3_FIREEFF			= DrawOptionSTAGE3_FIREEFF[_type];
+		STAGE3_GILEFF			= DrawOptionSTAGE3_GILEFF[_type];
+		PRINT_TOP_RUNNER		= DrawOptionPRINT_TOP_RUNNER[_type];
+		return;
+	}
+	function GetDrawOption()
+	{
+		return ( global.tf[DRAW_OPTION] );
+	}
+
+	function SetMemoryType( _type )
+	{
+		global.tf[MEMORY_TYPE] = _type;
+
+		IMAGEBUFFER_CAPACITY_DEFAULT = IrDefaultMemoryType[_type];
+		IMAGEBUFFER_CAPACITY_SYSTEM  = IrDefaultMemorySystem[_type];
+		IMAGEBUFFER_CAPACITY_SERVANT = IrDefaultMemoryServant[_type];
+		return;
+	}
+	function GetMemoryType()
+	{
+		return ( global.tf[MEMORY_TYPE] );
+	}
+
+
+
+	// アイテム取得フラグ初期化
+	function create_getitem_data()
+	{
+		@if ( DEBUG_MODE )
+			dm( "新規にアイテム取得バッファを生成します。" );
+		@endif
+		global.tf.ir_get_item_list = [];
+		return;
+	}
+	function init_get_item_list()
+	{
+		@if (NEW_CREATE_GETITEM_DATA  ==  1)
+			create_getitem_data();
+			return;
+		@endif;
+		if (CheckValid(global.tf.ir_get_item_list)  ==  false) {
+			create_getitem_data();
+		}
+		return;
+	}
+	
+	// アイテム取得フラグ設定
+	function playerGetItem( item_id )
+	{
+	var		i;
+		global.tf.ir_get_item_list[item_id] = true;
+//		global.tf.displayedPictures[item_id] = true;
+
+		// すべてのアイテムを取得したのならご褒美CG
+		for (i=ITEM_レア;  i<ITEM_レア_終了;  i++) {
+			if (global.tf.ir_get_item_list[i]  ==  false) {
+				@if ( DEBUG_MODE )
+					dm( "まだまたアイテムは全部そろってません。" );
+				@endif
+				return;
+			}
+		}
+		@if ( DEBUG_MODE )
+			dm( "おめでとう！！すべてのアイテムがそろったよ。" );
+		@endif
+		setGohoubiCG( ご褒美CG_ITEMコンプリート );
+		return;
+	}
+
+	// アイテム取得フラグチェック
+	function checkPlayerGetItem( item_id )
+	{
+		return ( global.tf.ir_get_item_list[item_id] );
+	}
+	function getPlayrerItemCorrectNum()
+	{
+	var		i,count;
+		for (i=ITEM_レア,count=0;  i<ITEM_レア_終了;  i++) {
+			if (global.tf.ir_get_item_list[i]  ==  true)
+				count += 1;
+		}
+		return ( count );
+	}
+
+
+
+
+
+
+
+	// タイム記録数
+	var		MAX_CLEAR_TIME_NUM=5;
+	// テーブルID
+	var		CLEAR_TABLE_TIME=0;
+	var		CLEAR_TABLE_SCORE=CLEAR_TABLE_TIME;
+	var		CLEAR_TABLE_SERVANT=1;
+	var		CLEAR_TABLE_MASTER=2;
+
+
+	@if ( CREATE_RESULT_TIMEDATA_SET_TIME == 1 )
+		var		set_time_data_time=0;
+	@endif
+	@if ( CREATE_RESULT_TIMEDATA_SET_SV_ID == 1 )
+		var		set_time_data_sv_id=0;
+	@endif
+	@if ( CREATE_RESULT_TIMEDATA_SET_MS_ID == 1 )
+		var		set_time_data_ms_id=0;
+	@endif
+	@if ( CREATE_RESULT_SCOREDATA_SET_SCORE == 1 )
+		var		set_score_data_score=0;
+	@endif
+	@if ( CREATE_RESULT_SCOREDATA_SET_SV_ID == 1 )
+		var		set_score_data_sv_id=0;
+	@endif
+	@if ( CREATE_RESULT_SCOREDATA_SET_MS_ID == 1 )
+		var		set_score_data_ms_id=0;
+	@endif
+	// 各種タイム保存用バッファ生成
+	function create_clear_time_table()
+	{
+	var		table;
+	var		i;
+		table = new Array();
+		for (i=0;  i<MAX_CLEAR_TIME_NUM;  i++) {
+			table[i] = new Array();
+
+
+		@if ( CREATE_RESULT_TIMEDATA_SET_TIME == 0 )
+			table[i][CLEAR_TABLE_TIME]    = (30+i*5)*1000*100;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_TIME == 1 )
+			table[i][CLEAR_TABLE_TIME]    = set_time_data_time;
+		@endif
+
+
+		@if ( CREATE_RESULT_TIMEDATA_SET_SV_ID == 0 )
+			table[i][CLEAR_TABLE_SERVANT] = ConvertServantNotoServantCharaID(i % DEF_SERVANT_CHARA_NUM);
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_SV_ID == 1 )
+			table[i][CLEAR_TABLE_SERVANT] =ConvertServantNotoServantCharaID(set_time_data_sv_id);
+		@endif
+
+		@if ( CREATE_RESULT_TIMEDATA_SET_MS_ID == 0 )
+			table[i][CLEAR_TABLE_MASTER]  = ConvertMasterNotoMasterCharaID(i % DEF_MASTER_CHARA_NUM);
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_MS_ID == 1 )
+			table[i][CLEAR_TABLE_MASTER]  = ConvertMasterNotoMasterCharaID(set_time_data_ms_id);
+		@endif
+
+
+		}
+		return ( table );
+	}
+	function create_clear_score_table()
+	{
+	var		table;
+	var		i,count;
+		table = new Array();
+		count = 1;
+		for (i=MAX_CLEAR_TIME_NUM-1;  i>=0;  i--,count++) {
+			table[i] = new Array();
+
+		@if ( CREATE_RESULT_SCOREDATA_SET_SCORE == 0 )
+			table[i][CLEAR_TABLE_SCORE]   = 100*count;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_SCORE == 1 )
+			table[i][CLEAR_TABLE_SCORE]   = set_score_data_score;
+		@endif
+
+		@if ( CREATE_RESULT_SCOREDATA_SET_SV_ID == 0 )
+			table[i][CLEAR_TABLE_SERVANT] = ConvertServantNotoServantCharaID(i % DEF_SERVANT_CHARA_NUM);
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_SV_ID == 1 )
+			table[i][CLEAR_TABLE_SERVANT] = ConvertServantNotoServantCharaID(set_score_data_sv_id);
+		@endif
+
+		@if ( CREATE_RESULT_SCOREDATA_SET_MS_ID == 0 )
+			table[i][CLEAR_TABLE_MASTER]  = ConvertMasterNotoMasterCharaID(i % DEF_MASTER_CHARA_NUM);
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_MS_ID == 1 )
+			table[i][CLEAR_TABLE_MASTER]  = ConvertMasterNotoMasterCharaID(set_score_data_ms_id);
+		@endif
+		}
+		return ( table );
+	}
+
+	function create_result_time_data()
+	{
+		@if ( DEBUG_MODE )
+			dm( "新規に各クリアタイム記録用バッファを生成します。" );
+		@endif
+
+		global.tf.ir_clear_time_data_version = NOW_RESULT_DATA_VERSION;
+
+		// 総合
+		@if ( CREATE_RESULT_TIMEDATA_SET_TIME == 1 )
+			set_time_data_time=(30)*1000*100;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_SV_ID == 1 )
+			set_time_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_MS_ID == 1 )
+			set_time_data_ms_id=0;
+		@endif
+		global.tf.ir_total_clear_time = create_clear_time_table();
+
+		// 総合(サーバント毎)
+		@if ( CREATE_RESULT_TIMEDATA_SET_TIME == 1 )
+			set_time_data_time=(30)*1000*100;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_SV_ID == 1 )
+			set_time_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_MS_ID == 1 )
+			set_time_data_ms_id=0;
+		@endif
+		global.tf.ir_total_clear_sab_time = create_clear_time_table();
+
+		@if ( CREATE_RESULT_TIMEDATA_SET_TIME == 1 )
+			set_time_data_time=(30)*1000*100;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_SV_ID == 1 )
+			set_time_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_MS_ID == 1 )
+			set_time_data_ms_id=0;
+		@endif
+		global.tf.ir_total_clear_arc_time = create_clear_time_table();
+
+		@if ( CREATE_RESULT_TIMEDATA_SET_TIME == 1 )
+			set_time_data_time=(30)*1000*100;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_SV_ID == 1 )
+			set_time_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_MS_ID == 1 )
+			set_time_data_ms_id=0;
+		@endif
+		global.tf.ir_total_clear_lan_time = create_clear_time_table();
+
+		@if ( CREATE_RESULT_TIMEDATA_SET_TIME == 1 )
+			set_time_data_time=(30)*1000*100;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_SV_ID == 1 )
+			set_time_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_MS_ID == 1 )
+			set_time_data_ms_id=0;
+		@endif
+		global.tf.ir_total_clear_cas_time = create_clear_time_table();
+
+		@if ( CREATE_RESULT_TIMEDATA_SET_TIME == 1 )
+			set_time_data_time=(30)*1000*100;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_SV_ID == 1 )
+			set_time_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_MS_ID == 1 )
+			set_time_data_ms_id=0;
+		@endif
+		global.tf.ir_total_clear_rid_time = create_clear_time_table();
+
+		// 柳洞池
+		@if ( CREATE_RESULT_TIMEDATA_SET_TIME == 1 )
+			set_time_data_time=(30)*1000*100;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_SV_ID == 1 )
+			set_time_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_MS_ID == 1 )
+			set_time_data_ms_id=0;
+		@endif
+		global.tf.ir_ryuudou_clear_time = create_clear_time_table();
+
+		// 柳洞池(サーバント毎)
+		@if ( CREATE_RESULT_TIMEDATA_SET_TIME == 1 )
+			set_time_data_time=(30)*1000*100;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_SV_ID == 1 )
+			set_time_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_MS_ID == 1 )
+			set_time_data_ms_id=0;
+		@endif
+		global.tf.ir_ryuudou_clear_sab_time = create_clear_time_table();
+
+		@if ( CREATE_RESULT_TIMEDATA_SET_TIME == 1 )
+			set_time_data_time=(30)*1000*100;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_SV_ID == 1 )
+			set_time_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_MS_ID == 1 )
+			set_time_data_ms_id=0;
+		@endif
+		global.tf.ir_ryuudou_clear_arc_time = create_clear_time_table();
+
+		@if ( CREATE_RESULT_TIMEDATA_SET_TIME == 1 )
+			set_time_data_time=(30)*1000*100;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_SV_ID == 1 )
+			set_time_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_MS_ID == 1 )
+			set_time_data_ms_id=0;
+		@endif
+		global.tf.ir_ryuudou_clear_lan_time = create_clear_time_table();
+
+		@if ( CREATE_RESULT_TIMEDATA_SET_TIME == 1 )
+			set_time_data_time=(30)*1000*100;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_SV_ID == 1 )
+			set_time_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_MS_ID == 1 )
+			set_time_data_ms_id=0;
+		@endif
+		global.tf.ir_ryuudou_clear_cas_time = create_clear_time_table();
+
+		@if ( CREATE_RESULT_TIMEDATA_SET_TIME == 1 )
+			set_time_data_time=(30)*1000*100;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_SV_ID == 1 )
+			set_time_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_MS_ID == 1 )
+			set_time_data_ms_id=0;
+		@endif
+		global.tf.ir_ryuudou_clear_rid_time = create_clear_time_table();
+
+		// きのこ
+		@if ( CREATE_RESULT_TIMEDATA_SET_TIME == 1 )
+			set_time_data_time=(30)*1000*100;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_SV_ID == 1 )
+			set_time_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_MS_ID == 1 )
+			set_time_data_ms_id=0;
+		@endif
+		global.tf.ir_kinoko_clear_time = create_clear_time_table();
+
+		// きのこ(サーバント毎)
+		@if ( CREATE_RESULT_TIMEDATA_SET_TIME == 1 )
+			set_time_data_time=(30)*1000*100;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_SV_ID == 1 )
+			set_time_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_MS_ID == 1 )
+			set_time_data_ms_id=0;
+		@endif
+		global.tf.ir_kinoko_clear_sab_time = create_clear_time_table();
+
+		@if ( CREATE_RESULT_TIMEDATA_SET_TIME == 1 )
+			set_time_data_time=(30)*1000*100;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_SV_ID == 1 )
+			set_time_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_MS_ID == 1 )
+			set_time_data_ms_id=0;
+		@endif
+		global.tf.ir_kinoko_clear_arc_time = create_clear_time_table();
+
+		@if ( CREATE_RESULT_TIMEDATA_SET_TIME == 1 )
+			set_time_data_time=(30)*1000*100;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_SV_ID == 1 )
+			set_time_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_MS_ID == 1 )
+			set_time_data_ms_id=0;
+		@endif
+		global.tf.ir_kinoko_clear_lan_time = create_clear_time_table();
+
+		@if ( CREATE_RESULT_TIMEDATA_SET_TIME == 1 )
+			set_time_data_time=(30)*1000*100;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_SV_ID == 1 )
+			set_time_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_MS_ID == 1 )
+			set_time_data_ms_id=0;
+		@endif
+		global.tf.ir_kinoko_clear_cas_time = create_clear_time_table();
+
+		@if ( CREATE_RESULT_TIMEDATA_SET_TIME == 1 )
+			set_time_data_time=(30)*1000*100;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_SV_ID == 1 )
+			set_time_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_MS_ID == 1 )
+			set_time_data_ms_id=0;
+		@endif
+		global.tf.ir_kinoko_clear_rid_time = create_clear_time_table();
+
+		// ジブラルタル
+		@if ( CREATE_RESULT_TIMEDATA_SET_TIME == 1 )
+			set_time_data_time=(30)*1000*100;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_SV_ID == 1 )
+			set_time_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_MS_ID == 1 )
+			set_time_data_ms_id=0;
+		@endif
+		global.tf.ir_jiburaru_clear_time = create_clear_time_table();
+
+		// ジブラルタル(サーバント毎)
+		@if ( CREATE_RESULT_TIMEDATA_SET_TIME == 1 )
+			set_time_data_time=(30)*1000*100;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_SV_ID == 1 )
+			set_time_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_MS_ID == 1 )
+			set_time_data_ms_id=0;
+		@endif
+		global.tf.ir_jiburaru_clear_sab_time = create_clear_time_table();
+
+		@if ( CREATE_RESULT_TIMEDATA_SET_TIME == 1 )
+			set_time_data_time=(30)*1000*100;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_SV_ID == 1 )
+			set_time_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_MS_ID == 1 )
+			set_time_data_ms_id=0;
+		@endif
+		global.tf.ir_jiburaru_clear_arc_time = create_clear_time_table();
+
+		@if ( CREATE_RESULT_TIMEDATA_SET_TIME == 1 )
+			set_time_data_time=(30)*1000*100;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_SV_ID == 1 )
+			set_time_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_MS_ID == 1 )
+			set_time_data_ms_id=0;
+		@endif
+		global.tf.ir_jiburaru_clear_lan_time = create_clear_time_table();
+
+		@if ( CREATE_RESULT_TIMEDATA_SET_TIME == 1 )
+			set_time_data_time=(30)*1000*100;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_SV_ID == 1 )
+			set_time_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_MS_ID == 1 )
+			set_time_data_ms_id=0;
+		@endif
+		global.tf.ir_jiburaru_clear_cas_time = create_clear_time_table();
+
+		@if ( CREATE_RESULT_TIMEDATA_SET_TIME == 1 )
+			set_time_data_time=(30)*1000*100;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_SV_ID == 1 )
+			set_time_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_MS_ID == 1 )
+			set_time_data_ms_id=0;
+		@endif
+		global.tf.ir_jiburaru_clear_rid_time = create_clear_time_table();
+
+		// イリヤ戦
+		@if ( CREATE_RESULT_TIMEDATA_SET_TIME == 1 )
+			set_time_data_time=(30)*1000*100;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_SV_ID == 1 )
+			set_time_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_MS_ID == 1 )
+			set_time_data_ms_id=0;
+		@endif
+		global.tf.ir_iriyasen_clear_time = create_clear_time_table();
+
+		// イリヤ戦(サーバント毎)
+		@if ( CREATE_RESULT_TIMEDATA_SET_TIME == 1 )
+			set_time_data_time=(30)*1000*100;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_SV_ID == 1 )
+			set_time_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_MS_ID == 1 )
+			set_time_data_ms_id=0;
+		@endif
+		global.tf.ir_iriyasen_clear_sab_time = create_clear_time_table();
+
+		@if ( CREATE_RESULT_TIMEDATA_SET_TIME == 1 )
+			set_time_data_time=(30)*1000*100;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_SV_ID == 1 )
+			set_time_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_MS_ID == 1 )
+			set_time_data_ms_id=0;
+		@endif
+		global.tf.ir_iriyasen_clear_arc_time = create_clear_time_table();
+
+		@if ( CREATE_RESULT_TIMEDATA_SET_TIME == 1 )
+			set_time_data_time=(30)*1000*100;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_SV_ID == 1 )
+			set_time_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_MS_ID == 1 )
+			set_time_data_ms_id=0;
+		@endif
+		global.tf.ir_iriyasen_clear_lan_time = create_clear_time_table();
+
+		@if ( CREATE_RESULT_TIMEDATA_SET_TIME == 1 )
+			set_time_data_time=(30)*1000*100;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_SV_ID == 1 )
+			set_time_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_MS_ID == 1 )
+			set_time_data_ms_id=0;
+		@endif
+		global.tf.ir_iriyasen_clear_cas_time = create_clear_time_table();
+
+		@if ( CREATE_RESULT_TIMEDATA_SET_TIME == 1 )
+			set_time_data_time=(30)*1000*100;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_SV_ID == 1 )
+			set_time_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_TIMEDATA_SET_MS_ID == 1 )
+			set_time_data_ms_id=0;
+		@endif
+		global.tf.ir_iriyasen_clear_rid_time = create_clear_time_table();
+
+
+
+
+
+
+		// スコア
+		// 総合
+		@if ( CREATE_RESULT_SCOREDATA_SET_SCORE == 1 )
+			set_score_data_score=100;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_SV_ID == 1 )
+			set_score_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_MS_ID == 1 )
+			set_score_data_ms_id=0;
+		@endif
+		global.tf.ir_total_clear_score = create_clear_score_table();
+
+		// 総合(サーバント毎)
+		@if ( CREATE_RESULT_SCOREDATA_SET_SCORE == 1 )
+			set_score_data_score=1;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_SV_ID == 1 )
+			set_score_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_MS_ID == 1 )
+			set_score_data_ms_id=0;
+		@endif
+		global.tf.ir_total_clear_sab_score = create_clear_score_table();
+
+		@if ( CREATE_RESULT_SCOREDATA_SET_SCORE == 1 )
+			set_score_data_score=2;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_SV_ID == 1 )
+			set_score_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_MS_ID == 1 )
+			set_score_data_ms_id=0;
+		@endif
+		global.tf.ir_total_clear_arc_score = create_clear_score_table();
+
+		@if ( CREATE_RESULT_SCOREDATA_SET_SCORE == 1 )
+			set_score_data_score=3;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_SV_ID == 1 )
+			set_score_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_MS_ID == 1 )
+			set_score_data_ms_id=0;
+		@endif
+		global.tf.ir_total_clear_lan_score = create_clear_score_table();
+
+		@if ( CREATE_RESULT_SCOREDATA_SET_SCORE == 1 )
+			set_score_data_score=4;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_SV_ID == 1 )
+			set_score_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_MS_ID == 1 )
+			set_score_data_ms_id=0;
+		@endif
+		global.tf.ir_total_clear_cas_score = create_clear_score_table();
+
+		@if ( CREATE_RESULT_SCOREDATA_SET_SCORE == 1 )
+			set_score_data_score=5;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_SV_ID == 1 )
+			set_score_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_MS_ID == 1 )
+			set_score_data_ms_id=0;
+		@endif
+		global.tf.ir_total_clear_rid_score = create_clear_score_table();
+
+		// 柳洞池
+		@if ( CREATE_RESULT_SCOREDATA_SET_SCORE == 1 )
+			set_score_data_score=6;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_SV_ID == 1 )
+			set_score_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_MS_ID == 1 )
+			set_score_data_ms_id=0;
+		@endif
+		global.tf.ir_ryuudou_clear_score = create_clear_score_table();
+
+		// 柳洞池(サーバント毎)
+		@if ( CREATE_RESULT_SCOREDATA_SET_SCORE == 1 )
+			set_score_data_score=7;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_SV_ID == 1 )
+			set_score_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_MS_ID == 1 )
+			set_score_data_ms_id=0;
+		@endif
+		global.tf.ir_ryuudou_clear_sab_score = create_clear_score_table();
+
+		@if ( CREATE_RESULT_SCOREDATA_SET_SCORE == 1 )
+			set_score_data_score=8;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_SV_ID == 1 )
+			set_score_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_MS_ID == 1 )
+			set_score_data_ms_id=0;
+		@endif
+		global.tf.ir_ryuudou_clear_arc_score = create_clear_score_table();
+
+		@if ( CREATE_RESULT_SCOREDATA_SET_SCORE == 1 )
+			set_score_data_score=9;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_SV_ID == 1 )
+			set_score_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_MS_ID == 1 )
+			set_score_data_ms_id=0;
+		@endif
+		global.tf.ir_ryuudou_clear_lan_score = create_clear_score_table();
+
+		@if ( CREATE_RESULT_SCOREDATA_SET_SCORE == 1 )
+			set_score_data_score=10;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_SV_ID == 1 )
+			set_score_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_MS_ID == 1 )
+			set_score_data_ms_id=0;
+		@endif
+		global.tf.ir_ryuudou_clear_cas_score = create_clear_score_table();
+
+		@if ( CREATE_RESULT_SCOREDATA_SET_SCORE == 1 )
+			set_score_data_score=11;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_SV_ID == 1 )
+			set_score_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_MS_ID == 1 )
+			set_score_data_ms_id=0;
+		@endif
+		global.tf.ir_ryuudou_clear_rid_score = create_clear_score_table();
+
+		// きのこ
+		@if ( CREATE_RESULT_SCOREDATA_SET_SCORE == 1 )
+			set_score_data_score=12;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_SV_ID == 1 )
+			set_score_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_MS_ID == 1 )
+			set_score_data_ms_id=0;
+		@endif
+		global.tf.ir_kinoko_clear_score = create_clear_score_table();
+
+		// きのこ(サーバント毎)
+		@if ( CREATE_RESULT_SCOREDATA_SET_SCORE == 1 )
+			set_score_data_score=13;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_SV_ID == 1 )
+			set_score_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_MS_ID == 1 )
+			set_score_data_ms_id=0;
+		@endif
+		global.tf.ir_kinoko_clear_sab_score = create_clear_score_table();
+
+		@if ( CREATE_RESULT_SCOREDATA_SET_SCORE == 1 )
+			set_score_data_score=14;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_SV_ID == 1 )
+			set_score_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_MS_ID == 1 )
+			set_score_data_ms_id=0;
+		@endif
+		global.tf.ir_kinoko_clear_arc_score = create_clear_score_table();
+
+		@if ( CREATE_RESULT_SCOREDATA_SET_SCORE == 1 )
+			set_score_data_score=15;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_SV_ID == 1 )
+			set_score_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_MS_ID == 1 )
+			set_score_data_ms_id=0;
+		@endif
+		global.tf.ir_kinoko_clear_lan_score = create_clear_score_table();
+
+		@if ( CREATE_RESULT_SCOREDATA_SET_SCORE == 1 )
+			set_score_data_score=16;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_SV_ID == 1 )
+			set_score_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_MS_ID == 1 )
+			set_score_data_ms_id=0;
+		@endif
+		global.tf.ir_kinoko_clear_cas_score = create_clear_score_table();
+
+		@if ( CREATE_RESULT_SCOREDATA_SET_SCORE == 1 )
+			set_score_data_score=17;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_SV_ID == 1 )
+			set_score_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_MS_ID == 1 )
+			set_score_data_ms_id=0;
+		@endif
+		global.tf.ir_kinoko_clear_rid_score = create_clear_score_table();
+
+		// ジブラルタル
+		@if ( CREATE_RESULT_SCOREDATA_SET_SCORE == 1 )
+			set_score_data_score=18;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_SV_ID == 1 )
+			set_score_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_MS_ID == 1 )
+			set_score_data_ms_id=0;
+		@endif
+		global.tf.ir_jiburaru_clear_score = create_clear_score_table();
+
+		// ジブラルタル(サーバント毎)
+		@if ( CREATE_RESULT_SCOREDATA_SET_SCORE == 1 )
+			set_score_data_score=19;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_SV_ID == 1 )
+			set_score_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_MS_ID == 1 )
+			set_score_data_ms_id=0;
+		@endif
+		global.tf.ir_jiburaru_clear_sab_score = create_clear_score_table();
+
+		@if ( CREATE_RESULT_SCOREDATA_SET_SCORE == 1 )
+			set_score_data_score=20;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_SV_ID == 1 )
+			set_score_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_MS_ID == 1 )
+			set_score_data_ms_id=0;
+		@endif
+		global.tf.ir_jiburaru_clear_arc_score = create_clear_score_table();
+
+		@if ( CREATE_RESULT_SCOREDATA_SET_SCORE == 1 )
+			set_score_data_score=21;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_SV_ID == 1 )
+			set_score_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_MS_ID == 1 )
+			set_score_data_ms_id=0;
+		@endif
+		global.tf.ir_jiburaru_clear_lan_score = create_clear_score_table();
+
+		@if ( CREATE_RESULT_SCOREDATA_SET_SCORE == 1 )
+			set_score_data_score=22;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_SV_ID == 1 )
+			set_score_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_MS_ID == 1 )
+			set_score_data_ms_id=0;
+		@endif
+		global.tf.ir_jiburaru_clear_cas_score = create_clear_score_table();
+
+		@if ( CREATE_RESULT_SCOREDATA_SET_SCORE == 1 )
+			set_score_data_score=23;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_SV_ID == 1 )
+			set_score_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_MS_ID == 1 )
+			set_score_data_ms_id=0;
+		@endif
+		global.tf.ir_jiburaru_clear_rid_score = create_clear_score_table();
+
+		// イリヤ戦
+		@if ( CREATE_RESULT_SCOREDATA_SET_SCORE == 1 )
+			set_score_data_score=24;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_SV_ID == 1 )
+			set_score_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_MS_ID == 1 )
+			set_score_data_ms_id=0;
+		@endif
+		global.tf.ir_iriyasen_clear_score = create_clear_score_table();
+
+		// イリヤ戦(サーバント毎)
+		@if ( CREATE_RESULT_SCOREDATA_SET_SCORE == 1 )
+			set_score_data_score=25;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_SV_ID == 1 )
+			set_score_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_MS_ID == 1 )
+			set_score_data_ms_id=0;
+		@endif
+		global.tf.ir_iriyasen_clear_sab_score = create_clear_score_table();
+
+		@if ( CREATE_RESULT_SCOREDATA_SET_SCORE == 1 )
+			set_score_data_score=26;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_SV_ID == 1 )
+			set_score_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_MS_ID == 1 )
+			set_score_data_ms_id=0;
+		@endif
+		global.tf.ir_iriyasen_clear_arc_score = create_clear_score_table();
+
+		@if ( CREATE_RESULT_SCOREDATA_SET_SCORE == 1 )
+			set_score_data_score=27;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_SV_ID == 1 )
+			set_score_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_MS_ID == 1 )
+			set_score_data_ms_id=0;
+		@endif
+		global.tf.ir_iriyasen_clear_lan_score = create_clear_score_table();
+
+		@if ( CREATE_RESULT_SCOREDATA_SET_SCORE == 1 )
+			set_score_data_score=28;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_SV_ID == 1 )
+			set_score_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_MS_ID == 1 )
+			set_score_data_ms_id=0;
+		@endif
+		global.tf.ir_iriyasen_clear_cas_score = create_clear_score_table();
+
+		@if ( CREATE_RESULT_SCOREDATA_SET_SCORE == 1 )
+			set_score_data_score=29;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_SV_ID == 1 )
+			set_score_data_sv_id=0;
+		@endif
+		@if ( CREATE_RESULT_SCOREDATA_SET_MS_ID == 1 )
+			set_score_data_ms_id=0;
+		@endif
+		global.tf.ir_iriyasen_clear_rid_score = create_clear_score_table();
+		return;
+	}
+
+	// 各種タイム保存用バッファ初期化
+	function init_stage_clear_time_data()
+	{
+		if (CheckValid(global.tf.displayPictures)  ==  false) {
+			@if ( DEBUG_MODE )
+				dm( "新規にCGを見る用フラグバッファを生成します。" );
+			@endif
+			global.tf.displayPictures = new Dictionary();
+		}
+
+		if (CheckValid(global.tf.ir_clear_time_data_version)  ==  false) {
+			create_result_time_data();
+		} else
+		if (global.tf.ir_clear_time_data_version  !=  NOW_RESULT_DATA_VERSION) {
+			create_result_time_data();
+		}
+		@if (NEW_CREATE_RESULT_DATA  ==  1)
+			create_result_time_data();
+		@endif
+		return;
+	}
+
+	// 各種タイム挿入汎用関数
+	function ins_stage_clear_time(  _time_list, _chara_id, _master_id, _clear_time )
+	{
+	var		i,ins_pos;
+
+@if ( DEBUG_MODE )
+dm( "あなたのタイムは・・・:"+ _clear_time );
+dm("タイム記録リスト(更新前)");
+for (i=0;  i<MAX_CLEAR_TIME_NUM;  i++) {
+	dm( "------第"+(i+1)+"位:"+ _time_list[i][CLEAR_TABLE_TIME]);
+	dm("   ["+"サーバント名]:"+GetCharaIDtoCharaName(_time_list[i][CLEAR_TABLE_SERVANT]) );
+	dm("   ["+"  マスター名]:"+GetCharaIDtoCharaName(_time_list[i][CLEAR_TABLE_MASTER]) );
+}
+@endif
+
+		// 挿入位置を探す
+		for (ins_pos=0;  ins_pos<MAX_CLEAR_TIME_NUM;  ins_pos++) {
+			if (_time_list[ins_pos][CLEAR_TABLE_TIME]  ==  -1)
+				break;
+			if (_clear_time  <  _time_list[ins_pos][CLEAR_TABLE_TIME])
+				break;
+		}
+		if (ins_pos  ==  MAX_CLEAR_TIME_NUM) {
+			@if ( DEBUG_MODE )
+				dm( "ランキングには登録されませんでした。" );
+			@endif
+			return;
+		}
+		@if ( DEBUG_MODE )
+			dm( "おめでとう、第"+(ins_pos+1)+"位でランキングに登録されました！！！！！" );
+		@endif
+
+		// 挿入位置を空ける
+		for (i=(MAX_CLEAR_TIME_NUM-1);  i>ins_pos;  i--) {
+			_time_list[i][CLEAR_TABLE_TIME]    = _time_list[i-1][CLEAR_TABLE_TIME];
+			_time_list[i][CLEAR_TABLE_SERVANT] = _time_list[i-1][CLEAR_TABLE_SERVANT];
+			_time_list[i][CLEAR_TABLE_MASTER]  = _time_list[i-1][CLEAR_TABLE_MASTER];
+		}
+
+		// 記録挿入
+		_time_list[ins_pos][CLEAR_TABLE_TIME]    = _clear_time;
+		_time_list[ins_pos][CLEAR_TABLE_SERVANT] = _chara_id;
+		_time_list[ins_pos][CLEAR_TABLE_MASTER]  = _master_id;
+
+		@if ( DEBUG_MODE )
+		dm("タイム記録リスト(更新後)");
+		for (i=0;  i<MAX_CLEAR_TIME_NUM;  i++) {
+			dm( "------第"+(i+1)+"位:"+_time_list[i][CLEAR_TABLE_TIME]);
+			dm("   ["+"サーバント名]:"+GetCharaIDtoCharaName(_time_list[i][CLEAR_TABLE_SERVANT]) );
+			dm("   ["+"  マスター名]:"+GetCharaIDtoCharaName(_time_list[i][CLEAR_TABLE_MASTER]) );
+		}
+		@endif
+
+		return;
+	}
+
+	// ステージ別時間
+	function get_stage_clear_time_table( _stage_id )
+	{
+		switch ( _stage_id )
+		{
+		case SCENE_STAGE1:
+			return ( global.tf.ir_ryuudou_clear_time );
+		case SCENE_STAGE2:
+			return ( global.tf.ir_kinoko_clear_time );
+		case SCENE_STAGE3:
+			return ( global.tf.ir_jiburaru_clear_time );
+		case SCENE_BOSS:
+			return ( global.tf.ir_iriyasen_clear_time );
+		}
+		return ( void );
+	}
+	function get_total_clear_time_sv_table( _sv_id )
+	{
+		switch ( _sv_id )
+		{
+		case CHARA_ID_SABER:
+			return ( global.tf.ir_total_clear_sab_time );
+		case CHARA_ID_ARCHER:
+			return ( global.tf.ir_total_clear_arc_time );
+		case CHARA_ID_RIDER:
+			return ( global.tf.ir_total_clear_rid_time );
+		case CHARA_ID_LANCER:
+			return ( global.tf.ir_total_clear_lan_time );
+		case CHARA_ID_CASTER:
+			return ( global.tf.ir_total_clear_cas_time );
+		}
+		return ( void );
+	}
+
+
+	// ゲームクリア時間
+	function getTotalStageClearTime( _rank )
+	{
+		return ( global.tf.ir_total_clear_time[_rank][CLEAR_TABLE_TIME] );
+	}
+	function getTotalStageClearTimeServant( _rank )
+	{
+		return ( global.tf.ir_total_clear_time[_rank][CLEAR_TABLE_SERVANT] );
+	}
+	function getTotalStageClearTimeMaster( _rank )
+	{
+		return ( global.tf.ir_total_clear_time[_rank][CLEAR_TABLE_MASTER] );
+	}
+
+	function getTotalStageClearSVTime( _sv, _rank )
+	{
+	var		_table = get_total_clear_time_sv_table( _sv );
+		return ( _table[_rank][CLEAR_TABLE_TIME] );
+	}
+	function getTotalStageClearSVTimeServant( _sv, _rank )
+	{
+	var		_table = get_total_clear_time_sv_table( _sv );
+		return ( _table[_rank][CLEAR_TABLE_SERVANT] );
+	}
+	function getTotalStageClearSVTimeMaster( _sv, _rank )
+	{
+	var		_table = get_total_clear_time_sv_table( _sv );
+		return ( _table[_rank][CLEAR_TABLE_MASTER] );
+	}
+
+	function getStageClearTime( _stage, _rank )
+	{
+	var		_table = get_stage_clear_time_table( _stage );
+		return ( _table[_rank][CLEAR_TABLE_TIME] );
+	}
+	function getStageClearTimeServant( _stage, _rank )
+	{
+	var		_table = get_stage_clear_time_table( _stage );
+		return ( _table[_rank][CLEAR_TABLE_SERVANT] );
+	}
+	function getStageClearTimeMaster( _stage, _rank )
+	{
+	var		_table = get_stage_clear_time_table( _stage );
+		return ( _table[_rank][CLEAR_TABLE_MASTER] );
+	}
+
+
+	// ステージクリアタイム成績(ステージ別、サーヴァント別、総合成績など・・・)
+	function addStageClearTime( _stage_id, _sv_id, _ms_id, _time )
+	{
+		// スキップしてたら記録しない
+		if (getUseStageSkipFlag()  ==  true)
+			return;
+
+		with ( global.tf )
+		{
+			switch ( _stage_id )
+			{
+			case SCENE_STAGE1:
+				@if ( DEBUG_MODE )
+					dm( "柳洞池 クリアタイムランクの登録は・・・・" );
+				@endif
+				ins_stage_clear_time( .ir_ryuudou_clear_time, _sv_id, _ms_id, _time );
+
+				@if ( DEBUG_MODE )
+					dm( "柳洞池 クリアタイムランク(サーバント毎)の登録は・・・・" );
+				@endif
+				switch ( _sv_id )
+				{
+				case CHARA_ID_SABER:
+					ins_stage_clear_time( .ir_ryuudou_clear_sab_time, _sv_id, _ms_id, _time );
+					break;
+				case CHARA_ID_ARCHER:
+					ins_stage_clear_time( .ir_ryuudou_clear_arc_time, _sv_id, _ms_id, _time );
+					break;
+				case CHARA_ID_RIDER:
+					ins_stage_clear_time( .ir_ryuudou_clear_rid_time, _sv_id, _ms_id, _time );
+					break;
+				case CHARA_ID_LANCER:
+					ins_stage_clear_time( .ir_ryuudou_clear_lan_time, _sv_id, _ms_id, _time );
+					break;
+				case CHARA_ID_CASTER:
+					ins_stage_clear_time( .ir_ryuudou_clear_cas_time, _sv_id, _ms_id, _time );
+					break;
+				}
+				break;
+
+			case SCENE_STAGE2:
+				@if ( DEBUG_MODE )
+					dm( "きのこ クリアタイムランクの登録は・・・・" );
+				@endif
+				ins_stage_clear_time( .ir_kinoko_clear_time, _sv_id, _ms_id, _time );
+
+				@if ( DEBUG_MODE )
+					dm( "きのこ クリアタイムランク(サーバント毎)の登録は・・・・" );
+				@endif
+				switch ( _sv_id )
+				{
+				case CHARA_ID_SABER:
+					ins_stage_clear_time( .ir_kinoko_clear_sab_time, _sv_id, _ms_id, _time );
+					break;
+				case CHARA_ID_ARCHER:
+					ins_stage_clear_time( .ir_kinoko_clear_arc_time, _sv_id, _ms_id, _time );
+					break;
+				case CHARA_ID_RIDER:
+					ins_stage_clear_time( .ir_kinoko_clear_rid_time, _sv_id, _ms_id, _time );
+					break;
+				case CHARA_ID_LANCER:
+					ins_stage_clear_time( .ir_kinoko_clear_lan_time, _sv_id, _ms_id, _time );
+					break;
+				case CHARA_ID_CASTER:
+					ins_stage_clear_time( .ir_kinoko_clear_cas_time, _sv_id, _ms_id, _time );
+					break;
+				}
+				break;
+
+			case SCENE_STAGE3:
+				@if ( DEBUG_MODE )
+					dm( "セラリズ クリアタイムランクの登録は・・・・" );
+				@endif
+				ins_stage_clear_time( .ir_jiburaru_clear_time, _sv_id, _ms_id, _time );
+
+				@if ( DEBUG_MODE )
+					dm( "セラリズ クリアタイムランク(サーバント毎)の登録は・・・・" );
+				@endif
+				switch ( _sv_id )
+				{
+				case CHARA_ID_SABER:
+					ins_stage_clear_time( .ir_jiburaru_clear_sab_time, _sv_id, _ms_id, _time );
+					break;
+				case CHARA_ID_ARCHER:
+					ins_stage_clear_time( .ir_jiburaru_clear_arc_time, _sv_id, _ms_id, _time );
+					break;
+				case CHARA_ID_RIDER:
+					ins_stage_clear_time( .ir_jiburaru_clear_rid_time, _sv_id, _ms_id, _time );
+					break;
+				case CHARA_ID_LANCER:
+					ins_stage_clear_time( .ir_jiburaru_clear_lan_time, _sv_id, _ms_id, _time );
+					break;
+				case CHARA_ID_CASTER:
+					ins_stage_clear_time( .ir_jiburaru_clear_cas_time, _sv_id, _ms_id, _time );
+					break;
+				}
+				break;
+
+			case SCENE_BOSS:
+				@if ( DEBUG_MODE )
+					dm( "イリヤ戦 クリアタイムランクの登録は・・・・" );
+				@endif
+				ins_stage_clear_time( .ir_iriyasen_clear_time, _sv_id, _ms_id, _time );
+
+				@if ( DEBUG_MODE )
+					dm( "イリヤ戦 クリアタイムランク(サーバント毎)の登録は・・・・" );
+				@endif
+				switch ( _sv_id )
+				{
+				case CHARA_ID_SABER:
+					ins_stage_clear_time( .ir_iriyasen_clear_sab_time, _sv_id, _ms_id, _time );
+					break;
+				case CHARA_ID_ARCHER:
+					ins_stage_clear_time( .ir_iriyasen_clear_arc_time, _sv_id, _ms_id, _time );
+					break;
+				case CHARA_ID_RIDER:
+					ins_stage_clear_time( .ir_iriyasen_clear_rid_time, _sv_id, _ms_id, _time );
+					break;
+				case CHARA_ID_LANCER:
+					ins_stage_clear_time( .ir_iriyasen_clear_lan_time, _sv_id, _ms_id, _time );
+					break;
+				case CHARA_ID_CASTER:
+					ins_stage_clear_time( .ir_iriyasen_clear_cas_time, _sv_id, _ms_id, _time );
+					break;
+				}
+				break;
+
+			default:
+				return;
+			}
+		}
+		return;
+	}
+	// ステージクリアタイム成績(総合成績)
+	function addTotalStageClearTime( _sv_id, _ms_id, _time )
+	{
+	var		i,ins_pos;
+
+		// スキップしてたら記録しない
+		if (getUseStageSkipFlag()  ==  true)
+			return;
+
+		with ( 	global.tf )
+		{
+			// トータルクリアランク挿入
+			@if ( DEBUG_MODE )
+				dm( "トータル クリアタイムランクの登録は・・・・" );
+			@endif
+			ins_stage_clear_time( .ir_total_clear_time, _sv_id, _ms_id, _time );
+
+			// トータルクリアランク挿入
+			@if ( DEBUG_MODE )
+				dm( "トータル クリアタイムランク(サーバント毎)の登録は・・・・" );
+			@endif
+			switch ( _sv_id )
+			{
+			case CHARA_ID_SABER:
+				ins_stage_clear_time( .ir_total_clear_sab_time, _sv_id, _ms_id, _time );
+				break;
+			case CHARA_ID_ARCHER:
+				ins_stage_clear_time( .ir_total_clear_arc_time, _sv_id, _ms_id, _time );
+				break;
+			case CHARA_ID_RIDER:
+				ins_stage_clear_time( .ir_total_clear_rid_time, _sv_id, _ms_id, _time );
+				break;
+			case CHARA_ID_LANCER:
+				ins_stage_clear_time( .ir_total_clear_lan_time, _sv_id, _ms_id, _time );
+				break;
+			case CHARA_ID_CASTER:
+				ins_stage_clear_time( .ir_total_clear_cas_time, _sv_id, _ms_id, _time );
+				break;
+			}
+		}
+		return;
+	}
+//-------------------------------------------------------------------------------------------------
+	// 各種スコア挿入汎用関数
+	function ins_stage_clear_score(  _score_list, _chara_id, _master_id, _clear_score )
+	{
+	var		i,ins_pos;
+
+@if ( DEBUG_MODE )
+dm( "あなたのスコアは・・・:"+ _clear_score );
+dm("スコア記録リスト(更新前)");
+for (i=0;  i<MAX_CLEAR_TIME_NUM;  i++) {
+	dm( "------第"+(i+1)+"位:"+_score_list[i][CLEAR_TABLE_SCORE]);
+	dm("   ["+"サーバント名]:"+GetCharaIDtoCharaName(_score_list[i][CLEAR_TABLE_SERVANT]) );
+	dm("   ["+"  マスター名]:"+GetCharaIDtoCharaName(_score_list[i][CLEAR_TABLE_MASTER]) );
+}
+@endif
+
+		// 挿入位置を探す
+		for (ins_pos=0;  ins_pos<MAX_CLEAR_TIME_NUM;  ins_pos++) {
+			if (_score_list[ins_pos][CLEAR_TABLE_SCORE]  ==  -1)
+				break;
+			if (_clear_score  >  _score_list[ins_pos][CLEAR_TABLE_SCORE])
+				break;
+		}
+		if (ins_pos  ==  MAX_CLEAR_TIME_NUM) {
+			@if ( DEBUG_MODE )
+				dm( "ランキングには登録されませんでした。" );
+			@endif
+			return;
+		}
+		@if ( DEBUG_MODE )
+			dm( "おめでとう、第"+(ins_pos+1)+"位でランキングに登録されました！！！！！" );
+		@endif
+
+		// 挿入位置を空ける
+		for (i=(MAX_CLEAR_TIME_NUM-1);  i>ins_pos;  i--) {
+			_score_list[i][CLEAR_TABLE_SCORE]   = _score_list[i-1][CLEAR_TABLE_SCORE];
+			_score_list[i][CLEAR_TABLE_SERVANT] = _score_list[i-1][CLEAR_TABLE_SERVANT];
+			_score_list[i][CLEAR_TABLE_MASTER]  = _score_list[i-1][CLEAR_TABLE_MASTER];
+		}
+
+		// 記録挿入
+		_score_list[ins_pos][CLEAR_TABLE_SCORE]   = _clear_score;
+		_score_list[ins_pos][CLEAR_TABLE_SERVANT] = _chara_id;
+		_score_list[ins_pos][CLEAR_TABLE_MASTER]  = _master_id;
+
+		@if ( DEBUG_MODE )
+		dm("スコア記録リスト(更新後)");
+		for (i=0;  i<MAX_CLEAR_TIME_NUM;  i++) {
+			dm( "------第"+(i+1)+"位:"+ _score_list[i][CLEAR_TABLE_SCORE]);
+			dm("   ["+"サーバント名]:"+GetCharaIDtoCharaName(_score_list[i][CLEAR_TABLE_SERVANT]) );
+			dm("   ["+"  マスター名]:"+GetCharaIDtoCharaName(_score_list[i][CLEAR_TABLE_MASTER]) );
+		}
+		@endif
+
+		return;
+	}
+
+
+
+	// ステージ別スコア
+	function get_stage_clear_score_table( _stage_id )
+	{
+		switch ( _stage_id )
+		{
+		case SCENE_STAGE1:
+			return ( global.tf.ir_ryuudou_clear_score );
+		case SCENE_STAGE2:
+			return ( global.tf.ir_kinoko_clear_score );
+		case SCENE_STAGE3:
+			return ( global.tf.ir_jiburaru_clear_score );
+		case SCENE_BOSS:
+			return ( global.tf.ir_iriyasen_clear_score );
+		}
+		return ( void );
+	}
+	function get_total_clear_score_sv_table( _sv_id )
+	{
+		switch ( _sv_id )
+		{
+		case CHARA_ID_SABER:
+			return ( global.tf.ir_total_clear_sab_score );
+		case CHARA_ID_ARCHER:
+			return ( global.tf.ir_total_clear_arc_score );
+		case CHARA_ID_RIDER:
+			return ( global.tf.ir_total_clear_rid_score );
+		case CHARA_ID_LANCER:
+			return ( global.tf.ir_total_clear_lan_score );
+		case CHARA_ID_CASTER:
+			return ( global.tf.ir_total_clear_cas_score );
+		}
+		return ( void );
+	}
+	function getStageClearScore( _stage, _rank )
+	{
+	var		_table = get_stage_clear_score_table( _stage );
+		return ( _table[_rank][CLEAR_TABLE_SCORE] );
+	}
+	function getStageClearScoreServant( _stage, _rank )
+	{
+	var		_table = get_stage_clear_score_table( _stage );
+		return ( _table[_rank][CLEAR_TABLE_SERVANT] );
+	}
+	function getStageClearScoreMaster( _stage, _rank )
+	{
+	var		_table = get_stage_clear_score_table( _stage );
+		return ( _table[_rank][CLEAR_TABLE_MASTER] );
+	}
+
+	// ゲームクリアスコア
+	function getTotalStageClearScore( _rank )
+	{
+		return ( global.tf.ir_total_clear_score[_rank][CLEAR_TABLE_SCORE] );
+	}
+	function getTotalStageClearScoreServant( _rank )
+	{
+		return ( global.tf.ir_total_clear_score[_rank][CLEAR_TABLE_SERVANT] );
+	}
+	function getTotalStageClearScoreMaster( _rank )
+	{
+		return ( global.tf.ir_total_clear_score[_rank][CLEAR_TABLE_MASTER] );
+	}
+
+	function getTotalStageClearSVScore( _sv, _rank )
+	{
+	var		_table = get_total_clear_score_sv_table( _sv );
+		return ( _table[_rank][CLEAR_TABLE_SCORE] );
+	}
+	function getTotalStageClearSVScoreServant( _sv, _rank )
+	{
+	var		_table = get_total_clear_score_sv_table( _sv );
+		return ( _table[_rank][CLEAR_TABLE_SERVANT] );
+	}
+	function getTotalStageClearSVScoreMaster( _sv, _rank )
+	{
+	var		_table = get_total_clear_score_sv_table( _sv );
+		return ( _table[_rank][CLEAR_TABLE_MASTER] );
+	}
+
+	// ステージクリアスコア成績(ステージ別、サーヴァント別、総合成績など・・・)
+	function addStageClearScore( _stage_id, _sv_id, _ms_id, _score )
+	{
+		// スキップしてたら記録しない
+		if (getUseStageSkipFlag()  ==  true)
+			return;
+
+		with ( global.tf )
+		{
+			switch ( _stage_id )
+			{
+			case SCENE_STAGE1:
+				@if ( DEBUG_MODE )
+					dm( "柳洞池 クリアスコアランクの登録は・・・・" );
+				@endif
+				ins_stage_clear_score( .ir_ryuudou_clear_score, _sv_id, _ms_id, _score );
+
+				@if ( DEBUG_MODE )
+					dm( "柳洞池 クリアスコアランク(サーバント毎)の登録は・・・・" );
+				@endif
+				switch ( _sv_id )
+				{
+				case CHARA_ID_SABER:
+					ins_stage_clear_score( .ir_ryuudou_clear_sab_score, _sv_id, _ms_id, _score );
+					break;
+				case CHARA_ID_ARCHER:
+					ins_stage_clear_score( .ir_ryuudou_clear_arc_score, _sv_id, _ms_id, _score );
+					break;
+				case CHARA_ID_RIDER:
+					ins_stage_clear_score( .ir_ryuudou_clear_rid_score, _sv_id, _ms_id, _score );
+					break;
+				case CHARA_ID_LANCER:
+					ins_stage_clear_score( .ir_ryuudou_clear_lan_score, _sv_id, _ms_id, _score );
+					break;
+				case CHARA_ID_CASTER:
+					ins_stage_clear_score( .ir_ryuudou_clear_cas_score, _sv_id, _ms_id, _score );
+					break;
+				}
+				break;
+
+			case SCENE_STAGE2:
+				@if ( DEBUG_MODE )
+					dm( "きのこ クリアスコアランクの登録は・・・・" );
+				@endif
+				ins_stage_clear_score( .ir_kinoko_clear_score, _sv_id, _ms_id, _score );
+
+				@if ( DEBUG_MODE )
+					dm( "きのこ クリアスコアランク(サーバント毎)の登録は・・・・" );
+				@endif
+				switch ( _sv_id )
+				{
+				case CHARA_ID_SABER:
+					ins_stage_clear_score( .ir_kinoko_clear_sab_score, _sv_id, _ms_id, _score );
+					break;
+				case CHARA_ID_ARCHER:
+					ins_stage_clear_score( .ir_kinoko_clear_arc_score, _sv_id, _ms_id, _score );
+					break;
+				case CHARA_ID_RIDER:
+					ins_stage_clear_score( .ir_kinoko_clear_rid_score, _sv_id, _ms_id, _score );
+					break;
+				case CHARA_ID_LANCER:
+					ins_stage_clear_score( .ir_kinoko_clear_lan_score, _sv_id, _ms_id, _score );
+					break;
+				case CHARA_ID_CASTER:
+					ins_stage_clear_score( .ir_kinoko_clear_cas_score, _sv_id, _ms_id, _score );
+					break;
+				}
+				break;
+
+			case SCENE_STAGE3:
+				@if ( DEBUG_MODE )
+					dm( "セラリズ クリアスコアランクの登録は・・・・" );
+				@endif
+				ins_stage_clear_score( .ir_jiburaru_clear_score, _sv_id, _ms_id, _score );
+
+				@if ( DEBUG_MODE )
+					dm( "セラリズ クリアスコアランク(サーバント毎)の登録は・・・・" );
+				@endif
+				switch ( _sv_id )
+				{
+				case CHARA_ID_SABER:
+					ins_stage_clear_score( .ir_jiburaru_clear_sab_score, _sv_id, _ms_id, _score );
+					break;
+				case CHARA_ID_ARCHER:
+					ins_stage_clear_score( .ir_jiburaru_clear_arc_score, _sv_id, _ms_id, _score );
+					break;
+				case CHARA_ID_RIDER:
+					ins_stage_clear_score( .ir_jiburaru_clear_rid_score, _sv_id, _ms_id, _score );
+					break;
+				case CHARA_ID_LANCER:
+					ins_stage_clear_score( .ir_jiburaru_clear_lan_score, _sv_id, _ms_id, _score );
+					break;
+				case CHARA_ID_CASTER:
+					ins_stage_clear_score( .ir_jiburaru_clear_cas_score, _sv_id, _ms_id, _score );
+					break;
+				}
+				break;
+
+			case SCENE_BOSS:
+				@if ( DEBUG_MODE )
+					dm( "イリヤ戦 クリアスコアランクの登録は・・・・" );
+				@endif
+				ins_stage_clear_score( .ir_iriyasen_clear_score, _sv_id, _ms_id, _score );
+
+				@if ( DEBUG_MODE )
+					dm( "イリヤ戦 クリアスコアランク(サーバント毎)の登録は・・・・" );
+				@endif
+				switch ( _sv_id )
+				{
+				case CHARA_ID_SABER:
+					ins_stage_clear_score( .ir_iriyasen_clear_sab_score, _sv_id, _ms_id, _score );
+					break;
+				case CHARA_ID_ARCHER:
+					ins_stage_clear_score( .ir_iriyasen_clear_arc_score, _sv_id, _ms_id, _score );
+					break;
+				case CHARA_ID_RIDER:
+					ins_stage_clear_score( .ir_iriyasen_clear_rid_score, _sv_id, _ms_id, _score );
+					break;
+				case CHARA_ID_LANCER:
+					ins_stage_clear_score( .ir_iriyasen_clear_lan_score, _sv_id, _ms_id, _score );
+					break;
+				case CHARA_ID_CASTER:
+					ins_stage_clear_score( .ir_iriyasen_clear_cas_score, _sv_id, _ms_id, _score );
+					break;
+				}
+				break;
+
+			default:
+				return;
+			}
+		}
+		return;
+	}
+	// ステージクリアスコア成績(総合成績)
+	function addTotalStageClearScore( _sv_id, _ms_id, _score )
+	{
+	var		i,ins_pos;
+
+		// スキップしてたら記録しない
+		if (getUseStageSkipFlag()  ==  true)
+			return;
+
+		with ( 	global.tf )
+		{
+			// トータルクリアランク挿入
+			@if ( DEBUG_MODE )
+				dm( "トータル クリアスコアランクの登録は・・・・" );
+			@endif
+			ins_stage_clear_score( .ir_total_clear_score, _sv_id, _ms_id, _score );
+
+			// トータルクリアランク挿入
+			@if ( DEBUG_MODE )
+				dm( "トータル クリアスコアランク(サーバント毎)の登録は・・・・" );
+			@endif
+			switch ( _sv_id )
+			{
+			case CHARA_ID_SABER:
+				ins_stage_clear_score( .ir_total_clear_sab_score, _sv_id, _ms_id, _score );
+				break;
+			case CHARA_ID_ARCHER:
+				ins_stage_clear_score( .ir_total_clear_arc_score, _sv_id, _ms_id, _score );
+				break;
+			case CHARA_ID_RIDER:
+				ins_stage_clear_score( .ir_total_clear_rid_score, _sv_id, _ms_id, _score );
+				break;
+			case CHARA_ID_LANCER:
+				ins_stage_clear_score( .ir_total_clear_lan_score, _sv_id, _ms_id, _score );
+				break;
+			case CHARA_ID_CASTER:
+				ins_stage_clear_score( .ir_total_clear_cas_score, _sv_id, _ms_id, _score );
+				break;
+			}
+		}
+		return;
+	}
+
+
+
+
+
+
+
+	var	StageSelectFlag=false;
+	var	StageSelectStageID=0;
+	// ステージセレクトタイプフラグの設定
+	function setStageSelectFlag( _flag, _stage_id=void )
+	{
+		StageSelectFlag = _flag;
+		StageSelectStageID = _stage_id;
+		return;
+	}
+	// ステージセレクトタイプフラグの取得
+	function getStageSelectFlag()
+	{
+		if (StageSelectFlag  ==  true)
+				return ( true );
+		else	return ( false );
+	}
+	// ステージセレクトタイプフラグの取得
+	function getStageSelectStageID()
+	{
+		if (StageSelectFlag  ==  false)
+				return ( void );
+		else	return ( StageSelectStageID );
+	}
+
+
+	var	UseStageSkipFlag=false;
+	// ステージスキップを使ったかのフラグをクリア
+	function clearUseStageSkipFlag()
+	{
+		UseStageSkipFlag = false;
+		return;
+	}
+	// ステージスキップを使ったか？
+	function getUseStageSkipFlag()
+	{
+		return ( UseStageSkipFlag );
+	}
+	// ステージスキップを使った
+	function setUseStageSkipFlag()
+	{
+		UseStageSkipFlag = true;
+		return;
+	}
+
+	var	UseContinueFlag=false;
+	// コンティニューを使ったかのフラグをクリア
+	function clearUseContinueFlag()
+	{
+		UseContinueFlag = false;
+		return;
+	}
+	// コンティニューを使ったか？
+	function getUseContinueFlag()
+	{
+		return ( UseContinueFlag );
+	}
+	// コンティニューを使った
+	function setUseContinueFlag()
+	{
+		UseContinueFlag = true;
+		return;
+	}
+
+
+
+
+	// ADVパート呼び出しにイリヤ城クリアを伝えるフラグを設定する
+	function setIriyaBreakFlagGameClear()
+	{
+		global.iriya_result = true;
+		return;
+	}
+	// ADVパート呼び出しにイリヤ城ゲームオーバーを伝えるフラグを設定する
+	function setIriyaBreakFlagGameOver()
+	{
+		global.iriya_result = false;
+		return;
+	}
+
+	// オートモードかどうか
+	var	AutoPlayFlag=false;
+	function isAutoPlayMode()
+	{
+		return (AutoPlayFlag | ALWAYS_AUTOMODE);
+	}
+	
+	function setAutoPlayMode( _mode )
+	{
+		AutoPlayFlag = _mode;
+		return;
+	}
+
+	var fpsInfo = %[];	// FPS 計算用
+	var timer;			// フレーム管理のためのタイマー
+	var scene;			// シーンオブジェクト
+	var exitFlag = false;
+	var adv_mode;
+	var inputObj;
+	
+	//--------------------------------------------------------------------------
+	// コンストラクタ
+	//		window	:	親ウィンドウオブジェクト
+	//		parent	:	親レイヤオブジェクト
+	//--------------------------------------------------------------------------
+	function CIriyaLayer( window, parent, _adv_mode )
+	{
+		if ( ! window instanceof "Window" )
+			throw new Exception( "window パラメータの値が不正" );
+		super.Layer( window, parent );
+		if ( ! USE_DEFAULT_WINDOWSIZE )
+		{
+			window.innerWidth = SCREEN_SIZE_W;
+			window.innerHeight = SCREEN_SIZE_H;
+		}
+
+		InitPlaySESTack();
+
+
+		adv_mode = _adv_mode;
+		// レイヤ設定
+		setSize( window.innerWidth, window.innerHeight );
+		setPos( 0, 0 );
+		visible = true;
+		fillRect( 0, 0, window.innerWidth, window.innerHeight, 0xFF000000 );
+		// FPS計算・表示用
+		@if ( DEBUG_MODE )
+		fpsInit();
+		@endif
+		// タイマを生成
+		timer = new Timer( onTimer, "" );
+		timer.capacity	= 1;
+		timer.interval	= TIMER_INTERVAL;
+		timer.enabled	= true;
+		
+		InitStageLook();
+		InitGameOption();
+		CreateCharaStatus();
+
+		init_get_item_list();
+		init_stage_clear_time_data();
+		init_quiz_counter();
+		init_gohoubi_cg();
+
+		setIriyaBreakFlagGameOver();
+		//
+		change( SCENE_FIRST );
+	}
+
+
+	//--------------------------------------------------------------------------
+	// デストラクタ
+	//--------------------------------------------------------------------------
+	function finalize()
+	{
+		ReleasePlaySESTack();
+		ReleaseCharaStatus();
+		timer.enabled = false;
+		invalidate timer if( CheckValid(timer) );
+		invalidate scene if( CheckValid(scene) );
+		super.finalize( ... );
+	}
+
+	//--------------------------------------------------------------------------
+	// 可視状態切り替え
+	//--------------------------------------------------------------------------
+	function show()
+	{
+		timer.enabled = true;
+	}
+	
+	function hide( closefunc )
+	{
+		if ( closefunc )
+			closefunc();
+	}
+
+	function close()
+	{
+		if( CheckValid(timer) )
+			timer.enabled = false;
+		hideIriyaCastle();
+	}
+	
+	
+	var TotalScore;
+	var StageScore;
+
+	function getStageInitScore()
+	{
+		StageScore = 0;
+		return TotalScore;
+	}
+	
+	function resetStageScore()
+	{
+		TotalScore = 0;
+		StageScore = 0;
+	}
+	
+	function addScore( s )
+	{
+		StageScore += s;
+		StageScore = round( 0, StageScore, 99999999 );
+	}
+	
+	function getScore()
+	{
+		return StageScore;
+	}
+	function getTotalScore()
+	{
+		return round( 0, TotalScore+StageScore, 99999999 );
+	}
+
+	function flushScore()
+	{
+		TotalScore = getTotalScore();
+		StageScore = 0;
+	}
+
+
+
+	// オートモード時の次のステージのIDを返す
+	function get_next_auto_play_stage_id( _scene_id )
+	{
+	var		i;
+	var		bak_scene_id;
+
+		bak_scene_id = _scene_id;
+		for (i=0;  i<4;  i++) {
+			switch ( _scene_id )
+			{
+			case SCENE_STAGE1:
+				if (CheckLook(SCENE_STAGE1)  ==  true)
+					return ( SCENE_STAGE1 );
+				_scene_id = SCENE_STAGE2;
+				break;
+			case SCENE_STAGE2:
+				if (CheckLook(SCENE_STAGE2)  ==  true)
+					return ( SCENE_STAGE2 );
+				_scene_id = SCENE_STAGE3;
+				break;
+			case SCENE_STAGE3:
+				if (CheckLook(SCENE_STAGE3)  ==  true)
+					return ( SCENE_STAGE3 );
+				_scene_id = SCENE_BOSS;
+				break;
+			case SCENE_BOSS:
+				if (CheckLook(SCENE_BOSS)  ==  true)
+					return ( SCENE_BOSS );
+				_scene_id = SCENE_STAGE1;
+				break;
+			}
+		}
+		return ( bak_scene_id );
+	}
+	function getNextAutoPlayStage( _scene_id )
+	{
+	var		next_scene_id;
+		if (AutoPlayFlag  ==  false)
+			return ( _scene_id );
+
+
+		switch ( _scene_id )
+		{
+		case SCENE_TALK1:
+			_scene_id = SCENE_STAGE1;
+			break;
+		case SCENE_QUIZ1:
+			_scene_id = SCENE_STAGE2;
+			break;
+		case SCENE_QUIZ2:
+			_scene_id = SCENE_STAGE3;
+			break;
+		case SCENE_QUIZ3:
+		case SCENE_TALK2:
+			_scene_id = SCENE_BOSS;
+			break;
+		}
+
+		switch ( _scene_id )
+		{
+		case SCENE_STAGE1:
+		case SCENE_STAGE2:
+		case SCENE_STAGE3:
+		case SCENE_BOSS:
+			break;
+		default:
+			return ( _scene_id );
+		}
+
+		next_scene_id = get_next_auto_play_stage_id( _scene_id );
+		if (next_scene_id  ==  _scene_id) {
+			if (CheckLook(_scene_id)  ==  false) {
+				return ( SCENE_TITLE );
+			}
+			return ( next_scene_id );
+		}
+
+		if (next_scene_id  <  _scene_id) {
+			return ( SCENE_SELECT );
+		}
+		return ( next_scene_id );
+	}
+
+	//--------------------------------------------------------------------------
+	// 指定したシーンに切り替える
+	//--------------------------------------------------------------------------
+	function change( scene_id )
+	{
+		if ( scene_id == SCENE_DEFAULT )
+			return;
+			
+		var old_scene_id;
+
+
+		if ( scene!==void )
+		{
+			old_scene_id = scene.id;
+			invalidate scene;
+			scene = void;
+		}
+
+
+		scene_id = getNextAutoPlayStage( scene_id );
+		SetStageLook( scene_id );
+
+		if( CheckValid( inputObj ) )
+			invalidate inputObj;
+		inputObj = new CIrInput( this, scene_id, REPLAYMODE );
+
+
+		switch( scene_id )
+		{
+		case SCENE_RANK:
+			scene = new CIriyaRank( this, scene_id );
+			break;
+		
+		case SCENE_QUIZ1:
+		case SCENE_QUIZ2:
+		case SCENE_QUIZ3:
+			scene = new CIriyaQuiz( this, scene_id );
+			break;
+			
+		case SCENE_TALK1:
+		case SCENE_TALK2:
+			scene = new CIriyaTalk( this, scene_id );
+			break;
+			
+		case SCENE_TITLE:
+			scene = new CIriyaTitle( this, scene_id );
+			break;
+
+		case SCENE_SELECT:
+			scene = new CIriyaSelect( this, scene_id );
+			break;
+
+		case SCENE_STAGE1:
+			scene = new CIriyaRyujin( this, scene_id );
+			break;
+
+		case SCENE_STAGE2:
+			scene = new CIriyaKinoko( this, scene_id );
+			break;
+			
+		case SCENE_STAGE3:
+			scene = new CIriyaGib( this, scene_id );
+			break;
+
+		case SCENE_BOSS:
+			scene = new CIriyaIriya( this, scene_id );
+			break;
+
+		case SCENE_GAMEOVER:
+			scene = new CIriyaGameOver( this, scene_id, old_scene_id );
+			break;
+
+		case SCENE_ENDING:
+			scene = new CIriyaEnding( this, scene_id );
+			break;
+
+		case SCENE_CLOSE:
+			exitFlag = true;
+			break;
+
+		default:
+			throw new Exception( "未対応のシーン指定 : "+scene_id );
+		}
+	}
+	
+	function getCallType()
+	{
+		if ( adv_mode )
+			return CALLTYPE_ADV;
+		else
+			return CALLTYPE_NORMAL;
+	}
+
+	var __stageclear;
+	function getClearFlag()
+	{
+		return __stageclear;
+	}
+	
+	function setClearFlag(val)
+	{
+		__stageclear = val;
+	}
+
+
+	// ゲームオーバー回数記録
+	var	MAX_GAME_OVER_COUNT_NUM	=100;
+	var	game_over_count=0;
+	function addGameOverCount()
+	{
+		game_over_count += 1;
+		if (game_over_count  >  MAX_GAME_OVER_COUNT_NUM)
+			game_over_count = MAX_GAME_OVER_COUNT_NUM;
+		return;
+	}
+	function getGameOverCount()
+	{
+		return ( game_over_count );
+	}
+
+
+	//--------------------------------------------------------------------------
+	// FPS
+	//--------------------------------------------------------------------------
+	function fpsInit()
+	{
+	@if ( DEBUG_MODE )
+		with( fpsInfo )
+		{
+			with( .drawinfo = %[] )
+			{
+				.fps	= 0;	// 描画回数
+				.count	= 0;
+				.start	= 0;
+			}
+			with( .procinfo = %[] )
+			{
+				.fps	= 0;	// 描画回数
+				.count	= 0;
+				.start	= 0;
+			}
+			with( .layer = new CSpriteLayer(window,this) )
+			{
+				.visible = true;
+				.setSize( 200, 20 );
+				.setPos( 0, 0 );
+				.absolute = PRIORITY_FPSINFO;
+				.font.size = 9;
+			}
+		}
+	@endif
+	}
+	
+	function fpsDraw()
+	{
+	@if ( DEBUG_MODE )
+		with ( fpsInfo )
+		{
+			// draw
+			.layer.fill( 0x00000000 );
+			.layer.drawText( 0, 0, "v:%s fps:%d(%d) ".sprintf(VERSION_INFO, .drawinfo.fps, .procinfo.fps), 0xFFFFFF );
+		}
+	@endif
+	}
+
+	function fpsUpdate( info )
+	{
+	@if ( DEBUG_MODE )
+		with ( info )
+		{
+			if ( System.getTickCount() - .start >= 1000 )
+			{
+				.fps	= .count;
+				.start	= System.getTickCount();
+				.count	= 0;
+			}
+			else
+				.count++;
+		}
+	@endif
+	}
+	
+	function fpsDrawUpdate()
+	{
+		fpsUpdate( fpsInfo.drawinfo );
+	}
+	
+	function fpsProcUpdate()
+	{
+		fpsUpdate( fpsInfo.procinfo );
+	}
+
+	// １フレーム毎のデータ更新処理を行う
+	var lastTick;
+	var pastframe;
+	function iriyaproc()
+	{
+		// 終了確認ダイアログの表示中は更新処理しない
+		if ( closeDialogShowing )
+			return SCENE_DEFAULT;
+		// ウィンドウにフォーカスがないときは更新処理しない
+		if ( ! IsActiveWindow(kag) )
+			return SCENE_DEFAULT;
+		//
+		var flag;
+		@if(__SKIP_DELAY_FRAME__==1)
+			var tick = System.getTickCount();
+			lastTick = tick if lastTick == void; // failsafe
+			var past = tick - lastTick;
+			pastframe = past \ TIMER_INTERVAL;
+			lastTick = tick - past + pastframe * TIMER_INTERVAL; // 誤差を折り込む
+			flag = SCENE_DEFAULT;
+			pastframe = MAX_SKIP_COUNT if ( pastframe>MAX_SKIP_COUNT );
+			ClearPlaySESTack();
+			while(pastframe>0 && flag==SCENE_DEFAULT)
+			{
+				flag = scene.sceneproc();
+				pastframe--;
+				fpsProcUpdate();
+			}
+		@endif
+		@if(__SKIP_DELAY_FRAME__==0)
+			flag = scene.sceneproc();
+			fpsProcUpdate();
+		@endif
+		return flag;
+	}
+
+	function resetFrameSkipData()
+	{
+		pastframe = 0;
+		lastTick = System.getTickCount();
+		return;
+	}
+
+
+
+	// 描画が必要な場合に呼び出される
+	function iriyadraw()
+	{
+		@if ( DEBUG_MODE )
+		fpsDrawUpdate();
+		fpsDraw();
+		@endif
+		scene.scenedraw();
+	}
+
+
+	function _ontimer( _draw )
+	{
+		// 処理、描画、シーン切り替えを実行
+		var flag = iriyaproc();
+		// draw は必ずprocの直後に実行すること. 
+		// change を先にすると初期化されないままDrawが実行されてしまうため
+		if ( _draw )
+			iriyadraw(); 
+		change( flag );
+		// 必要ならば終了処理を行う
+		if ( exitFlag ) {
+			close();
+			return ( false );
+		}
+		return ( true );
+	}
+	
+	// タイマによる割り込み
+	var _framecount;
+	function onTimer()
+	{
+		if ( _framecount >= SKIP_COUNT-1 )
+		{
+			_ontimer(true);
+			_framecount = 0;
+		}
+		else
+		{
+			_ontimer(false);
+			_framecount++;	
+		}
+	}
+	
+	//
+	function getServantClearTime( _id )
+	{
+		return ( 0 );
+	}
+	
+	//
+	function getServantRank( _id )
+	{
+		return ( _id );
+	}
+	
+	//	閉じるダイアログ出現
+	function onCloseQuery()
+	{
+		dm( "onCloseQuery" );
+		closeDialogShowing = true;
+	}
+
+	//	閉じるダイアログ消去
+	function onCancelClose()
+	{
+		dm( "onCancelClose" );
+		closeDialogShowing = false;
+	}
+}
+
+
+
+
+
+

@@ -1,0 +1,659 @@
+/*******************************************************************************
+	IRIYA - QUIZ
+*******************************************************************************/
+
+class CIrAnswerScreen extends CIriyaObject
+{
+	var ANI_SCREEN_HIGHLIGHT= 1;
+	var ANI_SCREEN_NORMAL	= 2;
+	var ANI_SCREEN_SELECTED = 3;
+	var ANI_SCREEN_破れた	= 4; 
+
+	var answer;
+	var subScreen;
+	
+	function CIrAnswerScreen( _scene, _parent, _answer )
+	{
+		super.CIriyaObject( ... );
+		type = "Screen";
+		answer = _answer;
+		priority = PRIORITY_PLAYER;
+		animation = ANI_SCREEN_NORMAL;
+		with( subScreen = new CIrBackground(scene,this) )
+		{
+			.origin = ORIGIN_PARENT;
+			.x = 55;
+			.y = 0;
+			.priority = PRIORITY_PLAYER+1000;
+			.visible = false;
+			.clipRect = %[left:55, top:0, width:55, height:343];
+			.adapt = false;
+			if ( this.answer )
+				.filename = "ir_quiz_panel02";
+			else
+				.filename = "ir_quiz_panel12";
+		}
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	function focus()
+	{
+		animation = ANI_SCREEN_HIGHLIGHT;
+	}
+	
+	function focused()
+	{
+		return (animation==ANI_SCREEN_HIGHLIGHT);
+	}
+	
+	function unfocus()
+	{
+		animation = ANI_SCREEN_NORMAL;
+	}
+	
+	function tear()
+	{
+		animation = ANI_SCREEN_破れた;
+		syssound( SE_SCREEN_TEAR );
+	}
+	
+	function select()
+	{
+		animation = ANI_SCREEN_SELECTED;
+	}
+	
+	function onAnimation()
+	{
+		if ( answer )
+		{
+			switch( animation )
+			{
+			case ANI_SCREEN_HIGHLIGHT:	imageId="マルSEL"; break;
+			case ANI_SCREEN_NORMAL:		imageId="マル"; break;
+			case ANI_SCREEN_SELECTED:	imageId="マル"; break;
+			case ANI_SCREEN_破れた:
+				imageId="マル破れた";
+				subScreen.visible = true;
+				break;
+			}
+		}
+		else
+		{
+			switch( animation )
+			{
+			case ANI_SCREEN_HIGHLIGHT:	imageId="バツSEL"; break;
+			case ANI_SCREEN_NORMAL:		imageId="バツ"; break;
+			case ANI_SCREEN_SELECTED:	imageId="バツ"; break;
+			case ANI_SCREEN_破れた:
+				imageId="バツ破れた";
+				subScreen.visible = true;
+				break;
+			}
+		}
+	}
+	
+	function getImageFileInfo()
+	{
+		var file;
+		
+		switch(imageId)
+		{
+		case "マル":	file="ir_quiz_panel00"; break;
+		case "バツ":	file="ir_quiz_panel10"; break;
+		case "マルSEL":	file="ir_quiz_panel01"; break;
+		case "バツSEL":	file="ir_quiz_panel11"; break;
+		case "マル破れた":	file="ir_quiz_panel02"; break;
+		case "バツ破れた":	file="ir_quiz_panel12"; break;
+		}
+		var info = %[];
+		info.filename = file;
+		info.mirror = false;
+		info.adapt = false;
+		info.centerX = 0;
+		info.centerY = 0;
+		return info;
+	}
+}
+
+
+
+class CIrQuizResult extends CIriyaObject
+{
+	var seikai;
+	
+	function CIrQuizResult( _scene, _parent, _seikai )
+	{
+		super.CIriyaObject( ... );
+		origin = ORIGIN_WINDOWCENTER;
+		priority = PRIORITY_SYSTEM;
+		x = 0;
+		y = 0;
+		seikai = _seikai;
+		fadeIn(10);
+	}
+	
+	function getImageFileInfo()
+	{
+		var info = %[];
+		info.centerX = 272;
+		info.centerY = 112;
+		if ( seikai )
+			info.filename = "ir_quiz_seikai00";
+		else
+			info.filename = "ir_quiz_seikai01";
+		info.adapt = false;
+		info.mirror = false;
+		return info;
+	}
+}
+
+
+
+
+
+class CIriyaQuiz extends CIriyaSceneEx
+{
+	var ANI_RUN_TRUE = 3; // マルに向かって走る
+	var ANI_RUN_FALSE = 4; // バツに向かって走る
+
+	var FieldXSize		= 2200;
+	var FieldYSize		= 600;
+	var FirstCameraPosX	= 400;
+	var FirstCameraPosY	= 300;
+
+	function CIriyaQuiz( parent, scene_id )
+	{
+		super.CIriyaSceneEx( ... );
+		dm( "○×クイズ" );
+	}
+	
+	function finalize()
+	{
+		super.finalize( ... );
+	}
+	
+	function init()
+	{
+		super.init( ... );
+		optShowReadygo = false;
+		optShowTitle = false;
+		BgmPlay( BGM_QUIZ );
+	}
+
+	// 通常カメラを更新する（宝具を使っていないときに呼び出される）
+	function normalCameraUpdate( camera )
+	{
+		//if ( camera.mode != CAMERAMODE_DEFAULT )
+		//	return false;
+		with( camera )
+		{
+			.motionDestX = playerObj.x;
+			.motionDestY = playerObj.y;
+		}
+		return true;
+	}
+
+	var servantObj;
+	var screens;
+
+	// index番目のプレイヤの初期化処理の際に呼び出される
+	function onInitPlayer( player, index )
+	{
+		with( player )
+		{
+			switch( index )
+			{
+			// ０番目のキャラクタをマスターとして使う
+			case 0:
+				.characterId = parentLayer.CharaStatus[0].GetMasterID();
+				.marker.enabled = false;
+				.x = 200;
+				.y = 320;
+				.direction = MUKI_RIGHT;
+				.animation = ANI_イベント待機;
+				break;
+			// １番目のキャラクタをサーバントとして使う
+			case 1:
+				this.servantObj = player;
+				.x = -100; // 適当に画面外においておく
+				.visible = false;
+				.characterId = parentLayer.CharaStatus[0].GetServantID();
+				.direction = MUKI_LEFT;
+				.animation = ANI_イベント待機;
+				break;
+			//
+			default:
+				.visible = false;
+				//.enabled = false;
+				.shadow.visible = false;
+				.shadow.enabled = false;
+				break;
+			}
+			.gauge.enabled = false;
+		}
+	}
+	
+	var 正解はマル;
+	var trueObj;
+	var falseObj;
+	var textObj;
+	var lightUp;
+	var lightDown;
+	var 問題リスト = [];
+	var 問題行番号 = [];
+	var 問題数;
+	
+	function questionListInit()
+	{ 
+		問題リスト.load( QUIZ_FILENAME );
+		問題行番号 = [];
+		問題数 = 0;
+		var i;
+		for ( i=0; i<問題リスト.count; i++ )
+			if ( 問題リスト[i] == "#q" )
+			{
+				問題行番号.add(i+1);
+				問題数++;
+			}
+		return 問題数;
+	}
+	
+	function selectQuestion( index = -1 )
+	{
+		if ( index<0 )
+			index = parentLayer.getQuizCounter();//random32(問題数);
+		// 問題文を得る
+		textObj.strings = [];
+		var i = 問題行番号[index];
+		while( i<問題リスト.count && 問題リスト[i].substr(0,2)!="#a" )
+		{
+			dm( 問題リスト[i] );
+			textObj.strings.add( 問題リスト[i] );
+			i++;
+		}
+		// 解答を得る
+		if ( i<問題リスト.count && 問題リスト[i].substr(0,2)=="#a" )
+			正解はマル = (問題リスト[i].substring(3)=="true");
+		else
+			dm( "#aが見つからない" );
+	}
+
+	// フィールドの初期化時に呼び出される
+	function initField()
+	{
+		var マルコース基準位置Y = 100;
+		var バツコース基準位置Y = 300;
+		var i;
+		
+		createScreen = false;
+		super.initField();
+		
+		// 問題文
+		textObj = new CIrTextbox(this,etcRootObj);
+		questionListInit();
+		selectQuestion();
+		// 背景用オブジェクト
+		with ( new CIrBackground(this,etcRootObj) )
+		{
+			.type = "Background";
+			.filename = "ir_quiz_bg";
+		}
+		// ライト（上段）
+		with ( lightUp=new CIrBackground(this,etcRootObj) )
+		{
+			.type = "Light";
+			.x = 0;
+			.y = 0;
+			.origin = ORIGIN_WINDOW;
+			.filename = "ir_quiz_light00";
+			.visible = false;
+			.priority = PRIORITY_SYSTEM;
+		}
+		// ライト（下段）
+		with ( lightDown=new CIrBackground(this,etcRootObj) )
+		{
+			.type = "Light";
+			.x = 0;
+			.y = 0;
+			.origin = ORIGIN_WINDOW;
+			.filename = "ir_quiz_light10";
+			.visible = false;
+			.priority = PRIORITY_SYSTEM;
+		}
+		// マルに続く場所
+		with ( new CIrBackground(this,etcRootObj) )
+		{
+			.type = "Field";
+			.x = 520;
+			.y = マルコース基準位置Y;
+			.filename = 正解はマル ? "ir_quiz_true" : "ir_quiz_false";
+			.adapt = true;
+		}
+		// バツに続く場所
+		with ( new CIrBackground(this,etcRootObj) )
+		{
+			.type = "Field";
+			.x = 650;
+			.y = バツコース基準位置Y;
+			.filename = 正解はマル ? "ir_quiz_false" : "ir_quiz_true";
+			.adapt = true;
+		}
+		// マルの幕
+		with ( trueObj = new CIrAnswerScreen(this,etcRootObj,true) )
+		{
+			.x = 520;
+			.y = マルコース基準位置Y-150;
+			.priority = PRIORITY_PLAYER;
+		}
+		// バツの幕
+		with ( falseObj = new CIrAnswerScreen(this,etcRootObj,false) )
+		{
+			.x = 650;
+			.y = バツコース基準位置Y-150;
+			.priority = PRIORITY_PLAYER;
+		}
+	}
+	
+	// マウスで選択されているスクリーンOBJを返す。なにも選択されていない場合は void を返す
+	function getSelectedScreen()
+	{
+		if ( cursorInLayer(trueObj.layer ) ) return trueObj;
+		if ( cursorInLayer(falseObj.layer) ) return falseObj;
+		return void;
+	}
+	
+	function masterRunToScreen( obj )
+	{
+		with( playerObj )
+		{
+			.animation = ANI_MASTER_RUN;
+			.stop();
+			.motionDestX = obj.x-30;
+			.motionDestY = obj.y+250;
+			.motionLength = 30;
+			.motionType = MOTIONTYPE_SCHEDULED_LINER;
+			.motionStart();
+			.selectedScreen = obj;
+		}
+		obj.select();
+	}
+	
+	var master_emo;
+	var servant_emo;
+	var oldsel;
+	var animationDoneTiming;
+	var seikaiObj;
+
+	function servantAnimation( master )
+	{
+		switch( master.animation )
+		{
+		case ANI_イベント待機:
+			master.doAnimation( ANI_MASTER_STAND );
+			break;
+			
+		case ANI_MASTER_STAND:
+			master.doAnimation();
+			trueObj.unfocus();
+			falseObj.unfocus();
+			var sel;
+			if( isAutoPlayMode() )
+			{
+				if( master.timing<60 )
+					break;
+				if( random32(2) )
+					sel = trueObj;
+				else
+					sel = falseObj;
+				sel.focus();
+			}
+			else
+			{
+				sel = getSelectedScreen();
+				if ( sel == void )
+					break;
+				if ( input.left==-1 )
+				{
+					sel.focus();
+					break;
+				}
+			}
+			
+			if ( sel != oldsel )
+			{
+				syssound( SE_QUIZ_SCREENPOINT );
+				oldsel = sel;
+			}
+			masterRunToScreen(sel);
+			master.正解した = (正解はマル==sel.answer);
+			textObj.close();
+			// サーバントを、マスターが選択したほうに移動させる
+			servantObj.x = sel.x+800;
+			servantObj.y = sel.y+260;
+			servantObj.visible = true;
+			break;
+			
+		case ANI_MASTER_RUN:
+			if ( master.motionDone )
+				master.animation = ANI_MASTER_JUMP;
+			else
+				master.doAnimation();
+			break;
+			
+		case ANI_MASTER_JUMP:
+			with( master )
+			{
+				if ( .timing==0 )
+				{
+					.motionDestX = .x + 500;
+					.motionDestY = .y;
+					.motionDestZ = 0;
+					.motionLength = 60;
+					.motionHeight = 50;
+					.motionType = MOTIONTYPE_SCHEDULED_JUMP;
+					.motionStart();	
+				}
+				if ( .timing==5 )
+				{
+					.selectedScreen.tear();
+				}
+				.doAnimation();
+				if ( .motionDone )
+				{
+					if ( .正解した )
+						.animation = ANI_MASTER_起き上がり;
+					else
+						.animation = ANI_MASTER_FAILED;
+				}
+			}
+			break;
+			
+		case ANI_MASTER_起き上がり:
+			with( master )
+			{
+				if ( .timing==0 )
+				{
+					syssound( SE_QUIZ_SLIDING );
+					.motionDestZ = .z = 0;
+					.motionDestX = .x + 60;
+					.motionLength = 30;
+					.motionType = MOTIONTYPE_SCHEDULED_SIN;
+					.motionStart();
+					new CIrSmoke(this,master);
+				}
+				.doAnimation();
+			}
+			break;
+		// 正解した
+		case ANI_MASTER_SUCCEEDED:
+			switch( master.timing )
+			{
+			case 0:
+				seikaiObj = new CIrQuizResult( this, etcRootObj, true );
+				with( new CIrDecorativePaperBall( this, master ) )
+				{
+					.origin = ORIGIN_PARENT;
+					.images = systemImages;
+				}
+				break;
+
+			case 20:
+				var emoset = GetEmotionSet( EMOSCENE_QUIZ_SUCCESS, master.characterId, servantObj.characterId );
+				with( new CIrEmotion( this, master ) )
+				{
+					.origin = ORIGIN_PARENT;
+					.z = 100;
+					.animation = emoset.master;
+					.images = systemImages;
+				}
+				with( new CIrEmotion(this,servantObj) )
+				{
+					.origin = ORIGIN_PARENT;
+					.z = 100;
+					.animation = emoset.servant;
+				}
+				syssound( SE_QUIZ_CORRECTANS );
+				switch( emoset.servant )
+				{
+				case ANI_EMOTION_HAPPY:
+					servantObj.animation = ANI_勝利;
+					break;
+				default:
+					break;
+				}
+				master.scoreInc( 得点_クイズに正解 );
+				animationDoneTiming = timerCount;
+				break;
+				
+			case 30:
+				seikaiObj.fadeOut(15);
+				break;
+			}
+			master.doAnimation();
+			break;
+			
+		// 間違えた
+		case ANI_MASTER_FAILED:
+			master.doAnimation();
+			switch( master.timing )
+			{
+			case 0:
+				syssound( SE_DIRTY_LANDING );	
+				with( master )
+				{
+					.motionDestZ = .z = 0;
+					.motionDestX = .x + 60;
+					.motionLength = 30;
+					.motionType = MOTIONTYPE_SCHEDULED_SIN;
+					.motionStart();
+					new CIrMudEffect(this,master);
+				}
+				break;
+			case 30:
+				seikaiObj = new CIrQuizResult( this, etcRootObj, false );
+				var emoset = GetEmotionSet( EMOSCENE_QUIZ_FAIL, master.characterId, servantObj.characterId );
+				syssound( SE_QUIZ_INCORRECTANS );
+				with( master_emo=new CIrEmotion(this,master) )
+				{
+					.origin = ORIGIN_PARENT;
+					.z = 60;
+					.animation = emoset.master;
+				}
+				with( servant_emo=new CIrEmotion(this,servantObj) )
+				{
+					.origin = ORIGIN_PARENT;
+					.z = 100;
+					.animation = emoset.servant;
+				}
+				switch( emoset.servant )
+				{
+				case ANI_EMOTION_HAPPY:
+					servantObj.animation = ANI_勝利;
+					break;
+				default:
+					break;
+				}
+				break;
+			case 60:
+				seikaiObj.fadeOut(15);
+				if ( 正解はマル )
+				{
+					lightDown.visible = true;
+					lightDown.fadeIn(15);
+				}
+				else
+				{
+					lightUp.visible = true;
+					lightUp.fadeIn(15);
+				}
+				master_emo.priority = PRIORITY_SYSTEM+10;
+				servant_emo.priority = PRIORITY_SYSTEM+10;
+				servantObj.priority = PRIORITY_SYSTEM+20;
+				animationDoneTiming = timerCount;
+				break;
+			}
+			break;
+		
+		default:
+			master.doAnimation();
+			break;
+		}
+	}
+	
+	//--------------------------------------------------------------------------
+	// イベント進行
+	//--------------------------------------------------------------------------
+	function onEventFirst()
+	{
+		textObj.show();
+	}
+	
+	function onEventStart()
+	{
+		playerObj.animation = ANI_MASTER_STAND;
+		with( normalCamera )
+		{
+			.motionDestX = .x = playerObj.x;
+			.motionDestY = .y = playerObj.y;
+			.motionType = MOTIONTYPE_INVERCE;
+		}
+		textObj.write();
+	}
+	
+	function onEventLast()
+	{
+		switch( id )
+		{
+		case SCENE_QUIZ1:
+			next=SCENE_QUIZ1_NEXT;
+			break;
+		case SCENE_QUIZ2:
+			next=SCENE_QUIZ2_NEXT;
+			break;
+		case SCENE_QUIZ3:
+			switch( parentLayer.getCallType() )
+			{
+			case CALLTYPE_NORMAL:
+				next=SCENE_QUIZ3_NEXT;
+				break;
+			case CALLTYPE_ADV:
+				next=SCENE_QUIZ3_ADV_NEXT;
+				break;
+			}
+		}
+		return;
+	}
+	
+	function onEventPlaying()
+	{
+		if ( animationDoneTiming > 0 )
+			if ( animationDoneTiming+60 < timerCount )
+				eventSwitch = EVENTSWITCH_QUIZ_END;
+	}
+
+}
+

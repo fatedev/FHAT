@@ -1,0 +1,1628 @@
+/*-----------------------------------------------------------------------------/
+/	Copyright (C) 2004 TYPE-MOON All Rights Reserved.
+/		基本の、こいこいルーチン
+/-----------------------------------------------------------------------------*/
+@if(__KOIKOIROUTINE_DEFINED__==0)
+@set(__KOIKOIROUTINE_DEFINED__=1)
+
+class BasicKoikoiRoutine
+{
+	var parent;
+	var	game;
+	var limit;	//	得点下限
+
+	var 勝負判断パラメータ	= %[
+		相手があがる可能性:%[
+			札多し:-0.25,
+			札少なし:-0.5,
+			場にあり:0.5,
+			場に同月あり:0.25,
+			手元にあり:-0.5
+		],
+		あがる可能性の判断:0.75,
+	];
+	var 許容ダメージ= 8;
+	var	勝負点数	= 7;
+
+	function BasicKoikoiRoutine(par, koikoi, l=7)
+	{
+		parent	= par;
+		game	= koikoi;
+		limit	= l;
+	}
+
+	var 防御楽観度	= 0;
+	function def_optim(per)
+	{
+		if(per > 0)
+			return per * (100 - 防御楽観度) / 100;
+		else
+			return per * (防御楽観度 + 100) / 100;
+	}
+
+	//	手札を切る
+	function playTefuda()
+	{
+		with(game)
+		{
+			var aifuda	= .searchAifuda(.currentTefuda);
+			if(aifuda.count > 0)
+//				.playFuda(aifuda[0][1], aifuda[0][0]);	//	とりあえず、一番最初を出す
+				return [aifuda[0][1], aifuda[0][0]];
+			else
+//				.playFuda(0);	//	とりあえず、一番最初を捨てる
+				return [0];
+		}
+	}
+
+	//	持ち点比較をして、使用するかどうか決める(攻撃)
+	function comparePoint(player, comp=void, force=false)
+	{
+		with(game)
+		{
+			//	相手の持ち点
+			var opt	= .getRestPoint((player + 1) & 1);
+			//	手元の役を計算
+			var cpt	= .getCurrentYakuPoint(player);
+			//	リーチ役のなかで、上がれば勝てる役を見つける
+			var yakus	= .getLastOneYaku(player);
+			for(var i=0; i<yakus.count; i++)
+			{
+				var pt = .calcLastOneYakuPoint(player, yakus[i]) + cpt;	//	あがったときのポイント
+				pt	= .calcFinalPoint(pt, player);
+				var fs	= yakus[i][1];
+				var agarifuda	= %[];
+				for(var j=0; j<fs.count; j++)
+					agarifuda[fs[j]]	= true;
+				if(comp == void || comp(pt, opt))
+				{//	使用すれば勝てる状況であれば
+					var te	= .currentTefuda;
+					var ba	= .bafuda;
+					for(var j=0; j<te.count; j++)
+					{
+						//	手元に上がる札があり
+						if(agarifuda[te[j].no])
+						{
+							//	場に合わせる札がある
+							for(var k=0; k<ba.count; k++)
+							{
+								if(ba[k].month == te[j].month)
+									return [j, k];
+							}
+						}
+					}
+					//	場に上がる札があり、手元に合わせる札がある
+					for(var j=0; j<ba.count; j++)
+					{
+						if(agarifuda[ba[j].no])
+						{
+							for(var k=0; k<te.count; k++)
+							{
+								if(te[k].month == ba[j].month)
+									return [k, j];
+							}
+						}
+					}
+				}
+			}
+			return void;
+		}
+	}
+
+	//	持ち点を比較して、使用するかどうか決める(防御)
+	function comparePoint2(opp, comp=void)
+	{
+		with(game)
+		{
+			var opt = .getCurrentYakuPoint(opp);
+			var cpt	= .getRestPoint((opp + 1) & 1);
+			//	リーチ役をすべてチェック
+			var yakus	= .getLastOneYaku(opp);
+			for(var i=0; i<yakus.count; i++)
+			{
+				//	リーチ役の中で、あがると負けてしまう役がある
+				var pt = .calcLastOneYakuPoint(opp, yakus[i]) + opt;
+				pt	= .calcFinalPoint(pt, opp);
+				if(pt >= cpt && (comp == void || comp(pt, cpt)))
+				{
+					var fs	= yakus[i][1];
+					var agarifuda	= %[];
+					var cnt = fs.count;
+					for(var j=0; j<cnt; j++)
+						agarifuda[fs[j]]	= true;
+					//	手札のなかにあがり札が全てあるなら、相手はほぼあがれない
+					var te	= .currentTefuda();
+					for(var j=0; j<te.count; j++)
+						cnt-- if agarifuda[te[j].no];
+					if(cnt > 0)
+						return true;	//	手元に無い札があるので、あがられる可能性がある=使用する
+				}
+			}
+			return false;
+		}
+	}
+
+	//	札を置くとき(ターン開始時)の宝具使用判断
+	//	使うときは、何番のサーヴァントの何番の宝具を使うかを返す。
+	var usedTreasure;	//	そのターンに使った宝具
+	function useSpecialForPut()
+	{
+		usedTreasure	= "";
+		with(game)
+		{
+			var list = .availableTreasure();
+			for(var cnt=0; cnt<list.count; cnt++)
+			{
+				var t	= list[cnt];
+				if(!t[0])	continue;	//	使用できない宝具
+				if(.isValidTreasure(t[4]))	continue;	//	既に発動中
+
+				var mp	= .playerServant[.currentPlayer][t[1]][1];	//	現在のMP
+				var nmp	= .servant[t[3]][3][t[2]][3];	//	必要なMP
+				var mmp	= .servant[t[3]][0];			//	最大MP
+				var ret = [t[1], t[2]];
+				switch(t[4])
+				{
+				//	MP13まで貯まったら、インヴィジブルエアを使用する。
+				//	第1ラウンドではインヴィジブルエアを使用する。
+				case .invisible_air:
+					if(.round == 0 || (mp - nmp) >= mmp \ 2)
+					{
+						usedTreasure	= t[4];
+						return ret;	//	サーヴァント番号, 宝具番号
+					}
+					break;
+
+				//	ストックされている役と、テンパイしている役の合計*3が相手の持ち点以上で、
+				//	手元と場の札の組み合わせで役が完成するとき、エクスカリバーを使用する。
+				case .excalibur:
+					//	比較条件として「得られるポイントよりも相手の持ち点が多く、得られるポイントの3倍より相手の持ち点が少ない」を設定してチェック
+					var result = comparePoint(.currentPlayer, function(pt,opt){ return (pt < opt && pt * 3 >= opt); } incontextof this);
+					if(result != void)
+					{
+						usedTreasure	= t[4];
+						result.insert(0, t[1]);
+						result.insert(1, t[2]);
+						return result;
+					}
+					break;
+
+/*				//	相手の役の点数が致死的であり、あがる可能性がわずかでもあればアヴァロンを使用する。
+				case .avalon:
+					if(comparePoint2(.currentOpponent))
+					{
+						usedTreasure	= t[4];
+						return ret;
+					}
+*/				//	勝負時発動
+				case .avalon:
+					break;
+
+				//	相手に役札があり、MPが6まで貯まっているか、相手の役札の平均点が5を超えていたらゲイボルクを使用する。
+				case .geiborg:
+					var fudas = .opponentYakufuda, pt = 0;
+					if(fudas.count > 0)
+					{
+						if(mp > 6)
+						{
+							usedTreasure	= t[4];
+							return ret;
+						}
+						for(var i=0; i<fudas.count; i++)
+							pt	+= fudas[i].point;
+						pt	/= fudas.count;
+						if(pt > 5)
+						{
+							usedTreasure	= t[4];
+							return ret;
+						}
+					}
+					break;
+
+/*				//	赤短、赤短青短の重複が成立していて、勝利に+2文足りないときに使用する。
+				case .broken_fantasm:
+					var yakus	= .curYaku[.currentPlayer];
+					for(var i=0; i<yakus.count; i++)
+					{
+						if(yakus[i][0].indexOf("赤短")>=0)
+						{
+							var cpt	= .getCurrentYakuPoint(.currentPlayer);
+							var opt	= .getRestPoint(.currentOpponent);
+							var lpt = .calcFinalPoint(cpt, .currentPlayer);
+							var pt	= .calcFinalPoint(cpt + .broken_fantasm_point, .currentPlayer);
+							if(lpt < opt && pt >= opt)
+							{
+								usedTreasure	= t[4];
+								return ret;
+							}
+						}
+					}
+					break;
+*/
+/*				//	相手の役の点数が致死的であり、あがる可能性もあって、使えば負けないのであればローアイアスを使用する。
+				case .row_aias:
+					if(comparePoint2(.currentOpponent, function(pt, cpt){ return pt - game.row_aias_life < cpt; } incontextof this))
+					{
+						usedTreasure	= t[4];
+						return ret;
+					}
+*/				//	勝負時発動
+				case .row_aias:
+					break;
+
+				//	余裕が出来たら、使う
+				case .unlimited_blade_work:
+					if(mmp >= (nmp + (nmp>>1)))
+					{
+						usedTreasure	= t[4];
+						return ret;
+					}
+					break;
+
+				//	前半のうちにこいこいが出来たら、ブラッドフォートを使用する。
+				case .bradfort_andromeda:
+					if(.turn < 8 && ._koikoi[.currentPlayer])
+					{
+						usedTreasure	= t[4];
+						return ret;
+					}
+					break;
+
+				//	場にコウ札が2枚以上あり、2枚取れるのであれば石化する。
+				case .breaker_gorgon:
+					var kou = [];
+					var ba = .bafuda;
+					for(var i=0; i<ba.count; i++)
+					{
+						if(ba[i].point == 20 && ba[i].month != 11)
+							kou.add(ba[i]);
+					}
+					if(kou.count < 2)
+						break;
+					var te	= .currentTefuda, cnt = 0;
+					for(var i=0; i<kou.count; i++)
+					{
+						for(var j=0; j<te.count; j++)
+						{
+							if(te[j].month == kou[i].month)
+							{
+								cnt++;
+								break;
+							}
+						}
+					}
+					if(cnt >= 2)
+					{
+						usedTreasure	= t[4];
+						return ret;
+					}
+					break;
+
+				//	3文以上の役が出来ているのに最終ターンであるとき、足せば勝てそうなときに使用する。
+				case .berrehorn:
+					var cpt = .getCurrentYakuPoint(.currentPlayer);
+					var limit = .calcFinalPoint(3, .currentPlayer);
+					if(cpt >= limit && .turn \ 2 == 7)
+					{
+						usedTreasure	= t[4];
+						return ret;
+					}
+					var opt = .getRestPoint(.currentOpponent);
+					var pt = cpt + .berrehorn_point;
+					pt	= .calcFinalPoint(pt, .currentPlayer);
+					if(pt >= opt)
+					{
+						usedTreasure	= t[4];
+						return ret;
+					}
+					break;
+
+				//	カス札の枚数がkasulimitを超えたら、または使えば勝てそうなときにサバイブを使う
+				case .survive:
+					var fudas = .currentYakufuda;
+					var cnt;
+					var kasulimit	= 11;
+					for(var i=0; i<fudas.count; i++)
+						cnt++ if fudas[i].point == 1;
+					if(cnt >= kasulimit)
+					{
+						usedTreasure	= t[4];
+						return ret;
+					}
+					var cpt = .getCurrentYakuPoint(.currentPlayer);
+					var pt = cpt + cnt - 10;
+					pt	= .calcFinalPoint(pt, .currentPlayer);
+					var opt = .getRestPoint(.currentOpponent);
+					if(pt >= opt)
+					{
+						usedTreasure	= t[4];
+						return ret;
+					}
+					break;
+
+/*				//	相手の役札枚数が規定数を超えたら使う
+				case .rule_breaker:
+					var fudas = .opponentYakufuda;
+					if(fudas.count >= 18)	//	18枚以上
+						return ret;
+					break;
+*/				//	使わない
+				case .rule_breaker:
+					break;
+
+				//	常に使用状態
+				case .godhand:
+					break;
+
+				//	相手がタネ札を4枚以上持っていたら燕返しを使う
+				case .tsubamegaesi:
+					var fudas	= .opponentYakufuda, cnt;
+					for(var i=0; i<fudas.count; i++)
+						cnt++ if fudas[i].point == 10;
+					if(cnt >= 4)
+					{
+						usedTreasure	= t[4];
+						return ret;
+					}
+					break;
+
+				//	コウ札に出来そうなカス札があれば使用する
+				case .gate_of_babylon:
+					var fudas = .currentTefuda;
+					var kou = [];
+					for(var i=0; i<fudas.count; i++)
+					{
+						if(fudas[i].point == 20)
+							kou[fudas[i].month]	= true;
+					}
+					for(var i=0; i<fudas.count; i++)
+					{
+						//	カス札で、同月にコウ札があり、そのコウ札が手元にない
+						if(fudas[i].point == 1 && .札点数一覧[(fudas[i].month-1) * 4] == 20 && !kou[fudas[i].month])
+						{
+							usedTreasure	= t[4];
+							return ret;
+						}
+					}
+					break;
+
+				//	あがれそうなとき、使用する。
+				case .enuma_elish:
+					var result	= comparePoint(.currentPlayer);
+					if(result != void)
+					{
+						usedTreasure	= t[4];
+						result.insert(0, t[1]);
+						result.insert(1, t[2]);
+						return result;
+					}
+					break;
+
+/*				//	あがられると負けそうなとき、使用する。
+				case .maid_dragoon:
+					if(comparePoint2(.currentOpponent))
+					{
+						usedTreasure	= t[4];
+						return ret;
+					}
+*/				//	勝負時発動
+				case .maid_dragoon:
+					break;
+
+				//	勝てる役をテンパっていたら、使用する。
+				case .grass_origin:
+					if(comparePoint(.currentPlayer) != void)
+					{
+						usedTreasure	= t[4];
+						return ret;
+					}
+					break;
+				}
+			}
+		}
+		return void;
+	}
+
+	//	「勝負」されたときの宝具使用判断
+	function useSpecialForShoubu(user, treasurename, dmg, restpoint)
+	{
+		with(game)
+		{
+			var mhp	= .minimumpoint[(user+1)&1];
+			switch(treasurename)
+			{
+			case .avalon:
+				if(dmg >= restpoint)
+					return true;	//	使用することで負けが回避できるなら使用する
+				var rp = restpoint \ .avalon_power;
+				var idmg	= dmg > rp ? rp : dmg;
+				if(dmg - idmg >= (mhp \ 3))
+					return true;	//	使用することでのダメージ差が、最大HPの3分の1を超えるなら使用する
+				break;
+
+			case .row_aias:
+				if((dmg - game.row_aias_life) < restpoint)
+					return true;	//	使うことで負けを回避できるなら使用する
+				if(dmg > (mhp \ 2) || dmg >= .row_aias_life)
+					return true;	//	ダメージが最大HPの半分を超えるか、足が出るぐらいなら使用する
+				break;
+
+			case .maid_dragoon:
+				if(dmg >= restpoint)
+					return true;	//	使用することで負けが回避できるなら使用する
+				if(.倍返しあり)
+					return true;	//	こいこいで倍になるなら、使用する
+				//	次のターンにでもあがれそうなら、こいこいさせる
+				break;
+			}
+		}
+		return false;
+	}
+
+	//	得た札を切る
+	function playPick()
+	{
+//		game.playFuda();	//	一番最初の合札にあわせる。無い可能性もある。
+		return [];
+	}
+
+	//	札をツモったときの法具使用判断
+	function useSpecialForPick()
+	{
+		//	ツモったときは宝具使用不可
+		return 0;
+	}
+
+	//	勝負を掛けるか？
+	function playShoubu()
+	{
+		//	手札が無くなったらあがる
+		if(game.currentTefuda.count < 1)
+		{
+			dm("--- 手札が無いのであがる");
+			return true;
+		}
+
+		//	相手が上がりそうになったら「勝負」する
+		var leach, list, ba, yakulist;
+		with(game)
+		{
+			leach	= .getLastOneYaku(.currentOpponent);
+			list = .getPointList();	//	残っている札
+			ba	= .bafuda;
+			yakulist = .役一覧;
+		}
+		if(leach.count > 0)
+		{
+			var param = 勝負判断パラメータ.相手があがる可能性;
+			var lcnt = 0;
+			var yaku, sept = "";
+			var ted = %[], te = game.currentTefuda;
+			for(var i=0; i<te.count; i++)
+				ted[te[i]]	= true;
+			for(var i=0; i<leach.count; i++)
+			{
+				var needs	= leach[i][1], co = needs.count;
+				for(var j=0; j<needs.count; j++)
+				{
+					if(ted[needs[j]])
+					{//	相手が待っている札を自分が持っているなら、可能性を減らす
+						co--;
+					}
+					else
+					{
+						var mon = no2month(needs[j]);
+						var res = 0;
+						for(var k=0; k<4; k++)
+							res++ if list[num(mon, k)] > 0;
+						if(res > 2)
+							co	+= def_optim(param.札多し);	//	対象の札がたっぷり残っている
+						else
+						{
+							co	+= def_optim(param.札少なし);		//	対象の札は少ない
+							for(var k=0; k<ba.count; k++)
+							{
+								if(ba[k].no == needs[j])
+								{//	場に必要な札があったら、少なくても油断しない
+									co	+= def_optim(param.場にあり);
+									break;
+								}
+								else if(ba[k].month == mon)
+								{//	場に同じ月の札があったら、可能性が高まる
+									co	+= def_optim(param.場に同月あり);
+									break;
+								}
+							}
+							for(var k=0; k<te.count; k++)
+							{
+								if(te[k].month == mon)
+								{//	手元に同じ月の札があったら、可能性は低くなる
+									co	+= def_optim(param.手元にあり);
+									break;
+								}
+							}
+						}
+					}
+				}
+				var dmg = co * yakulist[leach[i][0]][2] + game.opponentPoint;// + (現在相手が持っている役のポイント);
+				dm(leach[i][0]+"の成立可能ポイント: "+co+"P / ダメージポイント: "+dmg+"P");
+				if(dmg >= allowanceDamage)
+				{//	ダメージが大きいものを数える
+					yaku	+= sept + leach[i][0], sept=",";
+					lcnt++;
+				}
+			}
+			if(lcnt > 0)
+			{//	相手がリーチしていて、自分の持っている札では防げないとき
+				dm("--- 相手がリーチ("+yaku+")しているので、あがる");
+				return true;
+			}
+		}
+
+		//	次にあがる前に終わりそうだったら勝負する
+		with(game)
+		{
+			var agariok	= 0, agaript = 0, ac = 0;
+			var yakus	= .decisionYaku(, true);
+			var te	= .currentTefuda;
+			var keys = [];
+			keys.assign(yakus);
+			for(var i=0; i<keys.count; i+=2)
+			{
+				var yaku = yakus[keys[i]];
+				if(typeof yaku[1] == "Integer")
+				{//	あがるのに必要な点札が手元にあるか？
+					var cnt = yaku[0];
+					for(var j=0; j<te.count; j++)
+					{
+						if(te[j].point == yaku[1])
+						{
+							cnt--;
+//							cnt -= 0.5 if yaku[1] == 1;	//	カス札なら、さらに可能性アップ
+						}
+					}
+					if(cnt < 1)
+						agariok++;	//	ほぼ確実にあがれる
+					else
+					{
+						//	必要な枚数より手札の残り数(残りターン数)が多ければ、あがる確率がある。
+						//	残っている札から取得確率を計算し、取れそうならあがれそう
+						var result = [];//	点札の残り枚数
+						var sum = 0;	//	残り枚数
+						for(var j=0; j<list.count; j++)
+						{
+							result[list[j]]++;
+							if(list[j] > 0)
+								sum++;
+						}
+						if(sum > 0)
+						{
+							var respite = te.count - yaku[0];
+							if(respite > 0)
+							{
+								agaript	+= respite * (result[yaku[1]] / sum);
+								ac++;
+							}
+						}
+					}
+				}
+				else
+				{//	あがるのに必要な札が手元にあるか？
+					var cnt = yaku[0];
+					for(var j=0; j<te.count; j++)
+					{
+						if(yaku[1][te[j].no])
+						{
+							cnt--;
+							delete yaku[1][te[j].no];
+						}
+					}
+					if(cnt < 1)
+						agariok++;	//	ほぼ確実にあがれる
+					else
+					{
+						//	必要な枚数より手札の残り数(残りターン数)が多ければ、あがる確率がある。
+						var respite = te.count - yaku[0];
+						if(respite > 0)
+						{
+							agaript	+= respite * 0.05;	//	特定の札が必要な場合は低い
+							ac++;
+						}
+					}
+				}
+			}
+			if(ac > 0)
+				agariok	+= agaript / ac;
+			dm("--- 残りあがり確率: "+(agariok * 100)+"%");
+			if(agariok < def_optim(勝負判断パラメータ.あがる可能性の判断))
+			{
+				dm("--- 続けてもあがれなさそうなので、あがる");
+				return true;	//	あがれなさそうなので勝負する
+			}
+		}
+
+		with(game)
+		{
+			var plpt	= .playerpoint[.currentPlayer];
+			var oppt	= .playerpoint[.currentOpponent];
+			var plres	= .minimumpoint[.currentPlayer] - oppt;
+			var opres	= .minimumpoint[.currentOpponent] - plpt;
+
+			//	あがれば勝てるなら「勝負」する
+//			if(.currentPoint + plpt >= .minimumpoint[.currentOpponent])
+			var rest	= .getRestPoint(.currentOpponent);	//	相手の持ち点
+			if(.currentPoint >= rest)
+			{
+				return 3;
+			}
+
+			//	特定の宝具が発動していたら「勝負」する
+			var ex = .isValidTreasure(.excalibur, .currentPlayer);	//	エクスカリバー
+			var en = .isValidTreasure(.enuma_elish, .currentPlayer);//	エヌマ･エリシュ
+//			dm("エクスカリバー使用: "+ex+" / エヌマ･エリシュ使用: "+en);
+			if(ex || en)
+				return true;
+
+			//	残ターン数が少なくなれば、ハードルが下がる
+			var down	= 1.0;
+			if(game.tefuda[.currentPlayer].count <= 3)
+				down	= 0.45 + 0.15 * game.tefuda[.currentPlayer].count;
+
+			//	自分と相手の持ち点を比べて、勝負するかを決める
+			if(.７文倍掛けあり)
+			{//	7文倍があれば、7文が一応の目標となる。
+				return (.currentPoint >= int(勝負点数 * down));
+			}
+			else
+			{//	純粋に性質的なもの
+				//	勝ってる？負けてる？
+				var div = plres - opres;	//	持ち点差
+				if(div >= (opres >> 1))
+				{//	勝っているとき
+					return (.currentPoint >= int(opres * (勝負点数[1] + 0.1) * down));
+				}
+				else if(div <= -(plres>>1))
+				{
+					return (.currentPoint >= int(opres * (勝負点数[2] - 0.0) * down));
+				}
+				else
+				{//	通常時の判断
+					return (.currentPoint >= int(opres * 勝負点数[0] * down));
+				}
+			}
+		}
+		//	特に今上がる必要がない
+		return false;
+	}
+
+	property allowanceDamage
+	{
+		getter	{ return 許容ダメージ; }
+	}
+}
+
+//	特定の点札を集めるルーチン
+class PointGetter extends BasicKoikoiRoutine
+{
+	var point;	//	点札(20, 10, 5, 1)
+
+	function PointGetter(par, k, l, p=5)
+	{
+		super.BasicKoikoiRoutine(...);
+
+		point	= p;
+	}
+
+	function playTefuda()
+	{
+		with(game)
+		{
+			var ba	= .bafuda;
+			var te	= .currentTefuda;
+
+			//	場にある指定ポイントの札を探す
+			for(var i=0; i<ba.count; i++)
+			{
+				if(ba[i].point == point)
+				{
+					//	指定のポイントの場札
+					dm(i+"番目の場札が"+point+"文の札");
+					var mon	= ba[i].month;
+					var no = -1;
+					for(var j=0; j<te.count; j++)
+					{
+						if(te[j].month == mon && te[j].no != .雨番号)	//	雨は避ける
+						{//	場札に合う手札
+							dm(j+"番目の手札が合う");
+							no	= j;
+							if(te[j].point == point)
+							{
+								//	更に、ポイントも合えば完璧
+								break;
+							}
+						}
+					}
+					if(no >= 0)
+					{
+						dm("--- 場札から指定点の札を得る");
+						return [no, i];
+					}
+				}
+			}
+
+			//	場に指定ポイントの札が無いときは、手札から探す
+			for(var i=0; i<te.count; i++)
+			{
+				if(te[i].point == point)
+				{
+					dm(i+"番目の手札が"+point+"文の札");
+					var mon	= te[i].month;
+					var j;
+					for(j=0; j<ba.count; j++)
+					{
+						if(ba[j].month == mon && ba[j].no != .雨番号)	//	雨は避ける
+						{
+							dm(j+"番目の場札が合う");
+							dm("--- 手札から指定点の札を得る");
+							return [i, j];
+						}
+					}
+				}
+			}
+
+			//	どちらにも無いときは、合札のなかで指定ポイントの札を得る確率の低い札を出す
+			var list	= .getPointList();	//	札の点数一覧を取得(既に取られている札は0文)
+			var aifudas	= .searchAifuda(.currentTefuda);
+			if(aifudas.count > 0)
+			{
+				var rankmax = 0;
+				var aino = -1;
+				for(var i=0; i<aifudas.count; i++)
+				{
+					var te = .currentTefuda[aifudas[i][1]];
+					var rank	= 0;
+					rank	+= 4 if te.point != point;	//	手札のポイントが指定のポイントでない(4P)
+					for(var j=0; j<4; j++)
+					{
+						if(list[num(te.month, j)] == point)
+							rank--;	//	手札の月に指定のポイントの札が含まれている(-1P)
+					}
+					if(rankmax < rank && te.no != .雨番号)	//	雨は避ける
+					{
+						aino	= i;
+						rankmax	= rank;
+					}
+				}
+				dm("--- 確率の低い合札を出す");
+				if(aino >= 0)
+				{
+					return [ aifudas[aino][1], aifudas[aino][0] ];
+				}
+			}
+
+			//	合札が見つからないときは、手札の中で指定ポイントの札を得る確率が低い札を出す
+			var rankmax = 0;
+			var teno = 0;
+			var leach = .getLastOneYaku(.currentOpponent, 2);	//	相手の目指す役(あと2枚以下の役)
+			var want = %[];		//	相手の欲しい札
+			for(var i=0; i<leach.count; i++)
+			{
+				var fudas = leach[i][1];
+				for(var j=0; j<fudas.count; j++)
+					want[fudas[j]]	= true;
+			}
+			for(var i=0; i<te.count; i++)
+			{
+				var rank	= 0;
+				rank	+= 4 if te[i].point != point;
+				for(var j=0; j<4; j++)
+				{
+					if(list[num(te[i].month, j)] == point)
+						rank--;
+				}
+
+				//	相手の待ち札を捨てないように。
+				if(want[te[i].no])
+					rank	-= 4;
+				else if(point != 20 && te[i].no == .雨番号)
+					rank	+= 2;	//	なるべく雨を捨てる
+
+				if(rankmax < rank)
+				{
+					teno	= i;
+					rankmax	= rank;
+				}
+			}
+			dm("--- 確率の低い捨て札をする");
+			return [teno];
+		}
+	}
+
+	function playPick()
+	{
+		with(game)
+		{
+			//	場札の指定ポイントの札で、引いた札にあわせられるものを探す
+			var ba	= .bafuda;
+			var bano= -1;
+			for(var i=0; i<ba.count; i++)
+			{
+				if(ba[i].month == .turnup.month)
+				{
+					if(ba[i].point == point)
+					{
+						dm("--- 指定点の札を見つけた");
+						return [void, i];	//	ポイントがあっているなら、それにあわせる
+					}
+					bano	= i;	//	あわせられるもの
+				}
+			}
+			if(bano >= 0)
+				return [void, bano];	//	一応あわせられる札
+			else
+				return [];	//	どれにもあわせられなかった
+		}
+	}
+}
+
+class ConfirmLayer extends Layer
+{
+	var bgcolor		= 0xFF000000;
+	var textcolor	= 0xFFFFFF;
+
+	var margin		= 8;
+	var linespacing	= 2;
+
+	var mode;
+
+	var yesfunc;
+	var nofunc;
+
+	function ConfirmLayer(win, par, fh=16)
+	{
+		super.Layer(...);
+		font.height	= fh;
+	}
+
+	function finalize()
+	{
+		super.finalize(...);
+	}
+
+	function setPosToRB()
+	{
+		var l	= parent.width - width - margin;
+		var t	= parent.height - height - margin;
+		setPos(l, t);
+	}
+
+	function message(msg, l, t)
+	{
+		var lines;
+		if(typeof msg == "String")
+			lines	= msg.split("\n");
+		else if(typeof msg == "Object")
+			lines	= msg;
+		else
+			return;
+
+		var mw = -1, fw;
+		for(var i=0; i<lines.count; i++)
+			if((fw = font.getTextWidth(lines[i])) > mw) mw = fw;
+		var fh	= font.getTextHeight(lines[0]) + linespacing;
+		var mh	= lines.count * fh - linespacing;
+
+		mw	+= margin * 2, mh += margin * 2;
+		setSize(mw, mh);
+		fillRect(0, 0, mw, mh, bgcolor);
+
+		var fl = margin, ft = margin;
+		for(var i=0; i<lines.count; i++)
+		{
+			drawText(fl, ft, lines[i], textcolor);
+			ft	+= fh;
+		}
+
+		mode	= "message";
+		visible	= true;
+
+		if(l === void || t === void)
+			setPosToRB();
+		else
+			setPos(l, t);
+	}
+
+	function confirm(msg, conf, yf, nf, l, t)
+	{
+		var lines;
+		if(typeof msg == "String")
+			lines	= msg.split("\n");
+		else if(typeof msg == "Object")
+			lines	= msg;
+		else
+			return;
+
+		lines.add("");
+		lines.add(conf);
+		lines.add("(はい → 左クリック / いいえ → 右クリック)");
+
+		message(lines, l, t);
+
+		if(l === void || t === void)
+			setPosToRB();
+		else
+			setPos(l, t);
+
+		mode	= "confirm";
+		yesfunc	= yf;
+		nofunc	= nf;
+	}
+
+	function onMouseDown(x, y, button, shift)
+	{
+		switch(mode)
+		{
+		case "confirm":
+			if(button == mbLeft)
+				yesfunc() if yesfunc !== void;
+			else if(button == mbRight)
+				nofunc() if nofunc !== void;
+		case "message":
+			visible	= false;
+			break;
+		}
+	}
+}
+
+class Player extends BasicKoikoiRoutine
+{
+	var confirmlayer;
+	var state;
+
+	var choiced	= [];
+
+	function Player(par, g, l)
+	{
+		super.BasicKoikoiRoutine(...);
+		confirmlayer = new ConfirmLayer(par.window, par);
+	}
+
+	function finalize()
+	{
+		release(confirmlayer);
+		super.finalize(...);
+	}
+
+	function chooseShoubu()
+	{
+		choiced[0]	= true;
+		parent.process();
+		state++;
+	}
+
+	function chooseKoikoi()
+	{
+		choiced[0]	= false;
+		parent.process();
+		state++;
+	}
+
+	function playShoubu()
+	{
+		switch(state)
+		{
+		case 0:	//	出来た役を表示して、あがるかどうかを決定させる
+			var lines	= [];
+			with(game)
+				parent.makeYakuText(.curPoint[.currentPlayer], .curYaku[.currentPlayer], lines);
+			confirmlayer.confirm(lines, "勝負しますか？", chooseShoubu, chooseKoikoi);
+			state++;
+		case 1:
+			return void;
+
+		case 2:
+			state	= 0;
+			break;
+		}
+		return choiced[0];
+	}
+
+	//	手札を選んだ
+	function choiceTefuda(no)
+	{
+		var te = game.currentTefuda;
+		for(var i=0; i<te.count; i++)
+			choiced[0]	= i if te[i].no == no;
+
+		parent.process();	//	次へ進む
+		state++;
+	}
+
+	//	場札を選んだ
+	function choiceBafuda(no)
+	{
+		var ba = game.bafuda;
+		for(var i=0; i<ba.count; i++)
+			choiced[1]	= i if ba[i].no == no;
+
+		parent.process();	//	次へ進む
+		state++;
+	}
+
+	function playTefuda()
+	{
+		switch(state)
+		{
+		case 0:	//	1回目、合札にマークをつけ、手札を選べるようにして終了
+			with(parent)
+			{
+				.changeTefuda(, true, choiceTefuda);
+				var ai = game.searchAifuda();
+				.changeTeba(ai,, true);
+			}
+			state++;
+		case 1:	//	待ち中
+			return void;
+
+		case 2:	//	2回目、場札の合札にマークをつけ、選べるようにして終了
+			var te, ba, ai;
+			var cards = parent.cards;
+			with(game)
+			{
+				te	= .currentTefuda;
+				ba = .bafuda;
+				ai	= .searchAifuda([te[choiced[0]]]);
+			}
+			parent.restoreFuda();	//	一度、すべてを解除
+			if(ai.count > 1)
+			{//	あわせる札を指定する必要があるとき
+				for(var i=0; i<ai.count; i++)
+				{
+					with(cards[ba[ai[i][0]].no])
+					{
+						.selectok	= true;
+						.selectfunc	= choiceBafuda;
+						.prior		= true;
+					}
+				}
+				cards[te[choiced[0]].no].prior	= true;
+				state++;
+			}
+			else
+			{
+				if(ai.count == 0)
+				{//	札を捨てるとき
+					choiced[1]	= void;
+				}
+				else
+				{//	一対一で対応しているとき
+					choiced[1]	= ai[0][0];
+				}
+				state	= 0;
+				return choiced;
+			}
+		case 3:	//	待ち中
+			return void;
+
+		case 4:	//	3回目、手札と場札を返す
+			//	札を元に戻しておく
+			parent.restoreFuda();
+			state	= 0;
+			break;
+		}
+		return choiced;
+	}
+
+	function playPick()
+	{
+		switch(state)
+		{
+		case 0:	//	1回目、場の合札にマークをつけ、選べるようにして終了
+			var ai, ba;
+			var cards = parent.cards;
+			choiced[0]	= void;
+			with(game)
+			{
+				ai	= .searchAifuda([.turnup]);
+				ba	= .bafuda;
+			}
+			if(ai.count > 1)
+			{
+				for(var i=0; i<ai.count; i++)
+				{
+					with(cards[ba[ai[i][0]].no])
+					{
+						.selectok	= true;
+						.selectfunc	= choiceBafuda;
+						.prior		= true;
+					}
+				}
+				cards[game.turnup.no].prior	= true;
+			}
+			else
+			{
+				if(ai.count == 0)
+					choiced[1]	= void;
+				else
+					choiced[1]	= ai[0][0];
+				state	= 0;
+				return choiced;
+			}
+			state++;
+		case 1:
+			return void;
+
+		case 2:	//	2回目、選ばれた場札を返す
+			with(parent)
+			{
+				.restoreFuda();
+				.cards[game.turnup.no].prior	= false;
+			}
+			state	= 0;
+			break;
+		}
+		return choiced;
+	}
+}
+
+class StrengthenKoikoiRoutine extends BasicKoikoiRoutine
+{
+	var achievementRatio= [];
+	var targetFudas		= [];
+
+	var	役嗜好	= %[
+		//	小さい役は好まない
+		"カス"	=> 0.5,
+		"タン"	=> 0.6,
+		"タネ"	=> 0.6,
+	];
+
+	var priority	= %[];
+	//	札自体の優先度
+	var	base_priority	= %[
+		num(3, 0) => 15,	//	五光
+		num(8, 0) => 15,
+		num(1, 0) => 15,
+		num(12,0) => 15,
+		num(11,0) => 15,
+		num(7, 0) => 10,	//	猪鹿蝶
+		num(6, 0) => 10,
+		num(10,0) => 10,
+		num(1, 1) => 10,	//	赤短
+		num(2, 1) => 10,
+		num(3, 1) => 10,
+		num(6, 1) => 10,	//	青短
+		num(9, 1) => 10,
+		num(10,1) => 10
+	];
+	//	ルールに基づく札の優先度
+	var rule2priority	= [
+		"酒あり", [ num(9, 0), 30, num(3, 0), 20, num(8, 0), 20 ],	//	月見酒、花見酒
+		"雨流れあり", [ num(11,0), -50 ],	//	「小野道風にカエル」を回避
+		"雨四光あり", [ num(11,0), 20 ]
+	];
+	var point_priority	= %[
+		10 => 5, 5 => 5, 1 => 0
+	];
+	var choice_priority	= 0;	//	値が大きくなるに従い、優先度の低い札を取るようになる(-1ならランダム)
+
+	function StrengthenKoikoiRoutine(par, koikoi, l, cp)
+	{
+		super.BasicKoikoiRoutine(...);
+		choice_priority	= cp;
+		dm("札選択揺れ度: "+cp+"(0が最も良い)");
+		updatePriority();
+	}
+
+	var 攻撃楽観度 = 0;	//	-20〜20ぐらい
+	function ofc_optim(per)
+	{
+		per	+= 攻撃楽観度;
+		return per > 100 ? 100 : (per < 0 ? 0 : per);
+	}
+
+	function effectOnAchievement(yakuname, per)
+	{
+		if(役嗜好[yakuname])
+			return 役嗜好[yakuname] * per;
+		else
+			return per;
+	}
+
+	//	ルールに沿って、優先度を変更する
+	function updatePriority()
+	{
+		(Dictionary.clear incontextof priority)();
+		(Dictionary.assign incontextof priority)(base_priority);
+		var r2p = rule2priority;
+		for(var i=0; i<r2p.count; i+=2)
+		{
+			if(game[r2p[i]])
+			{
+				for(var j=0; j<r2p[i+1].count; j+=2)
+					priority[r2p[i+1][j]]	+= r2p[i+1][j+1];
+			}
+		}
+	}
+
+	//	札自身の優先度を取得
+	function getFudaPriority(no)
+	{
+		if(priority[no])
+			return priority[no];
+		else
+			return point_priority[game.札点数一覧[no]];
+	}
+
+	//	現状での役達成率を計算
+	function updateAchievementRatio()
+	{
+		var keys, yakus, te, ba, player, opponent, all;
+		var te_month = %[], ba_month = %[], yaku_month;
+		var list;
+		with(game)
+		{
+//			keys	= .役チェック順;	//	全ての役
+			keys	= .getValidYakuNames(.currentPlayer);	//	現在そのプレイヤーに有効な役(宝具で無効にされた役は含まない)
+			yakus	= .役一覧;
+			te		= .currentTefuda;
+			ba		= .bafuda;
+			player	= .currentPlayer;
+			opponent= .currentOpponent;
+			all		= .allfuda;
+			list	= .札点数一覧;
+
+			//	手札、場札、役札にある各月の枚数
+			for(var i=0; i<te.count; i++)
+				te_month[te[i].month]++;
+			for(var i=0; i<ba.count; i++)
+				ba_month[ba[i].month]++;
+			yaku_month	= .existMonthInYakufuda();
+		}
+		achievementRatio.clear();
+
+		var targets	= [];
+		for(var i=0; i<keys.count; i++)
+		{
+			var name	= keys[i];
+			var yaku	= yakus[name];
+			if(yaku == void)
+				continue;	//	無効な役なので次へ
+			var pers	= [];	//	確率の集合
+			var need_cnt			= yaku[0];	//	必要な枚数
+			var target_cnt			= 0;	//	対象となる札の数
+			var unobtainable_cnt	= 0;	//	手に入らない札の数
+
+			//	その札が必要かを判定する辞書配列
+			var fudacnt	= list.count;
+			var isNeed;
+			if(typeof yaku[1] == "Integer")
+			{
+				isNeed	= %[];
+				for(var i=0; i<fudacnt; i++)
+					isNeed[i]	= true if list[i] == yaku[1];
+			}
+			else
+				isNeed	= yaku[1];
+
+			//	すべての札に関して、獲得確率を調べる
+			var gets	= [];
+			for(var j=0; j<fudacnt; j++)
+			{
+				if(!isNeed[j])
+					continue;	//	次の札へ
+				target_cnt++;
+
+				//	現在の札の状態によって分岐
+				var per;
+				with(all[j])
+				{
+					switch(.place)
+					{
+					case 1:	//	場札で、
+						var mcnt = te_month[.month];
+						if(mcnt > 0)
+						{
+							if(yaku_month[.month] > 0)
+								per = ofc_optim(100);	//	手元に合札があり、いずれかの役札に同月の札があるもの
+							else if(ba_month[.month] > 2)
+								per = ofc_optim(100);	//	手元に合札があり、場にある同月札が3枚あるもの
+							else if(mcnt > 1)
+								per = ofc_optim(60);	//	手元に合札が2枚あるもの
+							else
+								per = ofc_optim(50);	//	手元に合札が1枚あるもの
+							gets.add([j, per]);	//	取得できそう
+//							dm("ターゲット: "+(j\4+1)+"月"+(j%4+1)+"番目 確率: "+per);
+						}
+						else
+							per = ofc_optim(20);	//	手元に合札がないもの
+						break;
+
+					case (2 + player):	//	手札で、
+						var mcnt = ba_month[.month];
+						if(mcnt > 0)
+						{
+							if(yaku_month[.month] > 0)
+								per = ofc_optim(100);	//	場に合札があり、いずれかの役札に同月の札があるもの
+							else if(mcnt > 2)
+								per = ofc_optim(100);	//	場に合札が3枚あるもの
+							else if(mcnt > 1)
+								per = ofc_optim(90);	//	場に合札が2枚あるもの
+							else
+								per = ofc_optim(75);	//	場に合札が1枚あるもの
+							gets.add([j, per]);	//	取得できそう
+//							dm("ターゲット: "+(j\4+1)+"月"+(j%4+1)+"番目 確率: "+per);
+						}
+						else
+							per = ofc_optim(50);	//	場に合札がないもの
+						break;
+
+					case (4 + player):	//	自分の役札
+						per = ofc_optim(100);
+						break;
+
+					case (4 + opponent)://	相手の役札
+						per = ofc_optim(0);
+						unobtainable_cnt++;
+						break;
+
+					case 0:		//	場札、自分の手札、役札以外
+					case (2 + opponent):
+						var mcnt = te_month[.month];
+						if(mcnt > 0)
+						{
+							if(mcnt > 1)
+								per = ofc_optim(50);	//	手元に合札が2枚あるもの
+							else
+								per = ofc_optim(40);	//	手元に合札が1枚あるもの
+//							gets.add([j, per]);	//	取得できそう？？？
+						}
+						else
+							per = ofc_optim(10);	//	手元に合札がないもの
+						break;
+					}
+					pers.add(per);
+				}
+//				dm(name+": "+(j \ 4 + 1)+"月の"+(j % 4 + 1)+"番目の札("+list[j]+"文) / 場所: "+all[j].placename+" / 獲得可能性: "+per);
+			}
+			if(target_cnt - unobtainable_cnt >= need_cnt)
+			{
+				pers.sort("-", false);	//	降順で並び替え
+				var per	= 0;
+				for(var j=0; j<need_cnt; j++)
+					per	+= pers[j];
+				per	/= need_cnt;	//	達成率
+				if(per < 100)
+				{//	100%以下の役のみ
+					per	= effectOnAchievement(name, per);	//	役によって達成率に偏向を加える
+					achievementRatio.add([name, per]);	//	役名、達成率、取るべき札
+					targets.add([per, gets]);			//	狙っている札のリスト
+				}
+			}
+			else
+				achievementRatio.add([name, 0]);	//	達成率 0%
+		}
+
+		//	並び替え(達成率順)
+		achievementRatio.sort(function(a,b) { return a[1] > b[1]; });
+
+		//	狙う札のリストを更新
+		var tmp = %[];
+		for(var i=0; i<targets.count; i++)
+		{
+			var per	= targets[i][0];
+			var gets= targets[i][1];
+
+			for(var j=0; j<gets.count; j++)
+			{
+				//	より達成率の高い役のより入手困難な札から取っていく
+				//	更に、札による優先度を加える
+				var no = gets[j][0];
+				var pg = per + (100 - gets[j][1]) * 0.5 + getFudaPriority(no);
+				tmp[no] = pg if pg > tmp[no];
+//				dm((no \ 4 + 1)+"月の"+(no % 4 + 1)+"番目の札("+per+"+"+gets[j][1]+"+"+getFudaPriority(no)+"P)");
+//				targetFudas.add([j, pg]);
+			}
+		}
+		var tf = targetFudas;
+		tf.clear();
+		var tmp2 = [];
+		tmp2.assign(tmp);
+		for(var i=0; i<tmp2.count; i+=2)
+			tf.add([tmp2[i], tmp2[i+1]]);
+		tf.sort(function(a, b) { return a[1] > b[1]; });	//	並び替え(優先度順)
+
+		//	状態表示
+		for(var i=0; i<achievementRatio.count; i++)
+		{
+			var rank	= achievementRatio[i];
+			if(rank[1] < 1)
+				break;
+			dm((i+1)+"位: "+rank[0]+"("+rank[1]+"%)");
+		}
+		for(var i=0; i<tf.count; i++)
+		{
+			var rank	= tf[i];
+			dm((i+1)+"位: "+(rank[0] \ 4 + 1)+"月の"+(rank[0] % 4 + 1)+"番目の札("+rank[1]+"P)");
+		}
+	}
+
+	//	手札を切る
+	function playTefuda()
+	{
+		//	グラス・オリジンを使ったときで、山の一番上に有る札と同月の札が場になく、手札の中に同月の札が有る場合
+		//	その札を出す
+		with(game)
+		{
+			if(usedTreasure == .grass_origin)
+			{
+				var	top	= .yamafuda[0];
+				var	ba	= .bafuda;
+				var	exist	= false;
+				for(var i=0; i<ba.count; i++)
+				{
+					if(ba[i].month == top.month)
+					{
+						exist	= true;
+						break;
+					}
+				}
+				if(!exist)
+				{
+					var	te	= .tefuda[.currentPlayer];
+					for(var i=0; i<te.count; i++)
+					{
+						if(te[i].month == top.month)
+							return [ i ];
+					}
+				}
+			}
+		}
+
+		//	役の達成率を計算
+		updateAchievementRatio();
+		var te, ba, ted = %[], bad = %[], teai = %[], baai = %[];
+		with(game)
+			te = .currentTefuda, ba = .bafuda;
+
+		//	指定番号の札がどこにあるか
+		var tf = targetFudas;
+		for(var i=0; i<te.count; i++)
+		{
+			var tno = te[i].no;
+			ted[tno]	= i;
+			for(var j=0; j<ba.count; j++)
+			{
+				if(te[i].month == ba[j].month)
+				{
+					teai[tno] = [] if teai[tno] == void;
+					teai[tno].add(j);
+				}
+			}
+		}
+		for(var i=0; i<ba.count; i++)
+		{
+			var bno = ba[i].no;
+			bad[bno]	= i;
+			for(var j=0; j<te.count; j++)
+			{
+				if(ba[i].month == te[j].month)
+				{
+					baai[bno] = [] if baai[bno] == void;
+					baai[bno].add(j);
+				}
+			}
+		}
+
+		//	優先度の高い札から、取れるものを探してとっていく
+		var cp	= choice_priority;
+		if(cp < 0)
+			cp	= int(tf.count * game.rg.random());
+		if(cp >= tf.count)
+			cp	= tf.count - 1;
+		if(cp < 0)
+			cp	= 0;
+		for(var i=cp; i<tf.count; i++)
+		{
+			var target	= tf[i];
+			var num;
+			var ai, bt;
+			if((num = ted[target[0]]) !== void)
+				ai	= teai, bt = ba;	//	この札は手札にある
+			else if((num = bad[target[0]]) !== void)
+				ai	= baai, bt = te;	//	この札は場札にある
+			else
+				continue;	//	どちらにも無い
+
+			var fuda = ai[target[0]];	//	この札にあわせることが出来る札の一覧
+			dm((target[0] \ 4 + 1)+"月の"+(target[0] % 4 + 1)+"番目の札("+(ai==teai?"手札":"場札")+"の"+num+"番目)の合札をチェック");
+			if(fuda)
+			{
+				//	あわせる札のうち、優先度の高いほうを得る
+				var rank = 1000, no = fuda[0];
+				for(var j=0; j<fuda.count; j++)
+				{
+					for(var k=0; k<tf.count; k++)
+					{
+						if(bt[fuda[j]].no == tf[k][0] && rank > k)
+						{
+							no		= fuda[j];
+							rank	= k;
+						}
+					}
+				}
+
+				//	取れる札を優先度リストから削除
+				if(rank < 1000)
+				{
+					if(i < rank)
+					{
+						tf.erase(rank);
+						tf.erase(i);
+					}
+					else
+					{
+						tf.erase(i);
+						tf.erase(rank);
+					}
+				}
+				else
+					tf.erase(i);
+
+				//	取る札を返す
+				var play;
+				if(ai == teai)
+					play	= [num, no];
+				else
+					play	= [no, num];
+				dm("場札の"+play[1]+"番目と手札の"+play[0]+"番目をあわせる");
+				return play;
+			}
+		}
+
+		//	取れる札がなかったので、優先度の高い札を取ることができる札を残す
+		var trg = [];
+		for(var i=0; i<tf.count; i++)
+			trg[tf[i][0]]	+= tf[i][1];
+		var minach	= 1000000, no	= 0;
+		for(var i=0; i<te.count; i++)
+		{
+			var tno	= te[i].no;
+			if(trg[tno] < minach)
+			{
+				no	= i;
+				minach	= trg[tno];
+			}
+		}
+		return [no];
+	}
+
+	function playPick()
+	{
+		//	得た札で取れる場札で、最も優先度の高い札を探す
+		var tf = targetFudas;
+		var mon, all, ba;
+		with(game)
+			mon = .turnup.month, all = .allfuda, ba = .bafuda;
+		var ib = [];
+		for(var i=0; i<ba.count; i++)
+			ib[ba[i].no]	= i;
+		for(var i=0; i<tf.count; i++)
+		{
+			var no = tf[i][0];
+			if(all[no].month == mon && ib[no] !== void)
+				return [void, ib[no]];
+		}
+		return [];	//	取れなかったので捨てる
+	}
+
+	function playShoubu()
+	{
+		return super.playShoubu(...);
+	}
+}
+
+@endif
+/*-----------------------------------------------------------------------------/
+/	End of KoikoiRoutines.tjs
+/-----------------------------------------------------------------------------*/

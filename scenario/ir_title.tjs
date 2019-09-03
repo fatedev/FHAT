@@ -1,0 +1,1963 @@
+/*******************************************************************************
+
+	風雲イリヤ城 - タイトル
+
+*******************************************************************************/
+
+
+
+Scripts.execStorage( "ir_option_menu.tjs" );
+
+Scripts.execStorage( "ir_gsys_cg.tjs" );
+
+
+// レイヤ情報
+var	IR_TITLE_LAYER_FADE			=0;	// タイトルフェードレイヤ
+
+var	IR_TITLE_LAYER_ITEM_VIEWER		=-(40);	// チュートリアルアイテムビューアー
+var	IR_TITLE_LAYER_TUTORIAL			=-(50);	// チュートリアル
+var	IR_TITLE_LAYER_TUTORIAL_SELECT	=-(60);	// チュートリアルセレクトメニュー
+
+var	IR_TITLE_LAYER_START_SELECT	=-(70);	// 
+
+var	IR_TITLE_LAYER_LOGO_SUB		=-(80);	// タイトルロゴ(サブ)
+var	IR_TITLE_LAYER_LOGO_MAIN	=-(81);	// タイトルロゴ(メイン)
+var	IR_TITLE_LAYER_LOGO_TM		=-(82);	// タイトルロゴ(TM)
+var	IR_TITLE_LAYER_SUB_TITLE	=-(85);	// サブタイトル
+var	IR_TITLE_LAYER_COPYRIGHT	=-(86);	// コピーライト
+
+
+var	IR_TITLE_LAYER_MENU_CURSOR	=-(90);	// メニューカーソル
+var	IR_TITLE_LAYER_MENU			=-(91);	// メニュー項目
+
+
+var	IR_TITLE_LAYER_BG_CASTLE	=-(100);	// 背景(城)
+var	IR_TITLE_LAYER_BG_THUNDER	=-(105);	// 背景(雷)
+var	IR_TITLE_LAYER_BG_BACK		=-(110);	// 背景(ベース)
+
+
+// 表示位置
+// +---ロゴサブ表示Y位置
+	var	IR_TITLE_LOGO_SUB_PRN_X		=56;
+	var	IR_TITLE_LOGO_SUB_PRN_Y		=48;
+// +---ロゴ表示位置
+	var	IR_TITLE_LOGO_PRN_Y			=48;
+// +---TM表示位置
+	var	IR_TITLE_LOGO_TM_PRN_X		=600;
+	var	IR_TITLE_LOGO_TM_PRN_Y		=48;
+// +---サブタイトル表示位置
+	var	IR_TITLE_SUB_TITLE_PRN_X	=352;
+	var	IR_TITLE_SUB_TITLE_PRN_Y	=312;
+// +---コピーライト表示位置
+	var	IR_TITLE_COPYRIGHT_PRN_X	=352;
+	var	IR_TITLE_COPYRIGHT_PRN_Y	=556;
+
+// +---メニュー表示位置
+	var	IR_TITLE_MENU_PRN_Y			=386;
+
+
+
+
+
+Scripts.execStorage( "ir_title_stageselect.tjs" );
+Scripts.execStorage( "ir_title_resultview.tjs" );
+
+
+
+
+
+class CIrTitleStartMenu
+{
+var		parWin,parLayer;
+
+	function CIrTitleStartMenu( _pr_win, _pr_layer )
+	{
+		parWin   = _pr_win;
+		parLayer = _pr_layer;
+		init_buffer();
+	}
+	function finalize()
+	{
+		Release();
+	}
+
+	var		MODE_NORMAL	=10;
+	var		MODE_END	=20;
+
+	var		MENU_NONE			=-1;
+	var		MENU_NORMAL			=0;
+	var		MENU_AUTO			=1;
+	var		MENU_STAGESELECT	=2;
+	var		MAX_MENU			=3;
+	var		MENU_CANCEL			=MAX_MENU;
+
+
+
+	var		MENU_CURSOR_SIZE_U=4;
+	var		MENU_CURSOR_SIZE_V=102;
+	var		MENU_CURSOR_SIZE_W=10;
+	var		MENU_CURSOR_SIZE_H=14;
+
+	var		MENU_WINDOW_SIZE_W=240;
+	var		MENU_WINDOW_SIZE_H=100;
+
+	var		MENU_HIT_TEST_SIZE_W=224;
+	var		MENU_HIT_TEST_SIZE_H= 22;
+
+	var		MENU_HIT_BASE_PX	=8;
+	var		MENU_HIT_BASE_PY	=16;
+
+
+
+	var		layer_offset;
+
+	var		mode;
+	var		menu_id;
+
+	var		menu_cg;
+	var		menu_cancel;
+	var		menu_cursor;
+	var		menu_window;
+
+	var		menu_hit_test;
+
+
+	function init_buffer()
+	{
+		Reset();
+
+
+		layer_offset = 0;
+
+		menu_cg = void;
+
+		menu_cursor = void;
+		menu_window = void;
+
+		menu_hit_test = void;
+
+		menu_cancel = void;
+		return;
+	}
+	function Release()
+	{
+		DeleteArrayObject( menu_hit_test, 1 );
+		menu_hit_test = void;
+
+		EasyReleaseLayer( menu_cursor );
+		menu_cursor = void;
+
+		EasyReleaseLayer( menu_window );
+		menu_window = void;
+
+		EasyReleaseLayer( menu_cg );
+		menu_cg = void;
+
+		EasyReleaseLayer( menu_cancel );
+		menu_cg = void;
+		return;
+	}
+	function Reset()
+	{
+		mode = MODE_NORMAL;
+		menu_id = MENU_NONE;
+		return;
+	}
+
+
+	function Init()
+	{
+	var		i;
+		menu_cg = EasyCreateLayerObject( parWin,parLayer, "ir_title_menu10", clAdapt, false, 0,0, 0 );
+
+
+		with (menu_cancel = new CSpriteLayer(parWin, parLayer))
+		{
+			.setPos( 0,0 );
+			.setSize( SCREEN_SIZE_W,SCREEN_SIZE_H );
+			.fill( RGBA_MAKE(0,0,0,0) );
+			.setGUID( MENU_NONE );
+		}
+
+
+		with (menu_window = new CSpriteLayer(parWin, menu_cancel) )
+		{
+			SetLayerInfoParam( menu_window, menu_cg, 0,0, 0 );
+			.setSize( MENU_WINDOW_SIZE_W,MENU_WINDOW_SIZE_H );
+			.setUV( 0,0 );
+			.setPos(
+				(SCREEN_SIZE_W-.width) /2,
+				(SCREEN_SIZE_H-.height) /2 +128
+				);
+		}
+		menu_cursor = new CSpriteLayer( parWin, menu_window );
+		SetLayerInfoParam( menu_cursor, menu_cg, 0,0, 1 );
+		menu_cursor.setSize( MENU_CURSOR_SIZE_W,MENU_CURSOR_SIZE_H );
+		menu_cursor.setUV( MENU_CURSOR_SIZE_U,MENU_CURSOR_SIZE_V );
+
+
+		menu_hit_test = new Array();
+		for (i=0;  i<MAX_MENU;  i++) {
+			with (menu_hit_test[i] = new CSpriteLayer(parWin, menu_window))
+			{
+				.setPos( MENU_HIT_BASE_PX,MENU_HIT_BASE_PY+i*MENU_HIT_TEST_SIZE_H );
+				.setSize( MENU_HIT_TEST_SIZE_W,MENU_HIT_TEST_SIZE_H );
+				.fill( RGBA_MAKE(0,0,0,0) );
+				.setGUID( i );
+			}
+		}
+
+
+
+		SetPriorityOffset( layer_offset );
+		return;
+	}
+
+	function SetPriorityOffset( _layer_offset )
+	{
+		layer_offset = _layer_offset;
+		if (CheckValid(menu_window)  ==  true)
+			menu_window.setPriority( layer_offset );
+		if (CheckValid(menu_cancel)  ==  true)
+			menu_cancel.setPriority( layer_offset );
+		return;
+	}
+	function Print()
+	{
+	var		i;
+		menu_cancel.visible = true;
+		menu_window.visible = true;
+		menu_cursor.visible = false;
+		for (i=0;  i<MAX_MENU;  i++)
+			menu_hit_test[i].visible = true;
+
+		return;
+	}
+
+	function Start()
+	{
+	var		i;
+
+		Reset();
+
+		for (i=0;  i<MAX_MENU;  i++) {
+			with ( menu_hit_test[i] )
+			{
+				.setMouseEnterCallback( FocusEvent );
+				.setMouseLeaveCallback( UnFocusEvent );
+				.setMouseDownCallback( ClickEvent );
+				.setHitCheckAlphaLimit( "ALL" );
+			}
+		}
+
+
+		with ( menu_cancel )
+		{
+			.setMouseDownCallback( ClickEvent );
+			.setHitCheckAlphaLimit( "ALL" );
+		}
+		return;
+	}
+	function Stop()
+	{
+	var		i;
+		for (i=0;  i<MAX_MENU;  i++) {
+			with ( menu_hit_test[i] )
+			{
+				.setMouseEnterCallback( void );
+				.setMouseLeaveCallback( void );
+				.setMouseDownCallback( void );
+				.setHitCheckAlphaLimit( "NONE" );
+			}
+		}
+		with ( menu_cancel )
+		{
+			.setMouseDownCallback( void );
+			.setHitCheckAlphaLimit( "NONE" );
+		}
+		return;
+	}
+
+	function FocusEvent( _layer )
+	{
+		with ( menu_cursor )
+		{
+			if (.visible  ==  false)
+				.visible = true;
+			.setPos( _layer.left+8, _layer.top+(_layer.height-.height)/2 );
+		}
+
+//		PlaySE( SET_STARTSELECT_MENU_FOCUS, true, , , SE_STOP_TIME );
+		if (CheckPlaySESTack(SET_STARTSELECT_MENU_FOCUS)  ==  false)
+			PlaySE( SET_STARTSELECT_MENU_FOCUS, , , , , FOCUS_SE_VOLUME_AVE );
+		return;
+	}
+	function UnFocusEvent( _layer )
+	{
+		menu_cursor.visible = false;
+		return;
+	}
+	function ClickEvent( _layer, _x,_y, _button,_shift )
+	{
+		if (_button  ==  mbRight) {
+			Stop();
+
+			mode = MODE_END;
+			menu_id = MENU_CANCEL;
+			stopSound( , , );
+			PlaySE( SET_STARTSELECT_MENU_CANCEL );
+			return;
+		}
+
+		if (_layer.getGUID()  == MENU_NONE)
+			return;
+
+
+		Stop();
+		mode = MODE_END;
+		menu_id = _layer.getGUID();
+		stopSound( , , );
+		switch ( menu_id )
+		{
+		case MENU_NORMAL:
+		case MENU_AUTO:
+			PlaySE( SET_STARTSELECT_MENU_SELECT_MAIN );
+			break;
+		case MENU_STAGESELECT:
+			PlaySE( SET_STARTSELECT_MENU_SELECT );
+			break;
+		}
+		return;
+	}
+
+	function Update()
+	{
+		return;
+	}
+
+}
+
+
+
+// タイトルロゴ管理クラス
+class CIrTitleLogo
+{
+var		parWin,parLayer;
+
+	function CIrTitleLogo( _pr_win, _pr_layer )
+	{
+		parWin   = _pr_win;
+		parLayer = _pr_layer;
+		init_buffer();
+	}
+	function finalize()
+	{
+		Release();
+	}
+
+
+	var		MODE_NONE				=-1;
+	var		MODE_FRAME_IN			=0;
+	var		MODE_FRAME_IN_END_DELAY	=10;
+
+	var		MODE_FRAME_IN_END		=100;
+
+	var		mode;
+
+
+	var		LOGO_IN_TIME			=60;	// ロゴ進入時間
+	var		FRAME_IN_END_DELAY_TIME	=16;
+
+	var	logo,logo_sub,logo_tm,sub_title;
+	var	copyright;
+
+	var	logo_in_y;
+
+
+	function init_buffer()
+	{
+		mode = MODE_NONE;
+		return;
+	}
+
+
+	// 初期化
+	function Init()
+	{
+		Release();
+
+		logo_in_y = new CNumAnime();
+
+
+		// タイトルロゴを生成
+		logo = EasyCreateLayerObject( parWin,parLayer, "ir_title_logo02", clAdapt, false,
+							0,0, IR_TITLE_LAYER_LOGO_MAIN );
+		logo.setPos( CalcCenterPosX(parWin, logo), IR_TITLE_LOGO_PRN_Y );
+
+		// タイトルロゴサブを生成
+		logo_sub = EasyCreateLayerObject( parWin,parLayer, "ir_title_logo01", clAdapt, false,
+							IR_TITLE_LOGO_SUB_PRN_X,IR_TITLE_LOGO_SUB_PRN_Y, IR_TITLE_LAYER_LOGO_SUB );
+
+		// タイトルロゴTMを生成
+		logo_tm = EasyCreateLayerObject( parWin,parLayer, "ir_title_logo03", clAdapt, false,
+							IR_TITLE_LOGO_TM_PRN_X,IR_TITLE_LOGO_TM_PRN_Y, IR_TITLE_LAYER_LOGO_TM );
+
+		// サブタイトルを生成
+		sub_title = EasyCreateLayerObject( parWin,parLayer, "ir_title_logo05", clAdapt, false,
+							IR_TITLE_SUB_TITLE_PRN_X,IR_TITLE_SUB_TITLE_PRN_Y, IR_TITLE_LAYER_SUB_TITLE );
+
+		// コピーライトを生成
+		copyright = EasyCreateLayerObject( parWin,parLayer, "ir_title_logo04", clAdapt, false,
+							IR_TITLE_COPYRIGHT_PRN_X,IR_TITLE_COPYRIGHT_PRN_Y, IR_TITLE_LAYER_COPYRIGHT );
+		return;
+	}
+	// 開放
+	function Release()
+	{
+		EasyObjectInvalidate( logo_in_y );
+		logo_in_y = void;
+
+		// タイトルロゴ開放
+		EasyReleaseLayer( logo );
+		logo = void;
+		// タイトルロゴサブ開放
+		EasyReleaseLayer( logo_sub );
+		logo_sub = void;
+		// タイトルロゴTM開放
+		EasyReleaseLayer( logo_tm );
+		logo_tm = void;
+		// サブタイトル開放
+		EasyReleaseLayer( sub_title );
+		sub_title = void;
+		// コピーライト開放
+		EasyReleaseLayer( copyright );
+		copyright = void;
+		return;
+	}
+
+	function Close()
+	{
+		logo.visible      = false;
+		logo_sub.visible  = false;
+		logo_tm.visible   = false;
+		sub_title.visible = false;
+		copyright.visible = false;
+		return;
+	}
+
+	// 表示
+	function Print()
+	{
+		logo.visible      = true;
+		logo_sub.visible  = true;
+		logo_tm.visible   = true;
+		sub_title.visible = true;
+		copyright.visible = true;
+		return;
+	}
+
+
+
+	function set_logo_in_pos()
+	{
+		with ( logo )
+		{
+			.setPos( .left, logo_in_y.GetNowNum() );
+		}
+		return;
+	}
+	function StartFrameIn( _skip_flag )
+	{
+		Close();
+
+		mode = MODE_FRAME_IN;
+
+		if (_skip_flag  ==  false)
+			PlaySE( SE_TITLE_IN );
+
+		logo_in_y.SetAnimeParam( -logo.height, IR_TITLE_LOGO_SUB_PRN_Y, LOGO_IN_TIME );
+		logo_in_y.Start();
+
+		logo.visible = true;
+		set_logo_in_pos();
+		return;
+	}
+
+
+	function update_frame_in()
+	{
+		logo_in_y.Update();
+		set_logo_in_pos();
+
+		if (logo_in_y.CheckUpdateState()  !=  "END")
+			return ( true );
+		return ( false );
+	}
+	function skip_frame_in()
+	{
+		logo_in_y.StartEx( logo_in_y.GetEndNum() );
+		update_frame_in();
+		return;
+	}
+
+
+
+	var		tmp_counter;
+	function set_tmp_counter( _count )
+	{
+		tmp_counter = _count;
+		return;
+	}
+	function update_tmp_counter()
+	{
+		if (tmp_counter  ==  0)
+			return ( false );
+		tmp_counter -= 1;
+		return ( true );
+	}
+
+
+	function Update()
+	{
+		switch ( mode )
+		{
+		case MODE_FRAME_IN:
+			if (update_frame_in()  ==  true)
+				break;
+
+			mode = MODE_FRAME_IN_END_DELAY;
+			set_tmp_counter( FRAME_IN_END_DELAY_TIME );
+			break;
+
+		case MODE_FRAME_IN_END_DELAY:
+			if (update_tmp_counter()  ==  true)
+				break;
+			mode = MODE_FRAME_IN_END;
+			Print();
+			break;
+
+		case MODE_NONE:
+			break;
+		case MODE_FRAME_IN_END:
+			break;
+		}
+		return;
+	}
+
+
+	function SkipAnime()
+	{
+		mode = MODE_FRAME_IN_END;
+		skip_frame_in();
+		Print();
+		return;
+	}
+
+}
+
+
+// タイトル背景管理クラス
+class CIrTitleBg
+{
+var		parWin,parLayer;
+
+	function CIrTitleBg( _pr_win, _pr_layer )
+	{
+		parWin   = _pr_win;
+		parLayer = _pr_layer;
+	}
+	function finalize()
+	{
+		Release();
+	}
+
+
+
+
+	var		mode;
+	var		MODE_NONE					=-1;
+	var		MODE_INIT					=0;
+	var		MODE_FLASH_READY_WATI		=1;		// フラッシュ開始待ちウェイト
+	var		MODE_THUNDER_IN				=2;		// 雷In
+	var		MODE_THUNDER_IN_END_DELAY	=3;		// 雷In終了ディレイ
+	var		MODE_BG_FLASH				=4;		// BGフラッシュ
+	var		MODE_BG_FLASH_END_DELAY		=5;		// BGフラッシュ終了ディレイ
+	var		MODE_FLASH_END				=10;
+
+
+
+	var		FLASH_READY_WAIT_TIME	=16;		// フラッシュ開始待ちウェイト
+	var		THUNDER_IN_TIME			=30;		// 雷Inタイム
+
+	var		THUNDER_IN_END_DELAY_TIME	=6;	// 雷In終了ディレイ
+
+
+	var		FLASH_NUM				= 8;
+	var		FLASH_CYCLE				= 3;		// 背景のフラッシュサイクル
+
+	var		BG_FLASH_END_DELAY_TIME	=0;
+
+
+	var		thunder_size_y;
+
+	var		bg_back,bg_back_flash,bg_castle,bg_thunder;
+
+	// 初期化
+	function Init()
+	{
+		Release();
+
+		// BG背景(ベース)を生成
+		bg_back = EasyCreateLayerObject( parWin,parLayer,
+						"ir_title_bg01", clNone, false, 0,0, IR_TITLE_LAYER_BG_BACK );
+		bg_back_flash = EasyCreateLayerObject( parWin,parLayer,
+						"ir_title_bg03", clNone, false, 0,0, IR_TITLE_LAYER_BG_BACK );
+
+
+		bg_thunder = EasyCreateLayerObject( parWin,parLayer,
+						"ir_title_thunder", clAdapt, false, 0,0, IR_TITLE_LAYER_BG_THUNDER );
+		bg_thunder.setSize( 0, 0 );
+		thunder_size_y = new CNumAnime();
+		thunder_size_y.SetAnimeParam( 0, bg_thunder.imageHeight, THUNDER_IN_TIME );
+
+
+
+		// BG背景(城)を生成
+		bg_castle = EasyCreateLayerObject( parWin,parLayer,
+					"ir_title_bg02", clAdapt, false, 0,0, IR_TITLE_LAYER_BG_CASTLE );
+
+		set_next_mode_data( MODE_NONE );
+		return;
+	}
+
+	// 開放
+	function Release()
+	{
+		EasyObjectInvalidate( thunder_size_y );
+		thunder_size_y = void;
+
+		// BG背景(ベース)開放
+		EasyReleaseLayer( bg_back );
+		bg_back = void;
+		EasyReleaseLayer( bg_back_flash );
+		bg_back_flash = void;
+
+		EasyReleaseLayer( bg_thunder );
+		bg_thunder = void;
+
+		// BG背景(城)開放
+		EasyReleaseLayer( bg_castle );
+		bg_castle = void;
+		return;
+	}
+
+	// 表示
+	function Print()
+	{
+		if (CheckValid(bg_back)  ==  true)
+			bg_back.visible   = true;
+		if (CheckValid(bg_back_flash)  ==  true)
+			bg_back_flash.visible = false;
+
+		if (CheckValid(bg_thunder)  ==  true)
+			bg_thunder.visible = false;
+
+		if (CheckValid(bg_castle)  ==  true)
+			bg_castle.visible = true;
+
+		set_next_mode_data( MODE_INIT );
+		return;
+	}
+
+
+	// 背景フラッシュ用表示初期化
+	function set_flash_bg_prn()
+	{
+		if (CheckValid(bg_back)  ==  true)
+			bg_back.visible       = false;
+		if (CheckValid(bg_back_flash)  ==  true)
+			bg_back_flash.visible = true;
+		return;
+	}
+	function reset_flash_bg_prn()
+	{
+		if (CheckValid(bg_back)  ==  true)
+			bg_back.visible       = true;
+		if (CheckValid(bg_back_flash)  ==  true)
+			bg_back_flash.visible = false;
+		return;
+	}
+	// 背景フラッシュ面の切り替え
+	function change_flash_bg_prn()
+	{
+		bg_back.visible       ^= true;
+		bg_back_flash.visible = bg_back.visible ^ true;
+		return;
+	}
+	function update_bg_flash()
+	{
+		if (bg_flashing  ==  false)
+			return ( true );
+		if (left_prn_time  >  0) {
+			left_prn_time -= 1;
+			if (left_prn_time  ==  0) {
+				change_flash_bg_prn();
+				left_prn_time = FLASH_CYCLE;
+
+				if (bg_flash_num  >  0) {
+					bg_flash_num -= 1;
+					if (bg_flash_num  ==  0) {
+						return ( false );
+					}
+				}
+			}
+		}
+		return ( true );
+	}
+	function set_thunder_size()
+	{
+		with ( bg_thunder )
+		{
+			.setSize( .imageWidth, thunder_size_y.GetNowNum() );
+		}
+		return;
+	}
+	function update_thunder()
+	{
+		thunder_size_y.Update();
+		set_thunder_size();
+		if (thunder_size_y.CheckUpdateState()  !=  "END")
+			return ( true );
+		return ( false );
+	}
+
+
+	var		tmp_counter;
+	function set_tmp_counter( _count )
+	{
+		tmp_counter = _count;
+		return;
+	}
+	function update_tmp_counter()
+	{
+		if (tmp_counter  ==  0)
+			return ( true );
+		tmp_counter -= 1;
+		return ( false );
+	}
+
+
+
+	// BGフラッシュを強制終了
+	function close_bg_flash()
+	{
+		init_bg_flash_data();
+		reset_flash_bg_prn();
+		bg_thunder.visible = false;
+		return;
+	}
+	function start_thunder_anime()
+	{
+		bg_thunder.visible = true;
+		thunder_size_y.Start();
+		set_thunder_size();
+		return;
+	}
+/*	function skip_thunder_anime()
+	{
+		bg_thunder.visible = true;
+		thunder_size_y.StartEx( thunder_size_y.GetEndNum() );
+		update_thunder();
+		return;
+	}
+*/
+
+	var		left_prn_time;
+	var		bg_flash_num;
+	var		bg_flashing;
+
+	function init_bg_flash_data()
+	{
+		bg_flashing = false;
+		left_prn_time = 0;
+		bg_flash_num  = 0;
+		return;
+	}
+	function set_bg_flash()
+	{
+		bg_flashing = true;
+		left_prn_time = FLASH_CYCLE;
+		bg_flash_num = FLASH_NUM*2;
+		set_flash_bg_prn();
+		return;
+	}
+
+
+
+
+	// 次の処理モード用初期化を行う
+	function set_next_mode_data( _next_mode )
+	{
+		switch ( _next_mode )
+		{
+		case MODE_NONE:
+			mode = MODE_NONE;
+			break;
+
+		case MODE_INIT:
+			init_bg_flash_data();
+			reset_flash_bg_prn();
+			set_next_mode_data( MODE_FLASH_READY_WATI );
+			break;
+
+		case MODE_FLASH_READY_WATI:
+			mode = MODE_FLASH_READY_WATI;
+			set_tmp_counter( FLASH_READY_WAIT_TIME );
+			break;
+
+		case MODE_THUNDER_IN:
+			PlaySE( SE_TITLE_THUNDER );
+
+			mode = MODE_THUNDER_IN;
+			start_thunder_anime();
+			break;
+
+		case MODE_THUNDER_IN_END_DELAY:
+			mode = MODE_THUNDER_IN_END_DELAY;
+			set_tmp_counter( THUNDER_IN_END_DELAY_TIME );
+			break;
+
+		case MODE_BG_FLASH:
+			PlaySE( SE_TITLE_THUNDER_FLASH );
+
+			mode = MODE_BG_FLASH;
+			set_bg_flash();
+			break;
+
+		case MODE_BG_FLASH_END_DELAY:
+			mode = MODE_BG_FLASH_END_DELAY;
+			close_bg_flash();
+			set_tmp_counter( BG_FLASH_END_DELAY_TIME );
+			break;
+
+		case MODE_FLASH_END:
+			mode = MODE_FLASH_END;
+			break;
+		}
+		return;
+	}
+
+
+
+
+	function Update()
+	{
+		switch ( mode )
+		{
+		case MODE_NONE:
+			break;
+
+		case MODE_FLASH_READY_WATI:
+			if (update_tmp_counter()  ==  false)
+				break;
+			set_next_mode_data( MODE_THUNDER_IN );
+			break;
+
+		case MODE_THUNDER_IN:
+			if (update_thunder()  ==  true)
+				break;
+			set_next_mode_data( MODE_THUNDER_IN_END_DELAY );
+			break;
+
+		case MODE_THUNDER_IN_END_DELAY:
+			if (update_tmp_counter()  ==  false)
+				break;
+			set_next_mode_data( MODE_BG_FLASH );
+			break;
+
+		case MODE_BG_FLASH:
+			if (update_bg_flash()  ==  true)
+				break;
+			set_next_mode_data( MODE_BG_FLASH_END_DELAY );
+			break;
+
+		case MODE_BG_FLASH_END_DELAY:
+			if (update_tmp_counter()  ==  false)
+				break;
+			set_next_mode_data( MODE_FLASH_END );
+			break;
+
+		case MODE_FLASH_END:
+			break;
+		}
+
+		return;
+	}
+
+
+	function SkipAnime()
+	{
+		mode = MODE_FLASH_END;
+		close_bg_flash();
+		return;
+	}
+
+}
+
+
+// タイトルメニュー管理クラス
+class CIrTitleMenu
+{
+var		parWin,parLayer;
+
+	function CIrTitleMenu( _pr_win, _pr_layer )
+	{
+		parWin   = _pr_win;
+		parLayer = _pr_layer;
+	}
+	function finalize()
+	{
+		Release();
+	}
+
+
+
+
+
+	var		MENU_SIZE_H		=24;	// メニューの項目の個々のサイズ
+	var		MENU_SIZE2_H	=32;
+
+	// タイトルメニュー
+	var		MENU_ID_START		=0;
+	var		MENU_ID_TUTORIAL	=1;
+	var		MENU_ID_OPTION		=2;
+	var		MENU_ID_EXIT		=3;
+	var		MENU_ID_ALBUM		=4;
+	var		MAX_MENU_ID			=5;
+/*	var		MENU_ID_STAGE_SELECT=4;
+	var		MENU_ID_RESULT=5;
+	var		MENU_ID_ITEM=6;
+	var		MAX_MENU_ID=7;
+*/
+
+
+	var		sel_menu_id,focus_menu_id;
+	var		menu;
+	var		cursor;
+
+
+	var		now_menu_list;
+	var		normal_menu_list = 
+	[
+		MENU_ID_START,
+		MENU_ID_TUTORIAL,
+		MENU_ID_ALBUM,
+		MENU_ID_OPTION,
+		MENU_ID_EXIT
+	];
+	var		adv_menu_list =
+	[
+		MENU_ID_START,
+		MENU_ID_TUTORIAL,
+		MENU_ID_OPTION
+	];
+
+	// メニュー追加
+	function AddMenu( _menu_id, _file_name, _step_size )
+	{
+		if (CheckValid(menu[_menu_id])  ==  true)
+			EasyReleaseLayer( menu[_menu_id] );
+
+		// 生成
+		menu[_menu_id] = EasyCreateLayerObject( parWin,parLayer, _file_name, clAdapt, false,
+							0,IR_TITLE_MENU_PRN_Y+_menu_id*_step_size, IR_TITLE_LAYER_MENU );
+		with ( menu[_menu_id] )
+		{
+			.CenteringPosX();		// 表示X位置をセンタリング
+			.setGUID( _menu_id );	// GUID設定
+		}
+		return;
+	}
+
+	// 再起動用のバッファのリセット
+	function ResetBuffer()
+	{
+		sel_menu_id = -1;
+		focus_menu_id = -1;
+		return;
+	}
+
+
+	// 初期化
+	function Init()
+	{
+	var		i;
+	var		step_size;
+
+		Release();
+
+
+		if(parLayer.getCallType()  ==  CALLTYPE_NORMAL) {
+			now_menu_list = normal_menu_list;
+			step_size = MENU_SIZE_H;
+		} else {
+			now_menu_list = adv_menu_list;
+			step_size = MENU_SIZE2_H;
+		}
+
+
+
+		ResetBuffer();
+		// メニューを生成
+		menu = new Array();
+		for (i=0;  i<now_menu_list.count;  i++)
+			AddMenu( i, "ir_title_menu%02d".sprintf(1+now_menu_list[i]), step_size );
+
+		// メニューの割り込み開始設定
+//		StartMenuHitCheck();
+
+
+		// カーソルを生成
+		cursor = EasyCreateLayerObject( parWin,parLayer, "ir_title_cursor", clAdapt, false,
+							0,0, IR_TITLE_LAYER_MENU_CURSOR );
+		return;
+	}
+
+	// 表示開始
+	function Print()
+	{
+	var		i;
+		for (i=0;  i<menu.count;  i++)
+			menu[i].visible = true;
+
+		CloseCursor();
+		return;
+	}
+	function Close()
+	{
+	var		i;
+		for (i=0;  i<menu.count;  i++)
+			menu[i].visible = false;
+		CloseCursor();
+		return;
+	}
+	// カーソルを非表示にする
+	function CloseCursor()
+	{
+		cursor.visible = false;
+		return;
+	}
+
+
+	// 開放
+	function Release()
+	{
+	var		i;
+		// メニュー項目開放
+		if (CheckValid(menu)  ==  true) {
+			KillMenuHitCheck();
+			for (i=0;  i<menu.count;  i++)
+				EasyReleaseLayer( menu[i] );
+			EasyObjectInvalidate( menu );
+			menu = void;
+		}
+
+		// カーソル開放
+		EasyReleaseLayer( cursor );
+		cursor = void;
+		return;
+	}
+
+	// 選択されたメニューIDを取得する
+	function GetSelectMenuID()
+	{
+		return ( sel_menu_id );
+	}
+
+
+	/********************************************
+
+			ヒットチェックコールバック
+					＆
+			ヒット判定設定関係
+
+	********************************************/
+	// レイヤにマウスが入ってきた
+	function _MouseEnterCallback( p_layer )
+	{
+		// カーソル表示
+		with ( cursor )
+		{
+			// 表示ON
+			if (.visible  ==  false)
+				.visible = true;
+		}
+
+		with ( 	p_layer )
+		{
+			// 選択メニューIDの計算
+			if (.getGUID()  ==  focus_menu_id)
+				return;
+/*			@if( DEBUG_MODE )
+				dm( "FocusMenuID:"+ .getGUID() );		// フォーカスメニューIDを表示
+			@endif
+*/
+			focus_menu_id = .getGUID();
+
+			cursor.setPos( .left-64, .top-16 );		// 表示位置の変更
+		}
+
+
+		if (CheckPlaySESTack(SE_TITLE_MENU_FOCUS)  ==  false) {
+			PlaySE( SE_TITLE_MENU_FOCUS, , , , , FOCUS_SE_VOLUME_AVE );
+		}
+		return;
+	}
+	// レイヤにマウスが出て行った
+	function _MouseLeaveCallback( p_layer )
+	{
+		// カーソル表示
+		with ( cursor )
+		{
+			// 表示OFF
+			if (.visible  ==  true) {
+				focus_menu_id = -1;
+				.visible = false;
+			}
+		}
+
+		return;
+	}
+	// レイヤを選択された
+	function _MouseDownCallback( p_layer, x,y, button, shift )
+	{
+		if (button  !=  mbLeft)
+			return;
+
+		// 保険エラ−チェック
+		if (cursor.visible  ==  false)		// カーソルが非表示だったら選択できない
+			return;
+		if (focus_menu_id  ==  -1)			// フォーカスがなかったら選択できない
+			return;
+
+		// 終了処理
+		sel_menu_id = now_menu_list[focus_menu_id];
+		KillMenuHitCheck();
+
+
+		// 各メニュー決定のSEを再生
+		stopSound( , , );
+		switch ( sel_menu_id )
+		{
+		case MENU_ID_EXIT:
+			PlaySE( SE_TITLE_MENU_SELECT_MAIN );
+			break;
+		default:
+			PlaySE( SE_TITLE_MENU_SELECT_SUB );
+			break;
+		}
+		return;
+	}
+	// レイヤの上を移動中
+	function _MouseMoveCallback( p_layer, x,y, button )
+	{
+		return;
+	}
+
+
+	// メニューのヒットチェックをONにする
+	function StartMenuHitCheck()
+	{
+	var		i;
+
+		ResetBuffer();
+		for (i=0;  i<menu.count;  i++) {
+			with ( menu[i] )
+			{
+				.setMouseEnterCallback( _MouseEnterCallback );
+				.setMouseLeaveCallback( _MouseLeaveCallback );
+				.setMouseDownCallback( _MouseDownCallback );
+				.setMouseMoveCallback( _MouseMoveCallback );
+				.setHitCheckAlphaLimit( "ALL" );
+			}
+		}
+		return;
+	}
+	// メニューのヒットチェックをOFFにする
+	function KillMenuHitCheck()
+	{
+	var		i;
+		for (i=0;  i<menu.count;  i++) {
+			with ( menu[i] )
+			{
+				.setHitCheckAlphaLimit( "NONE" );
+				.setMouseEnterCallback( void );
+				.setMouseLeaveCallback( void );
+				.setMouseDownCallback( void );
+				.setMouseMoveCallback( void );
+			}
+		}
+		return;
+	}
+}
+
+
+
+class CIriyaTitle extends CIriyaScene
+{
+var		bg_obj;
+var		title_obj;
+var		title_menu;
+var		option_menu;
+var		sys_fade;
+var		tutorial_select;
+var		result_viewer;
+var		stage_select;
+var		start_select;
+
+var		skip_flag;
+var		click_layer;
+
+
+var		proc_mode;
+	var		PROC_BG_FLASH			=0;		// 雷In
+	var		PROC_TITLE_IN			=10;	// タイトルIn
+	var		PROC_ROOT				=20;	// ルート処理
+	var		PROC_FADE_OUT			=30;	// ゲーム開始フェード処理
+	var		PROC_OPTION				=40;	// オプション処理
+	var		PROC_TUTORIAL_SELECT	=50;	// チュートリアルセレクト
+	var		PROC_STAGE_SELECT		=60;	// ステージセレクト
+//	var		PROC_ITEM_VIEWER		=70;	// レアアイテムビューアー
+	var		PROC_RESULT_VIEWER		=80;	// リザルトビューアー
+	var		PROC_START_SELECT		=100;	// ゲーム開始モード選択
+
+
+	var		SCREEN_FADE_TIME=30;
+
+
+	@if (DEBUG_MODE  ==  1)
+	var		key_state;
+	@endif;
+
+
+	function CIriyaTitle( parent, scene_id )
+	{
+		super.CIriyaScene( ... );
+		@if( DEBUG_MODE )
+			dm( "タイトル" );
+		@endif
+
+
+		sys_fade = void;
+
+		proc_mode = PROC_BG_FLASH;
+
+		parentLayer.setStageSelectFlag( false );	// ステージセレクトフラグ初期化
+		parentLayer.clearUseStageSkipFlag();		// スキップチェック用フラグのクリア
+		parentLayer.clearUseContinueFlag();			// コンティニューを使ったかのフラグをクリア
+		parentLayer.setAutoPlayMode( false );
+		parentLayer.resetStageScore();
+
+		// 背景
+		bg_obj = new CIrTitleBg( parentWindow, parentLayer );
+		bg_obj.Init();
+		bg_obj.Print();
+
+		// ロゴ
+		title_obj = new CIrTitleLogo( parentWindow, parentLayer );
+		title_obj.Init();
+
+		// メニュ−
+		title_menu = new CIrTitleMenu( parentWindow, parentLayer );
+		title_menu.Init();
+
+
+		// クリック感知用レイヤの生成
+		create_click_layer();
+		start_click_layer();
+
+		@if (SKIP_TITLE_ANIME  ==  1)
+			set_title_select();
+		@endif
+
+		@if (DEBUG_MODE  ==  1)
+		key_state = new CIriyaKeyState();
+		key_state.UpdateState();
+		@endif
+
+		BgmPlayNormal( BGM_TITLE );
+	}
+
+
+
+
+	function finalize()
+	{
+		release_stage_select();
+
+		@if (DEBUG_MODE  ==  1)
+		if (CheckValid(key_state)  ==  true) {
+			EasyObjectInvalidate( key_state );
+			key_state = void;
+		}
+		@endif
+
+		release_sys_fade();
+
+		// 背景開放
+		if (CheckValid(bg_obj)  ==  true) {
+			bg_obj.Release();
+			EasyObjectInvalidate( bg_obj );
+			bg_obj = void;
+		}
+
+		// ロゴ
+		if (CheckValid(title_obj)  ==  true) {
+			title_obj.Release();
+			EasyObjectInvalidate( title_obj );
+			title_obj = void;
+		}
+
+		// メニュー
+		if (CheckValid(title_menu)  ==  true) {
+			title_menu.Release();
+			EasyObjectInvalidate( title_menu );
+			title_menu = void;
+		}
+
+		release_start_select();
+		release_click_layer();
+		release_option_menu();
+		release_tutorial_select();
+		release_stage_select();
+		release_result_viewer();
+		super.finalize( ... );
+	}
+
+
+	// クリック感知用レイヤの生成
+	function create_click_layer()
+	{
+		skip_flag = false;
+		with (click_layer = new CSpriteLayer(parentWindow, parentLayer) )
+		{
+			.setSize( SCREEN_SIZE_W, SCREEN_SIZE_H );
+			.fill( RGBA_MAKE(0,0,0,0) );
+			.visible = true;
+		}
+		return;
+	}
+	// クリック感知用レイヤの開放
+	function release_click_layer()
+	{
+		if (CheckValid(click_layer)  ==  false)
+			return;
+		EasyReleaseLayer( click_layer );
+		click_layer = void;
+		return;
+	}
+	// クリック感知の開始
+	function start_click_layer()
+	{
+		skip_flag = false;
+		if (CheckValid(click_layer)  ==  false)
+			return;
+
+		with ( click_layer )
+		{
+			.setMouseDownCallback( button_skip );
+			.setHitCheckAlphaLimit( "ALL" );
+		}
+		return;
+	}
+	// クリック感知の終了
+	function stop_click_layer()
+	{
+		if (CheckValid(click_layer)  ==  false)
+			return;
+
+		with ( click_layer )
+		{
+			.setMouseDownCallback( void );
+			.setHitCheckAlphaLimit( "NONE" );
+			.visible = false;
+		}
+		return;
+	}
+
+
+	function button_skip( _layer, _x,_y, _button,_shift )
+	{
+		if (_button  ==  mbLeft)
+			skip_title_anime();
+		return;
+	}
+	function skip_title_anime()
+	{
+		stopSound( ,, );
+
+		PlaySE( SE_TITLE_MENU_SELECT_SUB );
+		skip_flag = true;
+		stop_click_layer();
+		return;
+	}
+
+
+
+
+
+
+
+	function StartTitleMenuSelect()
+	{
+		title_menu.StartMenuHitCheck();
+		UpdateCursorPos( this );
+		return;
+	}
+
+
+
+
+	function release_sys_fade()
+	{
+		if (CheckValid(sys_fade)  ==  true) {
+			ReleaseFadeAnime( sys_fade );
+			EasyReleaseLayer( sys_fade );
+			sys_fade = void;
+		}
+		return;
+	}
+	function set_fade_out()
+	{
+		proc_mode = PROC_FADE_OUT;
+
+		release_sys_fade();
+		sys_fade = EasyCreateFadeLayer( parentWindow, parentLayer, "BLACK","FADE_IN", SCREEN_FADE_TIME );
+		SetLayerPriority( sys_fade, IR_TITLE_LAYER_FADE );
+		stopBGM( SCREEN_FADE_TIME*TIMER_INTERVAL, );
+		return;
+	}
+	function ProcessFadeOut()
+	{
+		if (CheckValid(sys_fade)  ==  true) {
+			if (ProcessFadeAnime(sys_fade)  ==  "UPDATING")
+				return SCENE_DEFAULT;
+		}
+
+		with ( title_menu )
+		{
+			switch ( .GetSelectMenuID() )
+			{
+			case .MENU_ID_EXIT:
+				return SCENE_CLOSE;
+
+			case .MENU_ID_START:
+//			case .MENU_ID_STAGE_SELECT:
+				return SCENE_SELECT;
+			}
+		}
+		return SCENE_DEFAULT;
+	}
+
+
+
+	// ルートメニューセレクト
+	function ProcessRootMenu()
+	{
+		with ( title_menu )
+		{
+			if (.GetSelectMenuID()  ==  -1)
+				return SCENE_DEFAULT;
+
+			switch ( .GetSelectMenuID() )
+			{
+			case .MENU_ID_TUTORIAL:
+				change_tutorial_select();
+				parentLayer.resetFrameSkipData();
+				return SCENE_DEFAULT;
+
+			case .MENU_ID_OPTION:
+				ChangeOptionMenu();
+				parentLayer.resetFrameSkipData();
+				return SCENE_DEFAULT;
+//				return SCENE_SELECT;
+
+			case .MENU_ID_ALBUM:
+				change_result_viewer();
+				parentLayer.resetFrameSkipData();
+				return SCENE_DEFAULT;
+
+/*
+			case .MENU_ID_STAGE_SELECT:
+				change_stage_select();
+				parentLayer.resetFrameSkipData();
+				return SCENE_DEFAULT;
+
+			case .MENU_ID_ITEM:
+				change_item_viewer();
+				parentLayer.resetFrameSkipData();
+				return SCENE_DEFAULT;
+
+			case .MENU_ID_RESULT:
+				change_result_viewer();
+				parentLayer.resetFrameSkipData();
+				return SCENE_DEFAULT;
+*/
+
+			case .MENU_ID_START:
+				if (parentLayer.getCallType()  ==  CALLTYPE_ADV)
+						set_fade_out();
+				else	change_start_select();
+				return SCENE_DEFAULT;
+
+
+			case .MENU_ID_EXIT:
+				set_fade_out();
+				return SCENE_DEFAULT;
+			}
+		}
+	}
+
+
+	// タイトルメニュー復帰処理
+	function restart_title_menu_select()
+	{
+		proc_mode = PROC_ROOT;
+		StartTitleMenuSelect();
+		return;
+	}
+	// タイトルメニューのリセット
+	function reset_title_menu()
+	{
+		title_menu.KillMenuHitCheck();		// 判定処理を停止
+		title_menu.CloseCursor();			// カーソルを非表示にする
+		return;
+	}
+	function print_title_menu()
+	{
+		title_menu.Print();
+		return;
+	}
+	function close_title_menu()
+	{
+		title_menu.Close();
+		return;
+	}
+
+
+
+	// オプションメニューを開放
+	function release_option_menu()
+	{
+		ReleaseOptionMenu( option_menu );
+		option_menu = void;
+		return;
+	}
+	// オプションメニューの作成
+	function reset_option_menu()
+	{
+		reset_title_menu();
+		option_menu = ResetOptionMenu( option_menu, parentWindow, parentLayer, this );
+		return;
+	}
+	// オプションメニューに切り替える
+	function ChangeOptionMenu()
+	{
+		proc_mode = PROC_OPTION;
+
+		reset_option_menu();
+		return;
+	}
+
+	// オプションメニュー処理
+	function ProcessOptionMenu()
+	{
+		with ( option_menu )
+		{
+			switch ( .ProcessUpdate() )
+			{
+			case .PROCESS_RET_NROMAL:
+				return SCENE_DEFAULT;
+			case .PROCESS_RET_TITLE:
+			case .PROCESS_RET_GAME:
+				break;
+			}
+		}
+		// タイトルメニュー復帰処理
+		release_option_menu();	// オプションメニューを開放
+		restart_title_menu_select();
+		return SCENE_DEFAULT;
+	}
+
+
+
+	// BGフラッシュ処理
+	function process_bg_flash()
+	{
+		if (CheckValid(bg_obj)  ==  false) {
+			set_title_in();
+			return SCENE_DEFAULT;
+		}
+
+		if (skip_flag  ==  true)
+			bg_obj.SkipAnime();
+
+		bg_obj.Update();
+		if (bg_obj.mode  ==  bg_obj.MODE_FLASH_END)
+			set_title_in();
+		return SCENE_DEFAULT;
+	}
+
+
+
+	// タイトルフレームイン開始データ設定
+	function set_title_in()
+	{
+		proc_mode = PROC_TITLE_IN;
+		title_obj.StartFrameIn( skip_flag );
+		return;
+	}
+	function process_title_in()
+	{
+		if (CheckValid(title_obj)  ==  false) {
+			set_title_select();
+			return SCENE_DEFAULT;
+		}
+
+		if (skip_flag  ==  true)
+			title_obj.SkipAnime();
+
+		title_obj.Update();
+		if (title_obj.mode  ==  title_obj.MODE_FRAME_IN_END)
+			set_title_select();
+		return SCENE_DEFAULT;
+	}
+
+	function set_title_select()
+	{
+		proc_mode = PROC_ROOT;
+
+		stop_click_layer();
+
+		print_title_menu();
+		StartTitleMenuSelect();
+//		BgmPlayNormal( BGM_TITLE );
+		return;
+	}
+
+
+	function release_tutorial_select()
+	{
+		EasyObjectInvalidate( tutorial_select );
+		tutorial_select = void;
+		return;
+	}
+	function create_tutorial_select()
+	{
+		with (tutorial_select = new CIriyaTutorialMenu(parentWindow, parentLayer))
+		{
+			.Init();
+			.SetPriorityOffset( IR_TITLE_LAYER_TUTORIAL_SELECT );
+			.SetAutoBasePosition();
+//			.SetBasePosition( PRN_TUTORIAL_SELECT_X,PRN_TUTORIAL_SELECT_Y );
+			.Print();
+			.FadeIn();
+//			.Start();
+		}
+		return;
+	}
+	function change_tutorial_select()
+	{
+		proc_mode = PROC_TUTORIAL_SELECT;
+		reset_title_menu();
+		create_tutorial_select();
+		return;
+	}
+	function ProcessTutorialSelect()
+	{
+		if (CheckValid(tutorial_select)  ==  false)
+			return SCENE_DEFAULT;
+
+
+		with ( tutorial_select )
+		{
+			.Update();
+			if (.mode  !=  .MODE_END)
+				return SCENE_DEFAULT;
+		}
+
+		release_tutorial_select();	// オプションメニューを開放
+		restart_title_menu_select();
+		return SCENE_DEFAULT;
+	}
+
+
+
+
+
+
+	function release_result_viewer()
+	{
+		EasyObjectInvalidate( result_viewer );
+		result_viewer = void;
+		return;
+	}
+	function create_result_viewer()
+	{
+		with (result_viewer = new CIriyaResultViewMenu(parentWindow, parentLayer))
+		{
+			.Init();
+			.SetPriorityOffset( IR_TITLE_LAYER_TUTORIAL_SELECT );
+			.SetAutoBasePosition();
+//			.SetBasePosition( PRN_TUTORIAL_SELECT_X,PRN_TUTORIAL_SELECT_Y );
+			.Print();
+			.FadeIn();
+//			.Start();
+		}
+		return;
+	}
+	function change_result_viewer()
+	{
+		proc_mode = PROC_RESULT_VIEWER;
+		reset_title_menu();
+		create_result_viewer();
+		return;
+	}
+	function ProcessResultViewer()
+	{
+		if (CheckValid(result_viewer)  ==  false)
+			return SCENE_DEFAULT;
+
+
+		with ( result_viewer )
+		{
+			.Update();
+			if (.mode  !=  .MODE_END)
+				return SCENE_DEFAULT;
+		}
+
+		release_result_viewer();	// オプションメニューを開放
+		restart_title_menu_select();
+		return SCENE_DEFAULT;
+	}
+
+
+
+
+
+
+	// ステージセレクト
+	function release_stage_select()
+	{
+		if (CheckValid(stage_select)  ==  true) {
+			EasyObjectInvalidate( stage_select );
+			stage_select = void;
+		}
+		return;
+	}
+	function change_stage_select()
+	{
+		proc_mode = PROC_STAGE_SELECT;
+		reset_title_menu();
+
+		release_stage_select();
+
+		with (stage_select = new CIriyaStageSelectMenu(parentWindow, parentLayer))
+		{
+			.Init();
+			.SetPriorityOffset( IR_TITLE_LAYER_TUTORIAL_SELECT );
+			.SetAutoBasePosition();
+			.Print();
+			.FadeIn();
+		}
+
+		parentLayer.resetFrameSkipData();
+		return;
+	}
+	function ProcessStageSelect()
+	{
+
+		if (CheckValid(stage_select)  ==  false)
+			return SCENE_DEFAULT;
+
+
+		with ( stage_select )
+		{
+			.Update();
+			if (.mode  !=  .MODE_END)
+				return SCENE_DEFAULT;
+
+			if (.select_id  !=  -1) {
+			var	convert_id = new CIriyaGameHelpID();
+				parentLayer.setStageSelectFlag( true, convert_id.ConvertStageNoToSceneID( .select_id ) );
+				invalidate convert_id;
+
+				set_fade_out();
+			} else {
+				release_stage_select();
+//				print_title_menu();
+//				restart_title_menu_select();
+				restart_start_select();
+			}
+		}
+		return ( SCENE_DEFAULT );
+	}
+
+
+
+
+
+
+
+
+
+	function release_start_select()
+	{
+		EasyObjectInvalidate( start_select );
+		start_select = void;
+		return;
+	}
+	function change_start_select()
+	{
+		proc_mode = PROC_START_SELECT;
+		reset_title_menu();
+		close_title_menu();
+
+		release_start_select();
+
+		with (start_select = new CIrTitleStartMenu(parentWindow, parentLayer))
+		{
+			.Init();
+			.SetPriorityOffset( IR_TITLE_LAYER_START_SELECT );
+			.Print();
+			.Start();
+		}
+		UpdateCursorPos( this );
+		return;
+	}
+	function restart_start_select()
+	{
+		proc_mode = PROC_START_SELECT;
+		start_select.Reset();
+		start_select.Print();
+		start_select.Start();
+		UpdateCursorPos( this );
+		return;
+	}
+	function ProcessStartSelect()
+	{
+		if (CheckValid(start_select)  ==  false)
+			return SCENE_DEFAULT;
+
+
+		with ( start_select )
+		{
+			.Update();
+			if (.mode  !=  .MODE_END)
+				return SCENE_DEFAULT;
+
+			switch ( .menu_id )
+			{
+			case .MENU_NORMAL:
+				set_fade_out();
+				break;
+			case .MENU_AUTO:
+				parentLayer.setAutoPlayMode( true );
+				set_fade_out();
+				break;
+			case .MENU_STAGESELECT:
+				.Print();
+				change_stage_select();
+				parentLayer.resetFrameSkipData();
+				break;
+			case .MENU_CANCEL:
+				print_title_menu();
+				restart_title_menu_select();
+				release_start_select();
+				break;
+			}
+		}
+		return ( SCENE_DEFAULT );
+	}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+	// メインループ
+	function proc()
+	{
+
+		@if (DEBUG_MODE  ==  1)
+		if (CheckValid(key_state)  ==  true) {
+		with ( key_state )
+		{
+			.UpdateState();
+			if (.GetCtrlKeyState()  ==  .KEY_FIRAST) {
+				stopAll();
+				title_menu.KillMenuHitCheck();		// 判定処理を停止
+				return SCENE_SELECT;
+			}
+		}}
+		@endif
+
+
+		switch ( proc_mode )
+		{
+		case PROC_BG_FLASH:
+			return ( process_bg_flash() );
+
+		case PROC_TITLE_IN:
+			return ( process_title_in() );
+
+		case PROC_ROOT:
+			return ( ProcessRootMenu() );
+
+		case PROC_OPTION:
+			return ( ProcessOptionMenu() );
+
+		case PROC_TUTORIAL_SELECT:
+			return ( ProcessTutorialSelect() );
+
+		case PROC_FADE_OUT:
+			return ( ProcessFadeOut() );
+
+
+		case PROC_STAGE_SELECT:
+			return ( ProcessStageSelect() );
+
+//		case PROC_ITEM_VIEWER:
+//			return ( ProcessItemViewer() );
+
+		case PROC_RESULT_VIEWER:
+			return ( ProcessResultViewer() );
+
+		case PROC_START_SELECT:
+			return ( ProcessStartSelect() );
+
+
+		default:
+			break;
+		}
+		return SCENE_DEFAULT;
+	}
+
+	function draw()
+	{
+		
+	}
+}
+
+
+
+
+

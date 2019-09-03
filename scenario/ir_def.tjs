@@ -1,0 +1,708 @@
+var REPLAYMODE = 0; // 0:何もしない 1:記録する 2:再生する
+
+var VERSION_INFO = "051003-23";
+
+// デバッグ用設定
+var ALWAYS_NODAMAGE 	= false;	// 常にダメージを受けない
+var ALWAYS_RAPIDMODE	= false;	// 常に高速移動
+var ALWAYS_AUTOMODE		= false;	// 常にオートモードにする
+
+// システム設定
+var USE_DEFAULT_WINDOWSIZE = true;
+var FRAME_PER_SEC = 30;
+var TIMER_INTERVAL = 1000/FRAME_PER_SEC;
+var RELEASE_CG_FILE_EXT = "TLG5";
+var MAX_PLAYER_NUM = 5;
+
+var	START_LEFT_TIME = (3*60)*FRAME_PER_SEC;
+//var	START_LEFT_TIME = 3*FRAME_PER_SEC;
+//var	START_LEFT_TIME = 1*FRAME_PER_SEC;
+
+
+// タイム記録数
+var	MAX_CLEAR_TIME_NUM=5;
+
+// SE停止時のwait時間
+//var	SE_STOP_TIME=0;
+var	SE_STOP_TIME=1000/4;
+//var	SE_STOP_TIME=1000;
+//var	SE_STOP_TIME=void;
+
+
+var	AUTO_MODE_SE_VOLUME_AVE = 50;
+var	FOCUS_SE_VOLUME_AVE     = 70;
+
+var SE音量_画面外 = 70;
+var SE音量_画面内 = 100;
+
+
+// 描画・処理オプション
+var SKIP_COUNT;
+var	DrawOptionSKIP_COUNT = [ 1, 1 ];
+
+var CREATE_MENU;// メニュー、タイマ、トップランナーを表示する
+var	DrawOptionCREATE_MENU = [ 1, 1 ];
+	
+var CREATE_SMOKE;// 煙を表示する
+var	DrawOptionCREATE_SMOKE =  [ 1, 0 ];
+
+var CREATE_BUTTON;	// ボタン連打指示アニメを有効にする
+var	DrawOptionCREATE_BUTTON = [ 1, 1 ];
+	
+var CREATE_FIGHT_EFFECT;	// サーバントの攻撃エフェクトを有効にする
+var	DrawOptionCREATE_FIGHT_EFFECT = [ 1, 0 ];
+
+var CREATE_HIT_EFFECT;	// 打点エフェクトを有効にする
+var	DrawOptionCREATE_HIT_EFFECT = [ 1, 0 ];
+
+var CREATE_SHADOW;	// 影を生成する
+var	DrawOptionCREATE_SHADOW = [ 1, 0 ];
+
+var SHADOW_ANIMATION;	// 影のアニメを有効にする
+var	DrawOptionSHADOW_ANIMATION = [ 1, 0 ];
+
+var FIGHT_BUTTON_ANIMATION; // ボタン連打指示の拡縮アニメを行う
+var	DrawOptionFIGHT_BUTTON_ANIMATION = [ 1, 0 ];
+
+var PLAYER_MARKER_ANIMATION;	// プレイヤマーカーのアニメを有効にする
+var	DrawOptionPLAYER_MARKER_ANIMATION = [ 1, 0 ];
+
+var DIVIDE_BACKGROUND_IMAGE;	// 背景を分割管理する（無効にした場合、別途画像ファイルが必要なので注意）
+var	DrawOptionDIVIDE_BACKGROUND_IMAGE = [ 1, 1 ];
+
+var TITLE_FULLANIMATION;	// Title, Goal, Retire, Congraturations, ReadyGo のアニメーションを有効にする
+var	DrawOptionTITLE_FULLANIMATION = [ 1, 0 ];
+
+var ENABLE_HOUGU; // 宝具を使う
+var	DrawOptionENABLE_HOUGU = [ 1, 1 ];
+
+var ENABLE_RIVAL_ACTION; // COMサーバントの行動を有効にする
+var	DrawOptionENABLE_RIVAL_ACTION = [ 1, 1 ];
+
+var ENABLE_FIGHT; // 小競り合いを有効にする
+var	DrawOptionENABLE_FIGHT = [ 1, 1 ];
+
+var USE_MSEC_TIMER; // タイマを１ミリ秒単位まで表示する
+var	DrawOptionUSE_MSEC_TIMER = [ 1, 0 ];
+
+var PRINT_TOP_RUNNER; // トップランナー表示オプション
+var	DrawOptionPRINT_TOP_RUNNER = [ 1, 0 ];
+	
+// 足場の状態更新ルーチンを有効にする
+var STAGE1_STONE_COM; 
+var	DrawOptionSTAGE1_STONE_COM = [ 1, 1 ];
+
+// 足場を表示する
+var STAGE1_SHOW_STONE; 
+var	DrawOptionSTAGE1_SHOW_STONE = [ 1, 1 ];
+
+//敵の触手エフェクトを表示する
+var STAGE1_ENABLE_ENEMYEFF; 
+var DrawOptionSTAGE1_ENABLE_ENEMYEFF = [ 1, 0 ];
+
+// 敵を生成する
+var STAGE1_CREATE_ENEMY;
+var	DrawOptionSTAGE1_CREATE_ENEMY = [ 1, 1 ];
+
+// 石は用意されたすべてのアニメを行う
+var STAGE1_STONE_ANIMATION;
+var	DrawOptionSTAGE1_STONE_ANIMATION = [ 1, 0 ];
+
+// マウスでポイントされている石を選択状態にする
+var STAGE1_STONE_FOCUS;	
+var	DrawOptionSTAGE1_STONE_FOCUS = [ 1, 0 ];
+
+// きのこのアニメーションを省略しない
+var STAGE2_KINOKO_FULLANIM; 
+var	DrawOptionSTAGE2_KINOKO_FULLANIM = [ 1, 1 ];
+
+// セラリズを生成する
+var STAGE3_ENABLE_SERARIZ; 
+var	DrawOptionSTAGE3_ENABLE_SERARIZ = [ 1, 1 ];
+
+// 砲台を生成する
+var STAGE3_ENABLE_CANNON; 
+var	DrawOptionSTAGE3_ENABLE_CANNON = [ 1, 1 ];
+
+// 砲台の攻撃を有効にする
+var STAGE3_ENABLE_ATTACK; 
+var	DrawOptionSTAGE3_ENABLE_ATTACK = [ 1, 1 ];
+
+// ボールのバウントエフェクトを有効にする
+var STAGE3_BOUNCEEFF;
+var DrawOptionSTAGE3_BOUNCEEFF = [ 1, 0 ];
+
+// 砲台の発射時エフェクトを有効にする
+var STAGE3_FIREEFF;
+var DrawOptionSTAGE3_FIREEFF = [ 1, 0 ];
+
+// ダメージを受けたときのヒットエフェクトを表示する
+var ENABLE_SHOTHITEFF;
+var DrawOptionENABLE_SHOTHITEFF = [ 1, 0 ];
+	
+// 宝具エフェクトを完全表示する
+var ENABLE_HOUGUEFF;
+var DrawOptionENABLE_HOUGUEFF = [ 1, 0 ];
+
+// ギル先生のエフェクトを完全表示する
+var STAGE3_GILEFF;
+var DrawOptionSTAGE3_GILEFF = [ 1, 0 ];
+
+
+
+
+// メモリタイプオプション
+var IMAGEBUFFER_CAPACITY_DEFAULT;
+var	IrDefaultMemoryType =
+	[
+		4,
+		200
+	];
+var IMAGEBUFFER_CAPACITY_SYSTEM;
+var	IrDefaultMemorySystem =
+	[
+		10,
+		200
+	];
+var IMAGEBUFFER_CAPACITY_SERVANT;
+var	IrDefaultMemoryServant =
+	[
+		10,
+		200
+	];
+
+
+
+
+
+// タイム記録MAX
+var	MAX_TIME_COUNT			= (100*60*FRAME_PER_SEC);	// ステージタイム(通常表示も含む)
+var	MAX_TOTAL_TIME_COUNT	= (MAX_TIME_COUNT*10);		// トータルタイム
+
+
+var SCREEN_SIZE_W = 800;
+var SCREEN_SIZE_H = 600;
+var	SCREEN_CENTER_X	= SCREEN_SIZE_W/2;
+var	SCREEN_CENTER_Y	= SCREEN_SIZE_H/2;
+//
+var HOUGU_INTERVAL		= FRAME_PER_SEC*4; // 宝具使用直後の、宝具使用禁止時間
+var NO_HOUGU_TIME		= FRAME_PER_SEC*4; // スタート直後の宝具使用禁止時間(COM)
+var AFTER_DEAD_TIME		= 45;	// キャラがダウンしてからポーズがかかるまでの時間
+var AFTER_WIN_TIME		= 45;	// キャラがゴールしてからポーズがかかるまでの時間
+var FIGHT_TIME_LENGTH	= 80;	// 小競り合いの持続時間
+var FIGHT_GAUGE_RANGE	= 10;	// 小競り合い時のゲージ範囲
+var WAIT_TITLE			= 110;	// TITLEの表示開始から、READYGOの表示開始までの時間
+var WAIT_READYGO		= 80;	// READYGOの表示開始から、行動可能になるまでの時間
+var CORRECTION_INTERVAL	= 90;	// 不要なオブジェクトを削除する時間間隔
+var FADETIME_SCENESTART	= 15;	// シーン開始時のフェード時間
+var FADETIME_SCENEEND	= 15;	// シーン終了時のフェード時間
+var ALLOW_RIVAL_RESURRECTION		= false;	// ライバルサーバントが、ダウン後に復活可能かどうか
+var REQUIREDTIME_RESURRECTION		= 90;		// ダウンしてから復活するまでの時間
+var サーバントが倒れたら無条件で宝箱が出現する = true;
+var プレイヤが小競り合いで与えるダメージの倍率補正 = 1.2; // プレイヤが小競り合いで勝った場合に、相手に与えるダメージの倍率
+var CALLTYPE_NORMAL = 0;
+var CALLTYPE_ADV	= 1;
+
+var ITEM_スカ							= -2;
+var ITEM_はずれ							= -1;
+var ITEM_通常							= 0;
+	var ITEM_ケーキ						= ITEM_通常+0;
+	var ITEM_パフェ						= ITEM_通常+1;
+	var ITEM_リンゴ						= ITEM_通常+2;
+	var ITEM_ミカン						= ITEM_通常+3;
+	var ITEM_サンドイッチ				= ITEM_通常+4;
+	var ITEM_スープ						= ITEM_通常+5;
+	var ITEM_ようかん					= ITEM_通常+6;
+	var ITEM_パン						= ITEM_通常+7;
+	var ITEM_おにぎり					= ITEM_通常+8;
+	var ITEM_たいやき					= ITEM_通常+9;
+	var ITEM_ハンバーグ					= ITEM_通常+10;
+	var ITEM_麻婆豆腐					= ITEM_通常+11;
+	var ITEM_バーガー					= ITEM_通常+12;
+	var ITEM_焼魚定食					= ITEM_通常+13;
+var ITEM_通常_終了						= ITEM_通常+14;
+
+
+var ITEM_レア							= 20;
+	var ITEM_レア_カリバーン			= ITEM_レア+0;
+	var ITEM_レア_凛のペンダント		= ITEM_レア+1;
+	var ITEM_レア_偽臣の書				= ITEM_レア+2;
+	var ITEM_レア_天の杯				= ITEM_レア+3;
+	var ITEM_レア_ジャプニカ暗殺帖		= ITEM_レア+4;
+
+	var ITEM_レア_セイバーのぬいぐるみ	= ITEM_レア+5;
+	var ITEM_レア_セイバーの茶碗		= ITEM_レア+6;
+	var ITEM_レア_ライダーの眼鏡		= ITEM_レア+7;
+	var ITEM_レア_キャスターのコイン	= ITEM_レア+8;
+	var ITEM_レア_キャスターの指輪		= ITEM_レア+9;
+
+	var ITEM_レア_エクスカリバー		= ITEM_レア+10;
+	var ITEM_レア_金ぴか耳飾り			= ITEM_レア+11;
+	var ITEM_レア_ランサーの釣竿		= ITEM_レア+12;
+	var ITEM_レア_アーチャーのスリッパ	= ITEM_レア+13;
+	var ITEM_レア_アーチャーのお玉		= ITEM_レア+14;
+
+	var ITEM_レア_タイガーストラップ	= ITEM_レア+15;
+	var ITEM_レア_メイド服				= ITEM_レア+16;
+	var ITEM_レア_掛け軸				= ITEM_レア+17;
+	var ITEM_レア_おいしいネコ缶		= ITEM_レア+18;
+	var ITEM_レア_泰山のレンゲ			= ITEM_レア+19;
+var ITEM_レア_終了 						= ITEM_レア+20;
+
+
+function 通常アイテム？( id ) { return ( id>=ITEM_通常 && id<ITEM_通常_終了 ) ? true : false; }
+function レアアイテム？( id ) { return ( id>=ITEM_レア && id<ITEM_レア_終了 ) ? true : false; }
+
+var ハズレ宝箱が爆発する確率		= 0.30;	// 宝箱がハズレの場合、それが爆発する確率
+var セラリズがアイテムを置く確率	= 0.03;	// セラリズがアイテムを落とす確率（１行動毎に判定）
+var STAGE1_足場にアイテムを置く確率 = 0.30;	// アイテムそのものの出現確率
+var 宝箱の出現確率					= 0.07;	// アイテムが宝箱である確率
+
+var カリバーンの出現確率			= 0.5;	// 宝箱を開けた際にレアアイテムが出る確率
+var 凛のペンダントの出現確率		= 0.5;
+var 偽臣の書の出現確率				= 0.5;
+var 天の杯の出現確率				= 0.5;
+var ジャプニカ暗殺帖の出現確率		= 0.5;
+
+var セイバーのぬいぐるみの出現確率	= 0.5;
+var セイバーの茶碗の出現確率		= 0.5;
+var ライダーの眼鏡の出現確率		= 0.5;
+var キャスターのコインの出現確率	= 0.5;
+var キャスターの指輪の出現確率		= 0.5;
+
+var エクスカリバーの出現確率		= 0.5;
+var 金ぴか耳飾りの出現確率			= 0.5;
+var ランサーの釣竿の出現確率		= 0.5;
+var アーチャーのスリッパの出現確率	= 0.5;
+var アーチャーのお玉の出現確率		= 0.5;
+
+var タイガーストラップの出現確率	= 0.5;
+var メイド服の出現確率				= 0.5;
+var 掛け軸の出現確率				= 0.5;
+var おいしいネコ缶の出現確率		= 0.5;
+var 泰山のレンゲの出現確率			= 0.5;
+
+
+
+//----
+var SCENE_DEFAULT	= 0;	// なにもしない
+var SCENE_CLOSE		= -1;	// 風雲イリヤ城を終了させる
+var SCENE_TITLE		= 1;
+var SCENE_SELECT	= 2;
+var SCENE_GAMEOVER	= 3;
+var SCENE_ENDING	= 4;
+var SCENE_STAGE1	= 10;
+var SCENE_STAGE2	= 11;
+var SCENE_STAGE3	= 12;
+var SCENE_BOSS		= 13;
+var SCENE_RANK		= 14;
+var SCENE_QUIZ1		= 20;
+var SCENE_QUIZ2		= 21;
+var SCENE_QUIZ3		= 22;
+var SCENE_TALK1		= 24;
+var SCENE_TALK2		= 25;
+var SCENE_FIRST		= SCENE_TITLE;
+var MAX_SCENE_ID	= 26; // シーンの最大値＋１
+//----
+var SCENE_SELECT_NEXT	= SCENE_TALK1;//SCENE_STAGE1;	// SCENE_STAGE1; SCENE_STAGE2; SCENE_STAGE3; SCENE_BOSS
+//var SCENE_SELECT_NEXT	= SCENE_STAGE1;
+//var SCENE_SELECT_NEXT	= SCENE_ENDING;
+//var SCENE_SELECT_NEXT	= SCENE_RANK;
+var SCENE_SELECT_ADV_NEXT = SCENE_STAGE1;
+var SCENE_TALK1_NEXT	= SCENE_STAGE1;
+var SCENE_STAGE1_NEXT	= SCENE_QUIZ1;
+var SCENE_STAGE1_ADV_NEXT = SCENE_STAGE3; // アドベンチャーパートから呼び出されたとき
+var SCENE_QUIZ1_NEXT	= SCENE_STAGE2;
+var SCENE_STAGE2_NEXT	= SCENE_QUIZ2;
+var SCENE_QUIZ2_NEXT	= SCENE_STAGE3;
+var SCENE_STAGE3_NEXT	= SCENE_QUIZ3;
+var SCENE_STAGE3_ADV_NEXT = SCENE_BOSS;
+var SCENE_QUIZ3_NEXT	= SCENE_TALK2;
+var SCENE_QUIZ3_ADV_NEXT= SCENE_BOSS;
+var SCENE_TALK2_NEXT	= SCENE_BOSS;	// ２回目の藤隊長激励の次
+var SCENE_BOSS_NEXT		= SCENE_ENDING; // イリヤ戦の次（通常時）
+var SCENE_BOSS_ADV_NEXT	= SCENE_CLOSE;	// イリヤ戦の次（アドベンチャーから呼び出された場合）
+var SCENE_ENDING_NEXT	= SCENE_RANK;
+var SCENE_RANK_NEXT		= SCENE_TITLE;
+//----
+var CHARA_ID_NONE		= 0xFF;
+var CHARA_ID_MASTER		= 0x10;
+var	CHARA_ID_SERVANT	= 0x20;
+var	CHARA_ID_EX			= 0x40;
+var CHARA_ID_RIN		= CHARA_ID_MASTER|0x00;
+var CHARA_ID_SAKURA		= CHARA_ID_MASTER|0x01;
+var CHARA_ID_SHIROU		= CHARA_ID_MASTER|0x02;
+var	CHARA_ID_SABER		= CHARA_ID_SERVANT|0x00;
+var	CHARA_ID_ARCHER		= CHARA_ID_SERVANT|0x01;
+var	CHARA_ID_RIDER		= CHARA_ID_SERVANT|0x02;
+var	CHARA_ID_LANCER		= CHARA_ID_SERVANT|0x03;
+var CHARA_ID_CASTER		= CHARA_ID_SERVANT|0x04;
+var	CHARA_ID_GILGAMESH	= CHARA_ID_EX|0x01;
+var	CHARA_ID_IRIYA		= CHARA_ID_EX|0x02;
+var CHARA_ID_BERSERCAR	= CHARA_ID_EX|0x03;
+
+
+var	DEF_MASTER_CHARA_NUM	=3;
+var	DEF_SERVANT_CHARA_NUM	=5;
+var	MasterCharaIDTable =
+[
+	CHARA_ID_RIN,
+	CHARA_ID_SAKURA,
+	CHARA_ID_SHIROU,
+];
+
+var	ServantCharaIDTable =
+[
+	CHARA_ID_SABER,
+	CHARA_ID_ARCHER,
+	CHARA_ID_RIDER,
+	CHARA_ID_LANCER,
+	CHARA_ID_CASTER,
+];
+
+var	HOUGU_ID_NONE				= -1,
+
+	HOUGU_ID_OFFSET_SABER		= 0,
+	HOUGU_ID_エスクカリバー		= 0,
+	HOUGU_ID_アヴァロン			= 1,
+	HOUGU_ID_SABER_NUM			= 2,
+
+	HOUGU_ID_OFFSET_ARCHER		= 2,
+	HOUGU_ID_ブレードワークス	= 2,
+	HOUGU_ID_ARCHER_NUM			= 1,
+
+	HOUGU_ID_OFFSET_RIDER		= 3,
+	HOUGU_ID_ベルレフォーン		= 3,
+	HOUGU_ID_ブラッドフォート	= 4,
+	HOUGU_ID_RIDER_NUM			= 2,
+
+	HOUGU_ID_OFFSET_LANCER		= 5,
+	HOUGU_ID_ゲイボルク			= 5,
+	HOUGU_ID_LANCER_NUM			= 1,
+
+	HOUGU_ID_OFFSET_CASTER		= 6,
+	HOUGU_ID_サヴァイヴ			= 6,
+	HOUGU_ID_ルールブレイカー	= 7,
+	HOUGU_ID_小次郎さん			= 8,
+	HOUGU_ID_CASTER_NUM			= 3,
+
+	MAX_HOUGU_ID=HOUGU_ID_小次郎さん+1;
+
+@if (DEBUG_MODE  ==  1)
+// キャラセレのCTRLスキップの時に選択されていない場合の選択キャラ
+var		CHARASEL_SKIP_SEL_MS	= CHARA_ID_RIN;
+var		CHARASEL_SKIP_SEL_SV	= CHARA_ID_SABER;
+@endif
+
+
+
+// Layer priority
+var PRIORITY_BACKGROUND 	= 0;
+var PRIORITY_GROUNDOBJ		= 10000; // object on ground
+var PRIORITY_PLAYER_BACK	= 20000; // 
+var PRIORITY_SHADOW			= 30000; // shadow of object
+var PRIORITY_SHADOW_UP		= PRIORITY_SHADOW+3000; // 影より上
+var PRIORITY_SHADOW_UP2		= PRIORITY_SHADOW+6000; // 影より上2
+var PRIORITY_ITEM			= PRIORITY_SHADOW+9000;
+var PRIORITY_PLAYER			= 40000; // servant
+var PRIORITY_NORMAL_EFFECT	= 43000; // Normal Effect
+var PRIORITY_PLAYER_TOP		= 50000;
+var PRIORITY_MOUSECURSOR	= 68000; // mouse cursor
+var	PRIORITY_FADE			= 70000; // fade screen
+var PRIORITY_HOUGU			= 74000; // 宝具使用時にアニメーションするオブジェクト用
+var PRIORITY_GAMESYSTEM		= 75000;
+var PRIORITY_MENU_FADE		= 80000; // システムメッセージを表示するときの画面フェード用
+var PRIORITY_SYSTEM			= 90000; //
+var PRIORITY_INFO_OBJ		= 101000; // information
+var PRIORITY_MENU			= 103500; // option menu
+var PRIORITY_GOAL_RANK		= PRIORITY_MENU; // score
+var PRIORITY_SCREEN_FADE	= 104000; // 画面全体のフェード用レイヤ
+var PRIORITY_SYSTEM_FADE	= 110000; // システム用のフェード用レイヤ
+var PRIORITY_FPSINFO		= 0xFFFFFFF; // FPS表示用
+
+// BGM
+var BGM_TITLE	= "iriya01";
+var BGM_SELECT	= "iriya02";
+var BGM_STAGE1	= "iriya03";
+var BGM_STAGE2	= "iriya04";
+var BGM_STAGE3	= "iriya05";
+var BGM_BOSS	= "iriya06";
+var BGM_QUIZ	= "iriya07";
+var BGM_ENDING	= "iriya08";
+var BGM_STAFF	= "iriya09";
+var BGM_TALK	= "iriya10";
+
+// system
+var	SE_MENU_SELECT_MAIN	= "irse012";
+var	SE_MENU_SELECT_SUB	= "irse013";
+var	SE_MENU_CANCEL		= "irse047";
+var	SE_MENU_FOCUS		= "irse011";
+
+var SE_TITLE			= "irse001";	// ステージタイトル
+var SE_GO				= "irse002";	// "GO"
+var SE_GOAL				= "irse003";	// "GOAL!"
+var SE_RETIRE			= "irse004";	// "RETIRE"
+var SE_CONGRATULATIONS	= "irse005";	// "CONGRATULATIONS!"
+var SE_LANDING			= "irse007";	// 着地した
+var SE_GETITEM			= "irse009";	// アイテムを取った
+var SE_JUMP				= "irse010";	// ジャンプした
+var SE_ITEM_EXPLOSION	= "irse017";	// 宝箱が爆発した
+
+var SE_DAMAGE			= "irse167";	// ダメージを受けた
+
+var SE_USEHOUGU			= "irse132";	// 宝具を使った瞬間
+var SE_OPENBOX			= "irse409";	// 宝箱を開けた
+var SE_FIGHT			= "irse179";	// 小競り合いの音
+var SE_READY			= "irse112";	// 小競り合い開始
+
+// stage1
+var SE_ASHIBA_POINT		= "irse016";	// 足場にカーソルを合わせた	
+var SE_ASHIBA_EXPLOSION	= "irse017";	// 足場が爆発した
+var SE_ENEMYHAND		= "irse018";	// 電撃触手
+var SE_DROWN			= "irse019";	// 水に落ちた
+
+// stage2
+var SE_JUMPUP_CURSOR	= "irse020";	// きのこカーソル点滅
+var SE_JUMPDOWN_CURSOR	= "irse020";	// 着地点カーソル点滅
+var SE_HANG_KINOKO		= "irse021"; 	// きのこにしがみ付いた
+var SE_EAT				= "irse022";	// 食事中
+var SE_WARNING			= "irse023";	// ミサイルの警告音
+var SE_MISSILE_EXPLOSION= "irse017";//"irse024";	// ミサイルの爆発音
+var SE_KINOKO_CLIMB		= "irse025";	// きのこによじ登る
+var SE_CLIMB			= "irse026"; 	// 崖を登る
+var SE_GAKE_FALL		= "irse027";	// 崖から滑り落ちる
+
+// stage3
+var SE_SHOT				= "irse028";	// セラリズのショット
+var SE_BALL				= "irse029";	// 砲台の発射音
+var SE_HALBERD			= "irse104";//"irse030";	// ハルバード振る音
+var SE_GIL_ATTACK		= "irse031";
+var SE_GIL_ATTACK2		= "irse032";
+var SE_GIL_DEAD			= "irse033";
+
+// boss stage
+var SE_BOSS_SHOT		= SE_SHOT;		// ボスのショット攻撃
+var SE_BOSS_LASER		= "irse034";	// ボスのレーザー攻撃
+var SE_BOSS_DASH		= "irse035";	// ボスの突撃
+var SE_BOSS_DAMAGE		= "irse036";	// ボスがダメージを受けた
+var SE_BOSS_DESTROYED	= "irse037";	// ボスが壊れてのた打ち回っている
+var SE_BOSS_DEAD		= "irse038";	// ボスが壊れて停止した
+var SE_BOSS_PREV_DASH	= "irse039";	// ボスの突撃直前
+var SE_BOSS_PREV_SHOT	= "irse039";	// ボスのショット攻撃直前
+var SE_BOSS_PREV_LASER	= "irse039";	// ボスのレーザー攻撃直前
+var SE_LASER_EXPLOSION	= SE_MISSILE_EXPLOSION;
+var SE_BOSS_IDLING		= "irse040";	// バーサーカー待機中
+var SE_BOSS_MOVING		= "irse041";	// バーサーカー移動中
+var SE_ZANGEKI			= "irse102";	// バーサーカーと接近戦
+
+// quiz, talk
+var SE_SCREEN_TEAR		= "irse042";	// クイズ回答スクリーンを破った
+var SE_DIRTY_LANDING	= "irse043";	// 泥に着地した
+var SE_QUIZ_CORRECTANS	= "irse044";	// クイズに正解した
+var SE_QUIZ_INCORRECTANS= "irse045";	// クイズの答えを間違えた
+var SE_QUIZ_SCREENPOINT = SE_MENU_FOCUS;// 解答を選択した
+var SE_QUIZ_SLIDING		= "irse046";	// 正解着地時のスライディング
+var SE_TEXT_TYPING		= "irse069";
+
+
+// 宝具
+var SE_宝具防御成功		= "irse070";
+var SE_宝具防御			= "irse071";
+var SE_ARCHER_HOUGU 	= "irse072";
+var SE_CASTER_HOUGU		= "irse073";
+var SE_LANCER_HOUGU		= "irse074";
+var SE_RIDER_HOUGU		= "irse075";
+var SE_SABER_HOUGU		= "irse076";
+
+var SE_JIBAKU_WARNING	= "irse050";//"irse062";	// 偽スタッフロール時の警告音
+var SE_JIBAKU_BUTTON	= "irse050";	// ボタンが出現
+var SE_JIBAKU_PUSHBUTTON= "irse063";	// ボタンを押す
+var SE_JIBAKU_EXPLOSION = "irse051";	// ホワイトアウトして爆発
+var SE_JIBAKU_GOGOGOGOGO= "irse333";	// 瓦礫がふってくる
+
+var	DEF_MENU_SE_FADE_TIME	= 16*2;		// MenuSE用のフェード時間
+
+
+
+
+var	SE_FRAME_IN_SE					= "irse049";
+
+
+// タイトル画面用
+var	SE_TITLE_MENU_SELECT_MAIN		= SE_MENU_SELECT_MAIN;		// START & EXIT
+var	SE_TITLE_MENU_SELECT_SUB		= SE_MENU_SELECT_SUB;		// OPTION & HELP
+var	SE_TITLE_MENU_FOCUS				= SE_MENU_FOCUS;
+
+var	SE_TITLE_THUNDER				= "irse014";// タイトルの雷
+var	SE_TITLE_THUNDER_FLASH			= "irse015";// タイトルの雷フラッシュ
+var	SE_TITLE_IN						= "";	// タイトルインの音
+
+
+// オプションメニュー用
+var	SE_OPTION_MENU_SELECT			= SE_MENU_SELECT_SUB;	// SELECT
+var	SE_OPTION_MENU_SLIDER_CLICK		= "";					// Slider Bar Click
+var	SE_OPTION_MENU_RET_TITLE_CLICK	= SE_MENU_SELECT_SUB;	// Ret Title Click
+var	SE_OPTION_MENU_CANCEL			= SE_MENU_CANCEL;		// CANCEL
+var	SE_OPTION_MENU_FOCUS			= SE_MENU_FOCUS;
+
+// ステージメニュー用
+var	SE_STAGESELECT_MENU_SELECT		= SE_MENU_SELECT_MAIN;	// SELECT
+var	SE_STAGESELECT_MENU_CANCEL		= SE_MENU_CANCEL;		// CANCEL
+var	SE_STAGESELECT_MENU_FOCUS		= SE_MENU_FOCUS;
+
+
+// ご褒美CGビューワー
+var	SE_CGVIEWER_MENU_CANCEL			= SE_MENU_CANCEL;		// CANCEL
+
+
+// アイテムビューアー
+var	SE_ITEMVIEWER_MENU_SELECT		= SE_MENU_SELECT_SUB;	// SELECT
+var	SE_ITEMVIEWER_MENU_CANCEL		= SE_MENU_CANCEL;		// CANCEL
+var	SE_ITEMVIEWER_MENU_FOCUS		= SE_MENU_FOCUS;
+var	SE_ITEMVIEWER_MENU_ITEMSELECT	= SE_MENU_SELECT_MAIN;	// SELECT
+var	SE_ITEMVIEWER_MENU_ITEMFOCUS	= SE_MENU_FOCUS;
+var	SE_ITEMVIEWER_MENU_TEXTFADEIN	= "";
+var	SE_ITEMVIEWER_MENU_TEXTFADEOUT	= SE_MENU_CANCEL;
+
+// リザルトスコアメニュー用
+var	SE_RESULTVIEW_MENU_SELECT		= SE_MENU_SELECT_SUB;
+var	SE_RESULTVIEW_MENU_SELECT2		= SE_MENU_SELECT_MAIN;
+var	SE_RESULTVIEW_MENU_CANCEL		= SE_MENU_CANCEL;
+var	SE_RESULTVIEW_MENU_FOCUS		= SE_MENU_FOCUS;
+var	SE_RESULTVIEW_MAIN_SELECT		= SE_MENU_SELECT_SUB;
+var	SE_RESULTVIEW_MAIN_CANCEL		= SE_MENU_CANCEL;
+var	SE_RESULTVIEW_MAIN_FOCUS		= SE_MENU_FOCUS;
+var	SE_RESULTVIEW_MAIN_FRAME_IN		= SE_FRAME_IN_SE;	// 
+
+
+
+
+var	SET_STARTSELECT_MENU_SELECT_MAIN	= SE_MENU_SELECT_MAIN;
+var	SET_STARTSELECT_MENU_SELECT			= SE_MENU_SELECT_SUB;
+var	SET_STARTSELECT_MENU_CANCEL			= SE_MENU_CANCEL;
+var	SET_STARTSELECT_MENU_FOCUS			= SE_MENU_FOCUS;
+
+
+
+
+
+// キャラセレクト
+var	SE_CHARASEL_SELECT		= SE_MENU_SELECT_SUB;	// キャラ決定
+var	SE_CHARASEL_FOCUS		= SE_MENU_FOCUS;		// キャラフォーカス
+var	SE_CHARASEL_CANCEL		= SE_MENU_CANCEL;		// 
+var	SE_CHARASEL_FLASH		= "irse048";			// キャラすべて決定後のフラッシュ音
+var	SE_CHARASEL_YN_CLICK	= SE_MENU_SELECT_MAIN;	// OKメニュー内ボタンクリック音
+var	SE_CHARASEL_YN_CANCEL	= SE_MENU_CANCEL;		// OKメニューキャンセル音
+var	SE_CHARASEL_YN_FOCUS	= SE_MENU_FOCUS;		// OKメニューボタンフォーカス音
+
+
+// チュートリアルメニュー用
+var	SE_TUTORIAL_MENU_SELECT		= SE_MENU_SELECT_MAIN;	// SELECT
+var	SE_TUTORIAL_MENU_CANCEL		= SE_MENU_CANCEL;		// CANCEL
+var	SE_TUTORIAL_MENU_FOCUS		= SE_MENU_FOCUS;
+
+
+// HELP画面
+var	SE_TUTORIAL_CHANGE_PAGE		= SE_MENU_SELECT_MAIN;	// SELECT
+var	SE_TUTORIAL_CANCEL			= SE_MENU_CANCEL;		// CANCEL
+var	SE_TUTORIAL_FOCUS			= SE_MENU_FOCUS;
+
+
+// YES NO ダイアログ用
+var	SE_YES_NO_MENU_YES			= SE_MENU_SELECT_MAIN;	// Yes
+var	SE_YES_NO_MENU_NO			= SE_MENU_CANCEL;		// No
+var	SE_YES_NO_MENU_CANCEL		= SE_MENU_CANCEL;		// CANCEL
+var	SE_YES_NO_MENU_FOCUS		= SE_MENU_FOCUS;
+
+
+// ゲーム中ポーズボタン
+var	SE_GAME_PAUSE_SELECT		= SE_MENU_SELECT_SUB;	// ゲーム中のポーズボタン音
+var	SE_GAME_PAUSE_FOCUS			= SE_MENU_FOCUS;			// ゲーム中のポーズボタンフォーカス音
+
+
+// ランク表示用
+var	SE_GOAL_RANK_TITLE_FRAME_IN	= SE_FRAME_IN_SE;	// タイトルフレームイン開始の音
+var	SE_GOAL_RANK_FRAME_IN		= SE_FRAME_IN_SE;	// ランクフレームイン開始の音
+var	SE_GOAL_RANK_TIME_FRAME_IN	= SE_FRAME_IN_SE;	// タイムフレームイン開始の音
+var	SE_GOAL_RANK_PRN_WINNER		= "irse044";	// WINNER表示音
+var	SE_GOAL_RANK_END_WAIT_SKIP	= SE_FRAME_IN_SE;	// ウェイトスキップ
+
+// エンディング用
+var	SE_ENDING_FIRST_VIBRATE					= "irse052";	// 初期振動音
+var	SE_ENDING_FIRST_VIBRATE_FADE_IN_TIME	= 90*TIMER_INTERVAL;
+var	SE_ENDING_FIRST_VIBRATE_FADE_OUT_TIME	= 90*TIMER_INTERVAL;
+var	SE_ENDING_SAKURA_RUN					= "irse053";	// 桜歩く音
+var	SE_ENDING_RIN_CAR						= "irse054";	// 凛のフレームインの音
+var	SE_ENDING_BS_CAR						= "irse055";	// バーサーカーのフレームインの音
+var	SE_ENDING_SAKURA_FALLDOWN				= "irse056";	// 桜転倒
+var	SE_ENDING_SAKURA_CLASH					= "irse057";	// 凛が桜に接触事故
+var	SE_ENDING_OBJ_LANDING					= "irse058";	// 落下物が着地したときの音
+var	SE_ENDING_SERVANT_CLASH					= "irse059";	// サーバントがつぶれたときの音
+var	SE_ENDING_GROUND_FALL					= "irse060";	// 床の崩れる音
+var	SE_ENDING_MAIN_VIBRATE					= "irse061";	// メイン振動音
+var	SE_ENDING_MAIN_VIBRATE_FADE_IN_TIME		= 30*TIMER_INTERVAL;
+var	SE_ENDING_MAIN_VIBRATE_FADE_OUT_TIME	= 60*TIMER_INTERVAL;
+var	SE_ENDING_FJ_IN							= "irse064";	// 藤ねぇ登場音
+var	SE_ENDING_BS_CAR_CLASH					= "irse065";	// バーサーカー潰され
+
+// 城崩壊用
+var	SE_CASTLE_CLASH_VIBRATE					= "irse066";	// 振動音
+var	SE_CASTLE_CLASH_VIBRATE_FADE_IN_TIME	= 10;
+var	SE_CASTLE_CLASH_VIBRATE_FADE_OUT_TIME	= 30*TIMER_INTERVAL;
+var	SE_CASTLE_CLASH_SMOKE					= "";			// 城崩壊の煙SE
+var	SE_CASTLE_CLASH_SMOKE_CYCLE				= 16;			// 再生サイクル
+var	SE_CASTLE_CLASH_SHOOTING_STAR			= "";			// 流れ星の音
+var	SE_CASTLE_CLASH_FLASH_STAR				= "irse068";	// 流れ星が最後輝く音
+var	SE_CASTLE_CLASH_PRN_END_FONT			= "irse067";	// THE ENDの音
+
+
+
+
+// ゲームオーバー画面
+var	SE_GAMEOVER_PRN_TITLE		= "irse006";	// GameOver表示音
+var	SE_GAMEOVER_START_FUJI		= "";			// 藤ねぇ表示音
+var	SE_GAMEOVER_START_MESSAGE	= "irse069";	// Message表示音
+var	SE_GAMEOVER_START_YN_DLG	= "irse069";	// YesNoダイアログ表示音
+var	SE_GAMEOVER_YN_DLG_YES		= SE_MENU_SELECT_SUB;	// YesNoダイアログYes音
+var	SE_GAMEOVER_YN_DLG_NO		= SE_MENU_SELECT_SUB;	// YesNoダイアログNo音
+var	SE_GAMEOVER_YN_DLG_FOCUS	= SE_MENU_FOCUS;		// YesNoダイアログフォーカス音
+var	SE_GAMEOVER_CLICK			= "";			// ボタンによるキャンセル音
+
+
+
+
+
+var 得点_小競り合いに勝った =  300;
+var 得点_小競り合いに負けた =    0;
+var 得点_アイテム取得       =   50;
+var 得点_レアアイテム取得	=  200;
+var 得点_宝具防御			= 5000;
+var 得点_宝具ダメージ倍率	=  100;
+var 得点_宝箱は空だった		= 10000;
+// stage1
+var 得点_溺れた             =  400;
+var 得点_サーバントに着地   = 4000;
+var 得点_不安定足場に着地	=  800;
+var 得点_通常足場に着地		=  200;
+var 得点_吹き飛ばされた     = 2000;
+// stage2
+var 得点_落下時の悲鳴		= 1000;
+var 得点_崖での悲鳴			=   50;
+var 得点_きのこ頂点			= 	 0;
+var 得点_きのこ底辺			= 2000;
+var 得点_食事				=  100;
+var 得点_崖から落ちた		=  800;
+// stage3
+var 得点_盾を持っているフレーム = 200;
+var 得点_盾になっているフレーム = 400;
+var 得点_ボールに当たった		= 200;
+var 得点_ショットに当たった 	= 50;
+var 得点_ハルバードに当たった	= 5000;
+var 得点_ギルに弾き飛ばされた	= 200;
+var 得点_ギルの剣に当たった		= 10;
+// boss
+var 得点_ダメージ倍率		= 20;
+var 得点_レーザーに当たった	= 100;
+var 得点_衝撃波に当たった	= 200;
+//
+var 得点_クイズに正解		= 2000;

@@ -1,0 +1,593 @@
+/*******************************************************************************
+	風雲イリヤ城 - エンディング用サブスクリプト
+*******************************************************************************/
+
+
+
+
+/*===============================================================================
+		背景管理クラス
+===============================================================================*/
+class CIriyaEndingBg
+{
+var		parWin,parLayer,parScene;
+
+	function CIriyaEndingBg( _pr_win, _pr_layer, _pr_scene )
+	{
+		parWin   = _pr_win;
+		parLayer = _pr_layer;
+		parScene = _pr_scene;
+
+		init_buffer();
+	}
+	function finalize()
+	{
+		Release();
+	}
+
+
+
+	var		BG_LAYER			=PRIORITY_BACKGROUND;
+
+	var		BG_CG_SIZE_W		=600;
+	var		BG_SLIDE_Y			=-16;
+
+	var		MAX_PRN_BG_BUFFER	=3;
+	var		MAX_PRN_BG_CG_NUM	=1;
+
+
+
+
+
+	var		prn_offset_px,prn_offset_py;
+	var		prn_px;
+	var		prn_px_update;
+
+
+	var		prn_bg;
+	var		cg_bg;
+	var		bg_cg_no;
+	function init_buffer()
+	{
+		prn_bg = void;
+		cg_bg  = void;
+
+		prn_offset_px = void;
+		prn_offset_py = void;
+
+		prn_px = void;
+		prn_px_update = false;
+		return;
+	}
+	function Release()
+	{
+		if (CheckValid(prn_bg)  ==  true) {
+			ReleaseArray( prn_bg, 1 );
+			prn_bg = void;
+		}
+		if (CheckValid(cg_bg)  ==  true) {
+			ReleaseArray( cg_bg, 1 );
+			cg_bg = void;
+		}
+		if (CheckValid(bg_cg_no)  ==  true) {
+			ReleaseArray( bg_cg_no, 1 );
+			bg_cg_no = void;
+		}
+
+		init_buffer();
+		return;
+	}
+
+
+	function Init()
+	{
+	var		i;
+
+		Release();
+
+		prn_bg = new Array();
+		bg_cg_no = new Array();
+		for (i=0;  i<MAX_PRN_BG_BUFFER;  i++) {
+			prn_bg[i] = new CSpriteLayer( parWin, parLayer );
+			prn_bg[i].setPriority( BG_LAYER );
+			bg_cg_no[i] = void;
+		}
+
+		cg_bg = new Array();
+		for (i=0;  i<MAX_PRN_BG_CG_NUM;  i++) {
+			cg_bg[i] = EasyCreateLayerObject( parWin, parLayer,
+							"ir_ed_bg_back_%02d".sprintf(i),
+							0,0, 0 );
+		}
+		return;
+	}
+
+
+
+	function set_bg_cg()
+	{
+	var		i;
+	var		pos;
+		if ((CheckValid(bg_cg_no)  ==  false)
+		||	(CheckValid(cg_bg)  ==  false)
+		||	(CheckValid(prn_bg)  ==  false))
+			return;
+
+		pos = (prn_offset_px+prn_px) % BG_CG_SIZE_W;
+		for (i=0;  i<MAX_PRN_BG_BUFFER;  i++) {
+			with ( prn_bg[i] )
+			{
+				if (bg_cg_no[i]  !==  0) {
+					SetLayerInfoParam( prn_bg[i], cg_bg[0], ,, );
+
+					bg_cg_no[i] = 0;
+				}
+
+				if (prn_px_update  ==  true) {
+					.setPos( pos, prn_offset_py+BG_SLIDE_Y );
+				}
+				pos += BG_CG_SIZE_W;
+			}
+		}
+		prn_px_update = false;
+		return;
+	}
+
+
+	function Print()
+	{
+	var		i;
+
+		if (CheckValid(prn_bg)  ==  false)
+			return;
+
+		for (i=0;  i<prn_bg.count;  i++) {
+			if (CheckValid(prn_bg[i])  ==  false)
+				continue;
+			prn_bg[i].visible = true;
+		}
+
+
+		if (prn_offset_px  ===  void)
+			SetOffsetPos(0,0);
+		if (prn_px  ===  void)
+			SetPos(0);
+		return;
+	}
+
+	function SetOffsetPos( _x,_y )
+	{
+		if (_x  ===  void)
+			_x = prn_offset_px;
+		if (_y  ===  void)
+			_y = prn_offset_py;
+		if ((prn_offset_px  ==  _x)
+		&&	(prn_offset_px  ==  _y))
+			return;
+		prn_px_update = true;
+		prn_offset_px = _x;
+		prn_offset_py = _y;
+		set_bg_cg();
+		return;
+	}
+	function SetPos( _x )
+	{
+		if (prn_px  ===  _x)
+			return;
+		prn_px_update = true;
+		prn_px = _x;
+		set_bg_cg();
+		return;
+	}
+	function GetPos()
+	{
+		return ( prn_px );
+	}
+
+}
+
+
+
+class CIriyaEnidngGround extends CSpriteLayer
+{
+	function CIriyaEnidngGround( _pr_win, _pr_layer )
+	{
+		super.CSpriteLayer( _pr_win, _pr_layer );
+		init_data();
+	}
+	function finalize()
+	{
+		release_data();
+		super.finalize();
+	}
+
+
+	var		FALL_SPEED = 8;
+
+	var		prn_layer;
+
+	var		base_x,base_y;
+	var		off_x,off_y;
+	var		fall_y;
+
+	var		start_fall;
+
+	function init_data()
+	{
+		prn_layer = void;
+
+		base_x = 0;
+		base_y = 0;
+		off_x = 0;
+		off_y = 0;
+
+		fall_y = 0;
+
+		start_fall = false;
+		return;
+	}
+	function release_data()
+	{
+		EasyReleaseLayer( prn_layer );
+		prn_layer = void;
+		return;
+	}
+
+	function GetBasePosX()
+	{
+		return ( base_x );
+	}
+	function GetBasePosY()
+	{
+		return ( base_y );
+	}
+	function SetPosData( _px, _py, _offx, _offy )
+	{
+		if (_px  !==  void)
+			base_x = _px;
+		if (_py  !==  void)
+			base_y = _py;
+
+		if (_offx  !==  void)
+			off_x = _offx;
+
+		if (_offy  !==  void)
+			off_y = _offy;
+
+
+		setPos( base_x+off_x, base_y+off_y+fall_y );
+		return;
+	}
+	function UpdateData()
+	{
+		if (start_fall  ==  true)
+			fall_y += FALL_SPEED;
+		return;
+	}
+
+	function SetFallFlag( _flag )
+	{
+		start_fall = _flag;
+		return;
+	}
+	function GetFallFlag()
+	{
+		return ( start_fall );
+	}
+	function GetFallPosY()
+	{
+		return ( fall_y );
+	}
+}
+
+
+/*===============================================================================
+		背景床管理クラス
+===============================================================================*/
+class CIriyaEndingGroundManage
+{
+var		parWin,parLayer,parScene;
+
+	function CIriyaEndingGroundManage( _pr_win, _pr_layer, _pr_scene )
+	{
+		parWin   = _pr_win;
+		parLayer = _pr_layer;
+		parScene = _pr_scene;
+
+		init_buffer();
+	}
+	function finalize()
+	{
+		Release();
+	}
+
+
+	var		MAKE_GROUND_PANEL_W	=70;//82;
+	var		DEF_MAKE_START_PX	=-MAKE_GROUND_PANEL_W*3;
+	var		DEF_MAKE_START_PY	=SCREEN_SIZE_H-189;
+	var		DEF_MAKE_NUM		=15;
+
+	var		MAKE_GROUND_PANEL_END_PX = DEF_MAKE_START_PX+MAKE_GROUND_PANEL_W*(DEF_MAKE_NUM-1);
+
+
+
+
+	var		START_FALL_LINE		= DEF_MAKE_START_PX;
+	var		START_FALL_LINE_ADD	= /*0.8;/ */1.2 + 1.0;
+	var		LIMIT_FALL_LINE		= 192;//236;
+
+	var		base_priority;
+
+	var		cg_ground;
+	var		prn_layer;
+
+	var		base_pos;
+	var		offset_pos_x,offset_pos_y;
+
+	var		now_cg_no;
+
+	var		ground_fall_flag;
+	var		fall_line,fall_line_add;
+
+	var		fall_limit,max_fall_limit,add_fall_limit;
+
+
+	function init_buffer()
+	{
+		base_priority = PRIORITY_GROUNDOBJ;
+
+		ground_fall_flag = false;
+
+		now_cg_no = 0;
+
+		base_pos = 0;
+		offset_pos_x = 0;
+		offset_pos_y = 0;
+
+
+
+		cg_ground = void;
+
+		prn_layer = void;
+
+		fall_line = START_FALL_LINE;
+		fall_line_add = START_FALL_LINE_ADD;
+
+		max_fall_limit = fall_limit = LIMIT_FALL_LINE;
+		add_fall_limit = 0;
+		return;
+	}
+	function Release()
+	{
+		relese_prn_layer();
+		relese_cg_ground();
+		init_buffer();
+		return;
+	}
+	function relese_cg_ground()
+	{
+		if (CheckValid(cg_ground)  ==  false)
+			return;
+		ReleaseArray( cg_ground, 1 );
+		cg_ground = void;
+		return;
+	}
+	function relese_prn_layer()
+	{
+		if (CheckValid(prn_layer)  ==  false)
+			return;
+		ReleaseArray( prn_layer, 1 );
+		prn_layer = void;
+		return;
+	}
+
+
+
+
+	function Init()
+	{
+	var		i;
+	var		file_name;
+
+		relese_cg_ground();
+		cg_ground = new Array();
+		for (i=0;  ;  i++) {
+			file_name = "ir_ed_bg_ground_%02d".sprintf(i);
+			if (isImageFile(file_name)  ==  false)
+				break;
+
+			cg_ground[i] = EasyCreateLayerObject( parWin, parLayer, file_name, 0,0, 0 );
+		}
+
+
+		relese_prn_layer();
+		prn_layer = new Array();
+		make_initial_prn_layer();
+		return;
+	}
+
+
+	function update_layer_priority( _layer )
+	{
+		with ( _layer )
+		{
+			.setPriority( base_priority+.left );
+		}
+		return;
+	}
+
+	var		new_make_pos_x = DEF_MAKE_START_PX;
+	// 新たに生成したレイヤをアサインして初期化する
+	function new_assign_cg_ground( _layer )
+	{
+		with ( _layer )
+		{
+			SetLayerInfoParam( _layer, cg_ground[now_cg_no], ,, );
+			.SetPosData( new_make_pos_x, DEF_MAKE_START_PY, void,void );
+
+			update_layer_priority( _layer );
+
+			now_cg_no = (now_cg_no + 1) % cg_ground.count;
+			new_make_pos_x += MAKE_GROUND_PANEL_W;
+		}
+		return;
+	}
+
+	function make_add_new_panel( _visible_flag=true )
+	{
+	var		p_obj;
+		p_obj = new CIriyaEnidngGround( parWin, parLayer );
+		prn_layer.add( p_obj );
+
+		new_assign_cg_ground( p_obj );
+		p_obj.visible = _visible_flag;
+		return;
+	}
+
+
+	function make_initial_prn_layer()
+	{
+	var		i;
+
+		now_cg_no = 0;
+		for (i=0;  i<DEF_MAKE_NUM;  i++) {
+			make_add_new_panel( false );
+		}
+		return;
+	}
+
+	function Print()
+	{
+	var		i;
+
+		for (i=0;  i<prn_layer.count;  i++) {
+			prn_layer[i].visible = true;
+		}
+		AddPos( 0 );
+		return;
+	}
+	function SetOffsetPos( _px,_py )
+	{
+		offset_pos_x = _px;
+		offset_pos_y = _py;
+		return;
+	}
+	function AddPos( _add )
+	{
+	var		i;
+		for (i=0;  i<prn_layer.count;  ) {
+			with ( prn_layer[i] )
+			{
+				.UpdateData();
+				.SetPosData( .GetBasePosX()+_add, void, offset_pos_x,offset_pos_y );
+				update_layer_priority( prn_layer[i] );
+				if (.GetBasePosX()  <  DEF_MAKE_START_PX) {
+					EasyObjectInvalidate( prn_layer[i] );
+					prn_layer.erase( i );
+					continue;
+				}
+			}
+
+			i += 1;
+		}
+
+		// 新規に床をついかするか？
+		if (_add  !=  0) {
+			while (1) {
+				new_make_pos_x += _add;
+				if (new_make_pos_x  >  MAKE_GROUND_PANEL_END_PX)
+					break;
+				make_add_new_panel( true );
+			}
+		}
+
+		// 地面を落下させる？
+		if (ground_fall_flag  ==  true) {
+			update_ground_fall();
+		}
+		return;
+	}
+
+
+	function SetGroundFallFlag( _flag )
+	{
+		ground_fall_flag = _flag;
+
+
+		if (_flag  ==  true)
+				PlaySE( SE_ENDING_GROUND_FALL,,true );
+		else	StopSE( SE_ENDING_GROUND_FALL );
+		return;
+	}
+	function update_ground_fall()
+	{
+	var		i;
+		for (i=0;  i<prn_layer.count;  i++) {
+			with ( prn_layer[i] )
+			{
+				if (.GetBasePosX()  >  fall_line)
+					continue;
+				if (.GetFallFlag()  ==  false) {
+					.SetFallFlag( true );
+				}
+			}
+		}
+
+
+		fall_limit += add_fall_limit;
+		if (fall_limit  >  max_fall_limit)
+			fall_limit = max_fall_limit;
+
+
+		fall_line += fall_line_add;
+		if (fall_line  >  fall_limit)
+			fall_line = fall_limit;
+		return;
+	}
+
+	function SetFallLimitParam( _max, _add, _line_add )
+	{
+		max_fall_limit = _max;
+		add_fall_limit = _add;
+		fall_line_add  = _line_add;
+		return;
+	}
+
+
+	function FallCheck( _obj_x, _obj_y )
+	{
+	var		i;
+	var		_px,_py;
+
+		_py = _obj_y-DEF_MAKE_START_PY;
+		for (i=0;  i<prn_layer.count;  i++) {
+			with ( prn_layer[i] )
+			{
+				if (.GetFallFlag()  ==  false)
+					continue;
+
+				_px = _obj_x -.GetBasePosX();
+				if (_px  <   0)
+					continue;
+				if (_px  >=  .imageWidth)
+					continue;
+				if (_py  <   0)
+					continue;
+				if (_py  >=  .imageHeight)
+					continue;
+
+
+				if (.getMaskPixel(_px,_py)  ==  255) {
+					return ( .GetFallPosY() );
+				}
+			}
+		}
+		return ( -1 );
+	}
+	function GetNowFallLine()
+	{
+		return ( fall_line );
+	}
+}
+
+

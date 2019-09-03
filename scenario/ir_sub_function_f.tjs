@@ -1,0 +1,1700 @@
+// var formatted = "%04X %c %5d".sprintf(v1, v2, dic[v1]);
+var _sin = Math.sin;
+var _cos = Math.cos;
+
+
+
+var		DEF_FRAME_IN_OBJ_TIME = 16;
+
+
+
+
+//------------------------------------------------
+//
+// 丸め込まれたランダム値を返す
+//
+//------------------------------------------------
+function rand_ave( max )
+{
+	return ( (int)(Math.random()*max) );
+}
+
+
+//------------------------------------------------
+//
+// MessageBoxの表示
+//
+//------------------------------------------------
+function MessageBox( text, title )
+{
+	System.inform( text, title );
+	return;
+}
+
+
+//------------------------------------------------
+//
+// ARGBカラーコード取得
+//
+//------------------------------------------------
+function RGBA_MAKE( r, g, b, a )
+{
+	return ( (a<<24)|(r<<16)|(g<<8)|(b<<0) );
+}
+//------------------------------------------------
+//
+// 変数の有効状態を調べる
+//
+//------------------------------------------------
+function CheckValid( param )
+{
+	if ((typeof param)  ===  "Object")
+		return (isvalid param);
+	return ( (typeof param)  !==  "void" );
+}
+//------------------------------------------------
+//
+// 各種チェック付き(安全)Invalidate処理
+//
+//------------------------------------------------
+function EasyObjectInvalidate( p_obj )
+{
+	if ((typeof p_obj)  ===  "Object") {
+	if ((isvalid p_obj)  ==  true) {
+		invalidate p_obj;
+	}}
+	return;
+}
+
+//------------------------------------------------
+//
+// エラー終了
+//
+//------------------------------------------------
+function error_exit( sztext )
+{
+	throw new Exception( sztext );
+	return;
+}
+//------------------------------------------------
+//
+// System生成のGUIDを取得
+//
+//------------------------------------------------
+var		SystemGUID=0;
+function GetSystemGUID()
+{
+	SystemGUID += 1;
+	if (SystemGUID  <=  0)
+		SystemGUID = 1;
+	return ( SystemGUID );
+}
+
+
+
+
+
+//------------------------------------------------
+//
+// フェードレイヤ簡易生成
+//
+//------------------------------------------------
+function EasyCreateFadeLayer( parentWindow, parentLayer, color_type, fade_type, time=60*1 )
+{
+var 	FadeLayer;
+var 	color;
+
+	// 色設定
+	switch ( color_type )
+	{
+	case "WHITE":
+		color = RGBA_MAKE( 255,255,255,255 );
+		break;
+	case "BLACK":
+		color = RGBA_MAKE( 0,0,0,255 );
+		break;
+	case "TRANS":
+		color = RGBA_MAKE( 0,0,0,0 );
+		break;
+	default:
+		error_exit( "不明なcolor_typeです。"+color_type );
+		break;
+	}
+
+
+
+	// 生成後に即開始させる
+	FadeLayer = new CSpriteLayer( parentWindow, parentLayer );
+	FadeLayer.layerImageFromFill( 0,0, parentLayer.width,parentLayer.height, color,false );
+	ConnectFadeAnimeParam( FadeLayer );
+	SetFadeAnimeParam( FadeLayer, fade_type, time );
+	StartFadeAnime( FadeLayer );
+	return ( FadeLayer );
+}
+function EasyReleaseFadeLayer( _p_layer )
+{
+	if (CheckValid(_p_layer)  ==  false)
+		return;
+	ReleaseFadeAnime( _p_layer );
+	EasyReleaseLayer( _p_layer );
+	return;
+}
+
+
+
+
+@if (PRN_CSIN_COUNT  ==  1)
+var		CSinAnimeCount=0;
+@endif
+class	CSinAnime
+{
+var		useFlag;					// アニメ処理使用状況
+var		numAddDir;					// アニメ進行方向
+var		startNum,endNum,NowNum;		// アニメ管理情報
+var		nowTime,endTime,maxTime;	// アニメ時間進行管理
+
+
+
+	/***********************************************
+
+			コンストラクタ＆デストラクタ
+
+	***********************************************/
+	function CSinAnime()
+	{
+@if (PRN_CSIN_COUNT  ==  1)
+CSinAnimeCount += 1;
+dm("contract CSinAnimeCount:"+CSinAnimeCount);
+@endif
+		useFlag = "NONE";
+	}
+	function finalize()
+	{
+		invalidate	this;
+@if (PRN_CSIN_COUNT  ==  1)
+CSinAnimeCount -= 1;
+dm("destcontract CSinAnimeCount:"+CSinAnimeCount);
+@endif
+	}
+
+
+	/***********************************************
+
+			アニメパラメータ設定
+
+	************************************************/
+	function SetAnimeParam( start_num, end_num, now_time, end_time, max_time )
+	{
+		Update = UpdateFunc;
+
+		SetDirectionAdd();
+
+		startNum = start_num;
+		endNum   = end_num;
+
+		nowTime = now_time;
+		endTime = end_time;
+		maxTime = max_time;
+
+		UpdateNowNum();
+		return;
+	}
+
+	/***********************************************
+
+			更新管理
+
+	************************************************/
+	//------------------------------------------------
+	// 更新開始
+	//------------------------------------------------
+	function Start()
+	{
+		useFlag = "UPDATE";
+
+		if (GetDirection()  >  0) {
+			nowTime = nowTime;
+		} else
+		if (GetDirection()  <  0) {
+			nowTime = endTime;
+		}
+		UpdateNowNum();
+		return;
+	}
+	function StartEx( now_time )
+	{
+		useFlag = "UPDATE";
+
+		nowTime = now_time;
+		UpdateNowNum();
+		return;
+	}
+	//------------------------------------------------
+	// 終了(＆非表示化)
+	//------------------------------------------------
+	function Close()
+	{
+		useFlag = "NONE";
+		return;
+	}
+	//------------------------------------------------
+	// 更新停止
+	//------------------------------------------------
+	function Stop()
+	{
+		useFlag = "STOP";
+		return;
+	}
+	//------------------------------------------------
+	// 更新再開
+	//------------------------------------------------
+	function Restart()
+	{
+		useFlag = "UPDATE";
+		return;
+	}
+	//------------------------------------------------
+	// 更新方向加算設定
+	//------------------------------------------------
+	function SetDirectionAdd()
+	{
+		numAddDir = "ADD";
+		return;
+	}
+	//------------------------------------------------
+	// 更新方向減算設定
+	//------------------------------------------------
+	function SetDirectionDec()
+	{
+		numAddDir = "DEC";
+		return;
+	}
+	//------------------------------------------------
+	// 更新方向取得
+	//------------------------------------------------
+	function GetDirection()
+	{
+		if (numAddDir  ==  "ADD")
+			return (  1 );
+		if (numAddDir  ==  "DEC")
+			return ( -1 );
+		return ( 0 );
+	}
+
+
+
+
+
+
+	// Sinデータ取得
+	function UpdateNowNum()
+	{
+		NowNum = (startNum + _sin(nowTime*90/maxTime*3.1415926535/180)*( endNum-startNum ));
+		return;
+	}
+
+
+	/***********************************************
+
+			更新関係
+
+	************************************************/
+	//------------------------------------------------
+	// アニメ更新
+	//------------------------------------------------
+	function Update()
+	{
+		return ( 0 );
+	}
+
+	function UpdateFunc()
+	{
+		if (useFlag  !=  "UPDATE")
+			return ( NowNum );
+
+		if (GetDirection()  >  0) {
+			if ((nowTime+=1)  >=  endTime) {
+				nowTime = endTime;
+				useFlag = "END";
+			}
+		} else
+		if (GetDirection()  <  0) {
+			if ((nowTime-=1)  <=  0) {
+				nowTime = 0;
+				useFlag = "END";
+			}
+		}
+
+		UpdateNowNum();
+		return ( NowNum );
+	}
+
+	//------------------------------------------------
+	// アニメ状態取得
+	//	NONE	:非表示
+	//	UPDATE	:更新中
+	//	STOP	:更新停止
+	//	END		:更新終了
+	//------------------------------------------------
+	function CheckUpdateState()
+	{
+		return ( useFlag );
+	}
+	//------------------------------------------------
+	// 現在のアニメ値を取得
+	//------------------------------------------------
+	function GetNowNum()
+	{
+		return ( NowNum );
+	}
+	//------------------------------------------------
+	// 終了目標\のアニメ値を取得
+	//------------------------------------------------
+	function GetEndNum()
+	{
+		if (GetDirection()  >  0)
+				return ( endTime );
+		else	return ( 0 );
+	}
+
+}
+
+
+
+//------------------------------------------------
+//
+// 数値アニメ構造体
+//
+//------------------------------------------------
+@if (PRN_CNUM_COUNT  ==  1)
+var		CNumAnimeCount=0;
+@endif
+class	CNumAnime
+{
+var		useFlag;					// アニメ処理使用状況
+var		numAddDir;					// アニメ進行方向
+var		startNum,endNum,NowNum;		// アニメ管理情報
+var		ActionTime,_ActionTime;		// アニメ進行状況管理情報
+
+	/***********************************************
+
+			コンストラクタ＆デストラクタ
+
+	***********************************************/
+	function CNumAnime()
+	{
+@if (PRN_CNUM_COUNT  ==  1)
+CNumAnimeCount += 1;
+dm("contract CNumAnimeCount:"+CNumAnimeCount);
+@endif
+		useFlag = "NONE";
+	}
+	function finalize()
+	{
+@if (PRN_CNUM_COUNT  ==  1)
+CNumAnimeCount -= 1;
+dm("destcontract CNumAnimeCount:"+CNumAnimeCount);
+@endif
+		invalidate	this;
+	}
+
+	/***********************************************
+
+			アニメパラメータ設定
+
+	************************************************/
+	function SetAnimeParam( start_num, end_num, time )
+	{
+		Update = UpdateFunc;
+
+
+		SetDirectionAdd();
+
+		_ActionTime = 0;
+
+		ActionTime = time;
+
+		startNum = start_num;
+		endNum   = end_num;
+		return;
+	}
+
+
+
+	/***********************************************
+
+			更新管理
+
+	************************************************/
+	//------------------------------------------------
+	// 更新開始
+	//------------------------------------------------
+	function Start()
+	{
+		useFlag = "UPDATE";
+
+		if (GetDirection()  >  0) {
+			NowNum = startNum;
+			_ActionTime = 0;
+		} else
+		if (GetDirection()  <  0) {
+			NowNum = endNum;
+			_ActionTime = ActionTime;
+		}
+		return;
+	}
+	function StartEx( now_time )
+	{
+		useFlag = "UPDATE";
+
+		_ActionTime = now_time;
+		UpdateNowNum();
+		return;
+	}
+	//------------------------------------------------
+	// 終了(＆非表示化)
+	//------------------------------------------------
+	function Close()
+	{
+		useFlag = "NONE";
+		return;
+	}
+	//------------------------------------------------
+	// 更新停止
+	//------------------------------------------------
+	function Stop()
+	{
+		useFlag = "STOP";
+		return;
+	}
+	//------------------------------------------------
+	// 更新再開
+	//------------------------------------------------
+	function Restart()
+	{
+		useFlag = "UPDATE";
+		return;
+	}
+	//------------------------------------------------
+	// 更新方向加算設定
+	//------------------------------------------------
+	function SetDirectionAdd()
+	{
+		numAddDir = "ADD";
+		return;
+	}
+	//------------------------------------------------
+	// 更新方向減算設定
+	//------------------------------------------------
+	function SetDirectionDec()
+	{
+		numAddDir = "DEC";
+		return;
+	}
+	//------------------------------------------------
+	// 更新方向取得
+	//------------------------------------------------
+	function GetDirection()
+	{
+		if (numAddDir  ==  "ADD")
+			return (  1 );
+		if (numAddDir  ==  "DEC")
+			return ( -1 );
+		return ( 0 );
+	}
+
+
+
+
+	function UpdateNowNum()
+	{
+		NowNum = startNum+(endNum-startNum)*_ActionTime/ActionTime;
+		return;
+	}
+
+	/***********************************************
+
+			更新関係
+
+	************************************************/
+	//------------------------------------------------
+	// アニメ更新
+	//------------------------------------------------
+	function Update()
+	{
+		return ( 0 );
+	}
+
+	function UpdateFunc()
+	{
+		if (useFlag  !=  "UPDATE")
+			return ( NowNum );
+
+		if (GetDirection()  >  0) {
+			if ((_ActionTime+=1)  >=  ActionTime) {
+				_ActionTime = ActionTime;
+				useFlag = "END";
+			}
+		} else
+		if (GetDirection()  <  0) {
+			if ((_ActionTime-=1)  <=  0) {
+				_ActionTime = 0;
+				useFlag = "END";
+			}
+		}
+
+		UpdateNowNum();
+		return ( NowNum );
+	}
+	//------------------------------------------------
+	// アニメ状態取得
+	//	NONE	:非表示
+	//	UPDATE	:更新中
+	//	STOP	:更新停止
+	//	END		:更新終了
+	//------------------------------------------------
+	function CheckUpdateState()
+	{
+		return ( useFlag );
+	}
+	//------------------------------------------------
+	// 現在のアニメ値を取得
+	//------------------------------------------------
+	function GetNowNum()
+	{
+		return ( NowNum );
+	}
+	//------------------------------------------------
+	// 終了目標\のアニメ値を取得
+	//------------------------------------------------
+	function GetEndNum()
+	{
+		if (GetDirection()  >  0)
+				return ( ActionTime );
+		else	return ( 0 );
+	}
+
+}
+
+
+
+
+
+
+
+/***********************************************
+
+		レイヤフェードデータ処理
+
+************************************************/
+//------------------------------------------------
+// レイヤフェードデータの存在チェック
+//------------------------------------------------
+function CheckFadeParamConnected( p_layer )
+{
+	if ((typeof p_layer.FadeAnime)  ===  "undefined")
+			return ( false );
+	else	return ( true );
+}
+//------------------------------------------------
+// レイヤフェードデータの接続(作成)
+//------------------------------------------------
+function ConnectFadeAnimeParam( p_layer )
+{
+	if (CheckFadeParamConnected(p_layer)  ==  true) {
+		EasyObjectInvalidate( p_layer.FadeAnime );
+		delete p_layer.FadeAnime;
+	}
+	p_layer.FadeAnime = new CNumAnime();
+	return;
+}
+//------------------------------------------------
+// レイヤフェードデータ処理の簡易設定
+//------------------------------------------------
+function SetFadeAnimeParam( p_layer, fade_type, time )
+{
+var		start_a,end_a;
+
+	if (CheckFadeParamConnected(p_layer)  ==  false)
+		return;
+
+	// フェードタイプ設定
+	switch ( fade_type )
+	{
+	case "FADE_IN":
+		start_a =   0;
+		end_a   = 255;
+		break;
+	case "FADE_OUT":
+		start_a = 255;
+		end_a   =   0;
+		break;
+	default:
+		error_exit( "不明なfade_typeです。"+fade_type );
+		break;
+	}
+
+	p_layer.FadeAnime.SetAnimeParam( start_a, end_a, time );
+	return;
+}
+//------------------------------------------------
+// レイヤフェードデータ処理の開始
+//------------------------------------------------
+function StartFadeAnime( p_layer )
+{
+	if (CheckFadeParamConnected(p_layer)  ==  false)
+		return;
+
+	with ( p_layer )
+	{
+		.FadeAnime.Start();
+
+		.visible = true;
+		.opacity = .FadeAnime.GetNowNum();
+	}
+	return;
+}
+function StartFadeAnimeEx( p_layer, now_time )
+{
+	if (CheckFadeParamConnected(p_layer)  ==  false)
+		return;
+
+	with ( p_layer )
+	{
+		.FadeAnime.StartEx( now_time );
+
+		.visible = true;
+		.opacity = .FadeAnime.GetNowNum();
+	}
+	return;
+}
+// フェードデータのセット＆アニメ開始
+function EasyStartFadeAnime( p_layer, start_a, end_a, time )
+{
+	ConnectFadeAnimeParam( p_layer );
+	p_layer.FadeAnime.SetAnimeParam( start_a, end_a, time );
+	StartFadeAnime( p_layer );
+	return;
+}
+//------------------------------------------------
+// レイヤフェードデータアップデート
+//------------------------------------------------
+function UpdateFadeAnime( p_layer )
+{
+	with ( p_layer )
+	{
+		.opacity = .FadeAnime.Update();
+	}
+	return;
+}
+//------------------------------------------------
+// レイヤフェードデータ処理の終了
+//------------------------------------------------
+function CloseFadeAnime( p_layer, visible=false )
+{
+	if (CheckFadeParamConnected(p_layer)  ==  false)
+		return;
+
+	with ( p_layer )
+	{
+		.FadeAnime.Close();
+		.visible = visible;
+	}
+	return;
+}
+//------------------------------------------------
+// レイヤフェードデータの開放
+//------------------------------------------------
+function ReleaseFadeAnime( p_layer )
+{
+	if (CheckFadeParamConnected(p_layer)  ==  false)
+		return;
+
+	EasyObjectInvalidate( p_layer.FadeAnime );
+	delete p_layer.FadeAnime;
+	return;
+}
+//------------------------------------------------
+// レイヤフェードデータの取得
+//------------------------------------------------
+function GetFadeAnimeObject( p_layer )
+{
+	if (CheckFadeParamConnected(p_layer)  ==  false)
+		return ( void );
+
+	return ( p_layer.FadeAnime );
+}
+//------------------------------------------------
+// フェードレイヤ更新
+//------------------------------------------------
+function ProcessFadeAnime( layer )
+{
+	if (CheckValid(layer)  ==  false)
+		return  ( "NOT_USE" );
+
+	if (CheckFadeParamConnected(layer)  ==  false)
+		return;
+
+	switch ( GetFadeAnimeObject(layer).CheckUpdateState() )
+	{
+	case "END":
+		return ( "FADE_END");
+	case "STOP":
+		return ( "FADE_STOP");
+	}
+
+	UpdateFadeAnime( layer );
+	return ( "UPDATING" );
+}
+
+
+//------------------------------------------------
+// レイヤ表示切替え
+//------------------------------------------------
+function ShowLayer( p_layer, flag )
+{
+	p_layer.visible = flag;
+	return;
+}
+//------------------------------------------------
+// 簡易レイヤInvalidate処理(非表示処理付き)
+//------------------------------------------------
+function EasyReleaseLayer( p_layer )
+{
+	if (CheckValid(p_layer)  ==  false)
+		return;
+
+	ShowLayer( p_layer, false );
+	EasyObjectInvalidate( p_layer );
+	return;
+}
+
+
+
+function ReleaseArray( buf )
+{
+	if (CheckValid(buf)  ==  false)
+		return;
+
+	for(var i=0;  i<buf.count;  i++) {
+		if ((typeof buf[i])  !==  "Object")
+			continue;
+		invalidate buf[i];
+		buf[i] = void;
+	}
+
+	invalidate buf;
+	return;
+}
+function DeleteArrayObject( _obj_list, dim_num )
+{
+var		i;
+	if (CheckValid(_obj_list)  ==  true) {
+		for (i=0;  i<_obj_list.count;  i++) {
+			if (CheckValid(_obj_list[i])  ==  false)
+				continue;
+			if ((typeof _obj_list[i])  !==  "Object")
+				continue;
+
+			if (dim_num  !=  1) {
+				DeleteArrayObject( _obj_list[i], dim_num-1 );
+			}
+
+			invalidate _obj_list[i];
+			_obj_list[i] = void;
+		}
+		invalidate _obj_list;
+		_obj_list = void;
+	}
+	return;
+}
+
+
+
+//------------------------------------------------
+// レイヤプライオリティを設定する(0(top) 〜  (bottom))
+//------------------------------------------------
+function SetLayerPriority( p_layer, prio )
+{
+	p_layer.absolute = prio;
+	return;
+}
+//------------------------------------------------
+// レイヤプライオリティを取得する(0(top) 〜  (bottom))
+//------------------------------------------------
+function GetLayerPriority( p_layer )
+{
+	return ( p_layer.absolute );
+}
+
+
+
+
+//------------------------------------------------
+// シーンクラスを渡してカーソル位置を強制アップデート
+//------------------------------------------------
+function UpdateCursorPos( p_scene )
+{
+	with ( p_scene.parentLayer )
+	{
+		.setCursorPos( .cursorX, .cursorY );
+	}
+	return;
+}
+function UpdateCursorPos2( p_layer )
+{
+	with ( p_layer )
+	{
+		.setCursorPos( .cursorX, .cursorY );
+	}
+	return;
+}
+
+
+
+
+
+
+
+
+
+// 簡易CGレイヤ生成＆読み込み
+function EasyCreateLayerObject( _pr_window,_pr_layer, _file_name, _cl_type, _visible, _px, _py, _priority )
+{
+var	_layer;
+	with ( _layer = new CSpriteLayer( _pr_window, _pr_layer ) )
+	{
+		.layerImageFromCG( _file_name, _cl_type, _visible );
+		.setPriority( _priority );
+		.setPos( _px, _py );
+	}
+	return ( _layer );
+}
+
+
+// 指定ウィンドウのセンタリング位置を計算
+function CalcCenterPosX( pr_layer, my_layer )
+{
+	return ( (pr_layer.width-my_layer.width) /2 );
+}
+function CalcCenterPosY( pr_layer, my_layer )
+{
+	return ( (pr_layer.height-my_layer.height) /2 );
+}
+
+// 一括レイヤ情報設定
+function SetLayerInfoParam( _p_layer, _p_cg, _px, _py, _priority )
+{
+	if (CheckValid(_p_layer)  ==  false)
+		return;
+
+	with (_p_layer)
+	{
+		if (_p_cg  !==  void) {
+			.assignImages( _p_cg );
+			.setSize( .imageWidth, .imageHeight );
+		}
+
+		if ((_px  !==  void)
+		||	(_py  !==  void)) {
+			if (_px   ===   void)
+				_px = .left;
+			if (_py   ===   void)
+				_py = .top;
+			.setPos( _px,_py );
+		}
+
+		if (_priority  !==  void) {
+			.setPriority( _priority );
+		}
+	}
+	return;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// 簡易アニメ処理クラス
+class CIriyaCharaAnimeBase
+{
+	var		anime_flag;
+	var		anime_page;
+	var		anime_time;
+
+	var		time_table;
+
+	var		prn_pos_x;
+	var		prn_pos_y;
+
+
+	function CIriyaCharaAnimeBase()
+	{
+		prn_pos_x = void;
+		prn_pos_y = void;
+	}
+	function finalize()
+	{
+	}
+
+
+	var		prn_layer;
+	var		cg_list;
+
+	var		now_anime_cg;
+	var		now_time_table;
+
+	function SetLayerData( _prn_layer, _cg_list, _time_table )
+	{
+		prn_layer = _prn_layer;
+		cg_list   = _cg_list;
+		time_table = _time_table;
+
+		if (prn_pos_x  ===  void)
+			prn_pos_x = prn_layer.left;
+		if (prn_pos_y  ===  void)
+			prn_pos_y = prn_layer.top;
+		return;
+	}
+
+	function InitFirstData()
+	{
+		anime_flag = false;
+		anime_page = 0;
+		anime_time = 0;
+
+		return;
+	}
+	function Print()
+	{
+		prn_layer.visible = true;
+		return;
+	}
+
+	function SetAnimeFlag( _flag )
+	{
+		anime_flag = _flag;
+		return;
+	}
+
+
+	function change_cg()
+	{
+		SetLayerInfoParam( prn_layer, now_anime_cg[anime_page], ,, );
+		SetPosition(prn_pos_x,prn_pos_y);
+		return;
+	}
+	function set_data_assign( _anime_no, _page=0 )
+	{
+		anime_page = _page;
+		anime_time = 0;
+		now_anime_cg = cg_list[_anime_no];
+		now_time_table = time_table[_anime_no];
+
+		change_cg();
+		return;
+	}
+
+	function SetPosition( _px,_py )
+	{
+		prn_pos_x = _px;
+		prn_pos_y = _py;
+		if (CheckValid(prn_layer)  ==  true) {
+		if (CheckValid(now_anime_cg)  ==  true) {
+			prn_layer.setPos(prn_pos_x+now_anime_cg[anime_page].left,
+					prn_pos_y+now_anime_cg[anime_page].top );
+		}}
+		return;
+	}
+	function SetPriority( _offset )
+	{
+		prn_layer.setPriority( _offset );
+		return;
+	}
+
+	function ChangeAnimeNo( _anime_no )
+	{
+		set_data_assign( _anime_no );
+		return;
+	}
+
+	function Update()
+	{
+		if ((CheckValid(prn_layer)   ==  false)
+		||	(CheckValid(cg_list)    ==  false))
+			return;
+
+		if (anime_flag  ==  false) {
+			return;
+		}
+
+		anime_time += 1;
+		if (anime_time  ==  now_time_table) {
+			anime_time = 0;
+			anime_page += 1;
+			if (anime_page  ==  now_anime_cg.count)
+				anime_page = 0;
+			change_cg();
+		}
+		return;
+	}
+}
+
+
+
+
+
+// フラッシュ用データ
+class CIriyaFlashData
+{
+var		flash_flag;
+var		flash_time;
+var		page_no;
+var		page_cycle;
+var		flash_wait,tmp_flash_wait;
+
+	function CIriyaFlashData()
+	{
+		Init();
+	}
+	function finalize()
+	{
+	}
+
+	function Init()
+	{
+		flash_flag = false;
+		flash_time = 0;
+		page_no = 0;
+		flash_wait = 0;
+		page_cycle = 0;
+		return;
+	}
+
+
+	function StartFlash( _time, _wait, _cycle )
+	{
+		flash_flag = true;
+		page_no    = 0;
+		flash_wait = _wait;
+		flash_time = _time;
+		page_cycle = _cycle;
+
+		tmp_flash_wait = flash_wait;
+		return;
+	}
+
+	function Update()
+	{
+		if (flash_flag  ==  false)
+			return ( -1 );
+
+		tmp_flash_wait -= 1;
+		if (tmp_flash_wait  >  0)
+			return ( 0 );
+		tmp_flash_wait = flash_wait;
+
+		page_no = (page_no + 1) % page_cycle;
+		if (flash_time  >  0)
+			flash_time -= 1;
+
+		if (flash_time  ==  0) {
+			flash_flag = false;
+			page_no = 0;
+			return ( 1 );
+		}
+
+		return ( 0 );
+	}
+
+	function GetPage()
+	{
+		return ( page_no );
+	}
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+function isImageFile( _file_name )
+{
+@if (FINAL_VER  ==  0)
+	if (Storages.isExistentStorage(_file_name+".bmp")  ==  true)
+		return ( true );
+	if (Storages.isExistentStorage(_file_name+".png")  ==  true)
+		return ( true );
+@endif
+
+	if (Storages.isExistentStorage(_file_name+RELEASE_CG_FILE_EXT)  ==  true)
+		return ( true );
+	return ( false );
+}
+
+
+
+function ConvertMasterCharaIDtoMasterNo( _id )
+{
+var		i;
+	for (i=0;  i<MasterCharaIDTable.count;  i++) {
+		if (MasterCharaIDTable[i]  ==  _id)
+			return ( i );
+	}
+	return ( CHARA_ID_NONE );
+}
+function ConvertMasterNotoMasterCharaID( _master_no )
+{
+	return ( MasterCharaIDTable[_master_no] );
+}
+function ConvertServantCharaIDtoServantNo( _id )
+{
+var		i;
+	for (i=0;  i<ServantCharaIDTable.count;  i++) {
+		if (ServantCharaIDTable[i]  ==  _id)
+			return ( i );
+	}
+	return ( CHARA_ID_NONE );
+}
+function ConvertServantNotoServantCharaID( _servant_no )
+{
+	return ( ServantCharaIDTable[_servant_no] );
+}
+@if (DEBUG_MODE  ==  1)
+function GetCharaIDtoCharaName( _chara_id )
+{
+	switch ( _chara_id )
+	{
+	case CHARA_ID_RIN:
+		return ( "凛" );
+	case CHARA_ID_SAKURA:
+		return ( "桜" );
+	case CHARA_ID_SHIROU:
+		return ( "士郎" );
+
+	case CHARA_ID_SABER:
+		return ( "セイバー" );
+	case CHARA_ID_ARCHER:
+		return ( "アーチャー" );
+	case CHARA_ID_RIDER:
+		return ( "ライダー" );
+	case CHARA_ID_LANCER:
+		return ( "ランサー" );
+	case CHARA_ID_CASTER:
+		return ( "キャスター" );
+
+	case CHARA_ID_GILGAMESH:
+		return ( "ギルガメッシュ" );
+	case CHARA_ID_IRIYA:
+		return ( "イリヤ" );
+
+	case CHARA_ID_NONE:
+		return ( "!!!!!キャラ無指定!!!!!" );
+	}
+	return ( "範囲外の不明のキャラ" );
+}
+
+
+
+@endif
+
+
+
+@if (DEBUG_MODE  ==  1)
+class CIriyaKeyState
+{
+var		old_ctrl,now_ctrl;
+
+	function CIriyaKeyState()
+	{
+		now_ctrl = 0;
+	}
+	function finalize()
+	{
+	}
+
+
+	// キー情報の取得
+	function UpdateState()
+	{
+		old_ctrl = now_ctrl;
+		now_ctrl = System.getKeyState( VK_CONTROL );
+		return;
+	}
+
+	var		KEY_NONE=0;
+	var		KEY_FIRAST=1;
+	var		KEY_REPEAT=2;
+	function GetCtrlKeyState()
+	{
+		if (now_ctrl  ==  false)
+			return ( KEY_NONE );
+		if (old_ctrl  ==  true)
+			return ( KEY_REPEAT );
+		return ( KEY_FIRAST );
+	}
+
+}
+@endif;
+
+
+class CIriyaStageTimeConvert
+{
+var		time_update;
+var		time_data;
+var		now_minute_num,now_second_num,now_m_second_num;
+
+
+	var		TIME_DATA_M10		= 0;
+	var		TIME_DATA_M01		= 1;
+	var		TIME_DATA_S10		= 2;
+	var		TIME_DATA_S01		= 3;
+	var		TIME_DATA_MS100		= 4;
+	var		TIME_DATA_MS010		= 5;
+	var		TIME_DATA_MS001		= 6;
+	var		MAX_TIME_DATA		= 7;
+
+	var		TIME_UPDATE_M	=0;
+	var		TIME_UPDATE_S	=1;
+	var		TIME_UPDATE_MS	=2;
+	var		MAX_TIME_UPDATE	=3;
+
+	function CIriyaStageTimeConvert()
+	{
+		time_data   = void;
+		time_update = void;
+		Init();
+	}
+	function finalize()
+	{
+		Release();
+	}
+
+	function Init()
+	{
+		Release();
+
+		time_data = new Array();
+		time_update = new Array();
+
+		Reset();
+		return;
+	}
+	function Release()
+	{
+		ReleaseArray( time_update );
+		time_update = void;
+
+		ReleaseArray( time_data );
+		time_data = void;
+		return;
+	}
+
+	function Reset()
+	{
+	var		i;
+		for (i=0;  i<MAX_TIME_UPDATE;  i++)
+			time_update[i] = false;
+
+		now_minute_num   = -1;
+		now_second_num   = -1;
+		now_m_second_num = -1;
+		return;
+	}
+
+	function CheckUpdate( _id )
+	{
+		return ( time_update[_id] );
+	}
+	function GetTimeData( _id )
+	{
+		return ( time_data[_id] );
+	}
+
+	function Convert( _time )
+	{
+	var		now_num,left_num,tmp;
+
+		if (_time  <  0) {
+			Init();
+			return;
+		}
+
+
+		left_num = _time;
+		if (left_num  >=  MAX_TIME_COUNT) {
+			// minute
+			if (now_minute_num  !=  99) {
+				time_update[TIME_UPDATE_M] = true;
+				now_minute_num = 99;
+				time_data[TIME_DATA_M10] = 9;
+				time_data[TIME_DATA_M01] = 9;
+			} else {
+				time_update[TIME_UPDATE_M] = false;
+			}
+			// second
+			if (now_second_num  !=  59) {
+				time_update[TIME_UPDATE_S] = true;
+				now_second_num = 59;
+				time_data[TIME_DATA_S10] = 5;
+				time_data[TIME_DATA_S01] = 9;
+			} else {
+				time_update[TIME_UPDATE_S] = false;
+			}
+			// milli second
+			if (now_m_second_num  !=  999) {
+				time_update[TIME_UPDATE_MS] = true;
+				now_m_second_num = 999;
+				time_data[TIME_DATA_MS100] = 9;
+				time_data[TIME_DATA_MS010] = 9;
+				time_data[TIME_DATA_MS001] = 9;
+			} else {
+				time_update[TIME_UPDATE_MS] = false;
+			}
+			return;
+		}
+
+
+		// minute
+		now_num = (int)(left_num / (60*FRAME_PER_SEC));
+		left_num = (int)(left_num % (60*FRAME_PER_SEC));
+		if (now_num  !=  now_minute_num) {
+			time_update[TIME_UPDATE_M] = true;
+			now_minute_num = now_num;
+			time_data[TIME_DATA_M10] = (int)(now_num / 10);
+			time_data[TIME_DATA_M01] = (int)(now_num % 10);
+		} else {
+			time_update[TIME_UPDATE_M] = false;
+		}
+		// second
+		now_num = (int)(left_num / (FRAME_PER_SEC));
+		left_num = (int)(left_num % (FRAME_PER_SEC));
+		if (now_num  !=  now_second_num) {
+			time_update[TIME_UPDATE_S] = true;
+			now_second_num = now_num;
+			time_data[TIME_DATA_S10] = (int)(now_num / 10);
+			time_data[TIME_DATA_S01] = (int)(now_num % 10);
+		} else {
+			time_update[TIME_UPDATE_S] = false;
+		}
+		// milli second
+		now_num = left_num;
+		if (now_num  !=  now_m_second_num) {
+			time_update[TIME_UPDATE_MS] = true;
+			now_m_second_num = now_num;
+			now_num =  (int)(now_num * 1000 / FRAME_PER_SEC);
+			time_data[TIME_DATA_MS100] = (int)(now_num / 100);
+			now_num = now_num % 100;
+			time_data[TIME_DATA_MS010] = (int)(now_num /  10);
+			time_data[TIME_DATA_MS001] = (int)(now_num %  10);
+		} else {
+			time_update[TIME_UPDATE_MS] = false;
+		}
+		return;
+	}
+
+
+	function GetTimeCode()
+	{
+		return ( calc_m()*1000*100 + calc_s()*1000 + calc_ms() );
+	}
+	function SetTimeCode( _code )
+	{
+		time_data[TIME_DATA_M10]   = _code \ (10*100*1000);
+		_code = _code % (10*100*1000);
+
+		time_data[TIME_DATA_M01]   = _code \ ( 1*100*1000);
+		_code = _code % ( 1*100*1000);
+
+		time_data[TIME_DATA_S10]   = _code \ (    10*1000);
+		_code = _code % (    10*1000);
+
+		time_data[TIME_DATA_S01]   = _code \ (     1*1000);
+		_code = _code % (     1*1000);
+
+		time_data[TIME_DATA_MS100] = _code \ (       100);
+		_code = _code % (       100);
+
+		time_data[TIME_DATA_MS010] = _code \ (        10);
+		_code = _code % (        10);
+
+		time_data[TIME_DATA_MS001] = _code \ (         1);
+		_code = _code % (         1);
+
+		now_minute_num   = calc_m();
+		now_minute_num   = calc_s();
+		now_m_second_num = calc_ms();
+		time_update[TIME_UPDATE_M]  = true;
+		time_update[TIME_UPDATE_S]  = true;
+		time_update[TIME_UPDATE_MS] = true;
+
+		@if (DEBUG_MODE)
+		dm( "合計時間・・・・"
+			+ time_data[TIME_DATA_M10]+time_data[TIME_DATA_M01]
+			+ "’"
+			+ time_data[TIME_DATA_S10]+time_data[TIME_DATA_S01]
+			+ "”"
+			+ time_data[TIME_DATA_MS100]+time_data[TIME_DATA_MS010]+time_data[TIME_DATA_MS001] );
+		@endif;
+		return;
+	}
+
+	function calc_m()
+	{
+		return ( time_data[TIME_DATA_M10]*10 + time_data[TIME_DATA_M01]*1 );
+	}
+	function calc_s()
+	{
+		return ( time_data[TIME_DATA_S10]*10 + time_data[TIME_DATA_S01]*1 );
+	}
+	function calc_ms()
+	{
+		return ( time_data[TIME_DATA_MS100]*100 + time_data[TIME_DATA_MS010]*10 + time_data[TIME_DATA_MS001]*1 );
+	}
+	function Add( _time_data )
+	{
+	//var		old_m,old_s,old_ms;
+		with ( _time_data )
+		{
+/*			old_m  = calc_m();
+			old_s  = calc_s();
+			old_ms = calc_ms();
+*/
+			time_data[TIME_DATA_M10]   += .time_data[TIME_DATA_M10];
+			time_data[TIME_DATA_M01]   += .time_data[TIME_DATA_M01];
+			time_data[TIME_DATA_S10]   += .time_data[TIME_DATA_S10];
+			time_data[TIME_DATA_S01]   += .time_data[TIME_DATA_S01];
+			time_data[TIME_DATA_MS100] += .time_data[TIME_DATA_MS100];
+			time_data[TIME_DATA_MS010] += .time_data[TIME_DATA_MS010];
+			time_data[TIME_DATA_MS001] += .time_data[TIME_DATA_MS001];
+
+			while (1) {
+				if (time_data[TIME_DATA_MS001]  <  10)
+					break;
+				time_data[TIME_DATA_MS001] -= 10;
+				time_data[TIME_DATA_MS010] +=  1;
+			}
+			while (1) {
+				if (time_data[TIME_DATA_MS010]  <  10)
+					break;
+				time_data[TIME_DATA_MS010] -= 10;
+				time_data[TIME_DATA_MS100] +=  1;
+			}
+			while (1) {
+				if (time_data[TIME_DATA_MS100]  <  10)
+					break;
+				time_data[TIME_DATA_MS100] -= 10;
+				time_data[TIME_DATA_S01] +=  1;
+			}
+
+			while (1) {
+				if (time_data[TIME_DATA_S01]  <  10)
+					break;
+				time_data[TIME_DATA_S01] -= 10;
+				time_data[TIME_DATA_S10] +=  1;
+			}
+			while (1) {
+				if (time_data[TIME_DATA_S10]  <  6)
+					break;
+				time_data[TIME_DATA_S10] -= 6;
+				time_data[TIME_DATA_M01] += 1;
+			}
+
+			while (1) {
+				if (time_data[TIME_DATA_M01]  <  10)
+					break;
+				time_data[TIME_DATA_M01] -= 10;
+				time_data[TIME_DATA_M10] += 1;
+			}
+			if (time_data[TIME_DATA_M10]  >  9) {
+				time_data[TIME_DATA_M10] = 9;
+				time_data[TIME_DATA_M01] = 9;
+
+				time_data[TIME_DATA_S10] = 5;
+				time_data[TIME_DATA_S01] = 9;
+
+				time_data[TIME_DATA_MS100] = 9;
+				time_data[TIME_DATA_MS010] = 9;
+				time_data[TIME_DATA_MS001] = 9;
+			}
+
+			now_minute_num   = calc_m();
+			now_minute_num   = calc_s();
+			now_m_second_num = calc_ms();
+			time_update[TIME_UPDATE_M]  = true;
+			time_update[TIME_UPDATE_S]  = true;
+			time_update[TIME_UPDATE_MS] = true;
+		}
+		return;
+	}
+}
+
+
+
+
+
+
+
+// システムフェードレイヤ
+class CIriyaSystemFade
+{
+var		parWin,parLayer;
+var		layer;
+
+var		DEF_SYS_FADE_TIME = 90;
+	function CIriyaSystemFade( _pr_win, _pr_layer )
+	{
+		parWin   = _pr_win;
+		parLayer = _pr_layer;
+		layer = void;
+	}
+	function finalize()
+	{
+		release();
+	}
+
+	function release()
+	{
+		EasyReleaseFadeLayer( layer );
+		layer = void;
+		return;
+	}
+
+	function StartUpFade( _time=DEF_SYS_FADE_TIME, _fade_color="BLACK",_fade_type="FADE_IN" )
+	{
+		release();
+		layer = EasyCreateFadeLayer( parWin,parLayer, _fade_color, _fade_type, _time );
+		SetLayerPriority( layer, PRIORITY_SYSTEM_FADE );
+		return;
+	}
+	function UpdateFade()
+	{
+		// フェードアウトレイヤがある場合
+		if (CheckValid(layer)  ==  false)
+			return ( false );
+		if (ProcessFadeAnime(layer)  ==  "UPDATING")
+			return ( true );
+		return ( false );
+	}
+}
+
+
+
+
+
+function BgmPlay( _file_name )
+{
+	playBGM( _file_name );
+	return;
+}
+function BgmPlayNormal( _file_name )
+{
+	playBGM( _file_name,0,0, true );
+	return;
+}
+// SE再生
+function PlaySE( _file_name, _stop_flag, _fade_time, _loop_flag, _stop_time, volume=void )
+{
+//var		volume;
+@if (NOPLAY_SE  ==  1)
+return;
+@endif
+	if (_file_name  ===  void)
+		return;
+
+	if (_stop_flag  !==  void) {
+		if (_stop_flag  ==  true)
+			stopSound( _file_name, _stop_time, true );
+	}
+
+	if (iriyacastle_object.isAutoPlayMode()  ==  true)
+		volume = AUTO_MODE_SE_VOLUME_AVE;
+
+	if (_loop_flag  ==  true)
+			loopSound( _file_name, _fade_time );
+	else	playSound( _file_name, true, volume );
+	return;
+}
+// BGGM & SE 全停止
+function stopAll()
+{
+	stopBGM( , );
+	stopSound( ,, );
+	return;
+}
+// BGGM & SE 全フェードアウト
+function fadeOutAll( _time )
+{
+		stopSound( , _time, true );
+		stopBGM( _time, );
+	return;
+}
+function StopSE( _file_name, _time )
+{
+	if (_file_name  ===  void)
+		return;
+	stopSound( _file_name, _time, true );
+	return;
+}
+
+
+var	PlaySESTack;
+function InitPlaySESTack()
+{
+	EasyObjectInvalidate( PlaySESTack );
+	PlaySESTack = new Array();
+	return;
+}
+function ClearPlaySESTack()
+{
+	if (CheckValid(PlaySESTack)) {
+		PlaySESTack.clear();
+	}
+	return;
+}
+function CheckPlaySESTack( file_name )
+{
+	if (CheckValid(PlaySESTack)) {
+		if (PlaySESTack.find(file_name)  >=  0) {
+			return ( true );
+		}
+		PlaySESTack.add( file_name );
+		return ( false );
+	}
+	return ( true );
+}
+function ReleasePlaySESTack()
+{
+	EasyObjectInvalidate( PlaySESTack );
+	PlaySESTack = void;
+	return;
+}
+
+
+
+
+
+
+

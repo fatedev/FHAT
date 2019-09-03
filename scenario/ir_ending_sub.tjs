@@ -1,0 +1,305 @@
+/*******************************************************************************
+	風雲イリヤ城 - エンディング用サブスクリプト
+*******************************************************************************/
+
+
+/*###############################################################################
+
+		サポート用クラス
+
+###############################################################################*/
+
+
+/*===============================================================================
+		ベクトル管理クラス
+===============================================================================*/
+class CIrCharaVector
+{
+	function CIrCharaVector()
+	{
+		Clear();
+	}
+	function finalize()
+	{
+	}
+
+
+	var		tmp_vx,tmp_vz,vx,vz,add_vx,add_vz;
+
+	var		landing_flag;
+
+	var		CLEAR_VX=0x01;
+	var		CLEAR_VZ=0x02;
+	var		CLEAR_ALL=CLEAR_VX|CLEAR_VZ;
+	function Clear( flag=CLEAR_ALL )
+	{
+		if (flag&CLEAR_VX) {
+			tmp_vx = 0;
+			vx     = 0;
+			add_vx = 0;
+		}
+		if (flag&CLEAR_VZ) {
+			tmp_vz = 0;
+			vz     = 0;
+			add_vz = 0;
+		}
+		return;
+	}
+
+
+	function SetVector( _vx, _vz, _add_vx, _add_vz, _tvx, _tvz )
+	{
+		if (_tvx  !==  void)
+			tmp_vx = _tvx;
+		if (_tvz  !==  void)
+			tmp_vz = _tvz;
+
+		if (_vx  !==  void)
+			vx = _vx;
+		if (_vz  !==  void)
+			vz = _vz;
+
+		if (_add_vx  !==  void)
+			add_vx = _add_vx;
+		if (_add_vz  !==  void)
+			add_vz = _add_vz;
+		return;
+	}
+
+	function UpdateVectorX()
+	{
+	var		move;
+
+		vx += add_vx;
+		tmp_vx += vx;
+
+		move = tmp_vx \ 1;
+		tmp_vx -= move;
+		return ( move );
+	}
+	function UpdateVectorZ()
+	{
+	var		move;
+
+		vz += add_vz;
+		tmp_vz += vz;
+
+		move = tmp_vz \ 1;
+		tmp_vz -= move;
+		return ( move );
+	}
+
+}
+
+
+/*===============================================================================
+		時間停止管理クラス
+===============================================================================*/
+class CIrAnimeStopData
+{
+var		TYPE_CLEAR			=0;
+var		TYPE_STOP			=1;
+var		TYPE_STOP_CYCLE		=2;
+var		TYPE_STOP_CYCLE_EX	=3;
+
+	function CIrAnimeStopData()
+	{
+		SetStopAnimeData( TYPE_CLEAR );
+	}
+	function finalize()
+	{
+	}
+
+
+	var		anime_stop;
+	var		anime_stop_count;
+	var		anime_stop_cycle;
+	var		stop_time;
+	var		use_flag;
+	function SetStopAnimeData( _type, _data=void )
+	{
+		anime_stop = _type;
+		use_flag = true;
+
+		switch ( _type )
+		{
+		case TYPE_CLEAR:
+			use_flag = false;
+			break;
+		case TYPE_STOP:
+			break;
+		case TYPE_STOP_CYCLE:
+			anime_stop_count = 0;
+			anime_stop_cycle = _data;
+			break;
+		case TYPE_STOP_CYCLE_EX:
+			anime_stop_count = 0;
+			anime_stop_cycle = _data.stop_cycle;
+			stop_time = _data.stop_time;
+			break;
+		}
+		return;
+	}
+
+
+
+	function ProcessAnimeStop()
+	{
+		switch ( anime_stop)
+		{
+		case TYPE_CLEAR:
+			return ( false );
+		case TYPE_STOP:
+			return ( true );
+		case TYPE_STOP_CYCLE:
+			anime_stop_count += 1;
+			if (anime_stop_count  <  anime_stop_cycle)
+				return ( true );
+			anime_stop_count = 0;
+			break;
+
+		case TYPE_STOP_CYCLE_EX:
+			stop_time -= 1;
+			if (stop_time  ==  0) {
+				SetStopAnimeData( TYPE_CLEAR );
+				return ( false );
+			}
+
+			anime_stop_count += 1;
+			if (anime_stop_count  <  anime_stop_cycle)
+				return ( true );
+			anime_stop_count = 0;
+			break;
+		}
+		return ( false );
+	}
+}
+
+
+
+
+
+
+
+
+
+
+
+/*===============================================================================
+		ED汎用オブジェクト管理クラス
+===============================================================================*/
+class CIrServantEDEtc extends CIriyaObject
+{
+var		vector_data;
+
+	function CIrServantEDEtc( _scene, _parent )
+	{
+		vector_data = new CIrCharaVector();
+
+		init_buffer();
+
+		cg_info = new Dictionary();
+
+		super.CIriyaObject( ... );
+
+		type = "CIrServantEDEtc";
+	}
+	function finalize()
+	{
+		EasyObjectInvalidate( vector_data );
+		vector_data = void;
+
+
+		release_cg_info();
+
+		init_buffer();
+		super.finalize( ... );
+	}
+
+	var		cg_info;
+	var		anime_no,page_no,anime_time;
+
+	var		time_end_next,time_end_next_data;
+
+
+	function init_buffer()
+	{
+		cg_info = void;
+
+		anime_no   = 0;
+		page_no    = 0;
+		anime_time = 0;
+		time_end_next = 0;
+		return;
+	}
+
+
+	function release_cg_info()
+	{
+		if (CheckValid(cg_info)  ==  true) {
+			EasyObjectInvalidate( cg_info );
+			cg_info = void;
+		}
+		return;
+	}
+
+
+	// CG情報取得関数
+	function getCGInfo( _base_no, _page_no )
+	{
+		return ( false );
+	}
+
+	// アニメ変更データセット処理
+	function change_anime()
+	{
+		return;
+	}
+	function move_anime()
+	{
+		return ( true );
+	}
+
+
+	function onAnimation()
+	{
+		if (move_anime()  ==  false)
+			return;
+
+		anime_time -= 1;
+		if (anime_time  >  0) {
+			return;
+		}
+
+		switch ( time_end_next )
+		{
+		// ページ変更系
+		case -1:
+			// 次のページへ
+			page_no += 1;
+			break;
+		case  0:
+			// 指定ページへ
+			page_no  = time_end_next_data;
+			break;
+
+		// アニメ変更系
+		case 100:
+			// アニメ番号変更
+			anime_no  = time_end_next_data;
+			page_no = 0;
+			break;
+		}
+
+		change_anime();
+		return;
+	}
+
+
+	// 画像情報取得割り込み
+	function getImageFileInfo()
+	{
+		return cg_info;
+	}
+}
+

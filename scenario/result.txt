@@ -1,0 +1,58 @@
+./botsu/街編・3日目-42.ks: @fadein time=1000 storage=o駅前パーク(秋)-(昼) rule=カーテン左から
+←@fadein time=1000 storage=o駅前パーク-(昼) rule=カーテン左から
+./botsu/街編・3日目-42.ks: @fadein time=400 storage=o駅前パーク(秋)-(昼) noclear=1
+←@fadein time=400 storage=o駅前パーク-(昼) noclear=1
+./botsu/街編・3日目-42.ks: @dash page=back mx=0 opacity=255 layer=base irot=-0.0 cx=49 imag=1.4 time=6000 cy=277 mag=1.4 my=-224 storage=o駅前パーク(秋)-(昼) rot=-0.0 accel=0
+←@dash page=back mx=0 opacity=255 layer=base irot=-0.0 cx=49 imag=1.4 time=6000 cy=277 mag=1.4 my=-224 storage=o駅前パーク-(昼) rot=-0.0 accel=0
+./botsu/街編・3日目-42.ks: @rep force=1 fliplr=0 storages=セイバー私服12c(中) time=300 flipud=0 poss=c bg=o駅前パーク(秋)-(昼) indexes=1000
+←@rep force=1 fliplr=0 storages=セイバー私服12c(中) time=300 flipud=0 poss=c bg=o駅前パーク-(昼) indexes=1000
+./daytime.town/街編・2日目-19.ks: @fadein time=200 storage=o冬木大橋袂の公園1(秋)-(昼) rule=走る感じ
+←@fadein time=200 storage=o冬木大橋袂の公園1-(昼) rule=走る感じ
+./daytime.town/街編・2日目-19.ks: @rep rule=走る感じ fliplr=0 storages=カレン修道服02a(中) time=200 flipud=0 poss=c bg=o冬木大橋袂の公園1(秋)-(昼) indexes=1000
+←@rep rule=走る感じ fliplr=0 storages=カレン修道服02a(中) time=200 flipud=0 poss=c bg=o冬木大橋袂の公園1-(昼) indexes=1000
+./daytime.town/街編・2日目-19.ks: @fadein time=600 storage=o冬木大橋袂の公園1(秋)-(昼)
+←@fadein time=600 storage=o冬木大橋袂の公園1-(昼)
+./daytime.town/街編・4日目-04.ks: @fadein time=800 storage=o駅前パーク(秋)-(昼) rule=カーテン左から
+←@fadein time=800 storage=o駅前パーク-(昼) rule=カーテン左から
+./daytime.town/街編・4日目-04.ks: @fadein time=600 rule=カーテン左から storage=o駅前パーク(秋)-(昼)
+←@fadein time=600 rule=カーテン左から storage=o駅前パーク-(昼)
+./daytime.town/街編・4日目-04.ks: @haze page=back layer=base intime=400 waves=(100,1,10) upper=0 lower=600 center=300 upperpow=0.5 lowerpow=0.5 centerpow=1.0 storage=o駅前パーク(秋)-(昼)
+←@haze page=back layer=base intime=400 waves=(100,1,10) upper=0 lower=600 center=300 upperpow=0.5 lowerpow=0.5 centerpow=1.0 storage=o駅前パーク-(昼)
+./daytime.town/街編・4日目-04.ks: @fadein time=400 storage=o駅前パーク(秋)-(昼)
+←@fadein time=400 storage=o駅前パーク-(昼)
+./daytime.town/街編・4日目-04.ks: @dash page=back mx=-222 opacity=255 layer=base irot=-0.0 cx=509 imag=1.7 time=4000 cy=387 mag=1.7 my=0 storage=o駅前パーク(秋)-(昼) rot=-0.0 accel=0
+←@dash page=back mx=-222 opacity=255 layer=base irot=-0.0 cx=509 imag=1.7 time=4000 cy=387 mag=1.7 my=0 storage=o駅前パーク-(昼) rot=-0.0 accel=0
+./daytime.town/街編・4日目-04.ks: @fg left=0 index=1000 top=0 storage=o駅前パーク(秋)-(昼)
+←@fg left=0 index=1000 top=0 storage=o駅前パーク-(昼)
+./daytime.town/街編・4日目-04.ks: 「[line len=3]っはぶしッ！[wait canskip=0 time=400][rep fliplr=0 tops=46,1 storages=葛木01a眼鏡(遠),藤08f(近) time=300 flipud=0 lefts=88,254 bg=o駅前パーク(秋)-(昼) indexes=1000,2000]　うむぅ〜」
+←「[line len=3]っはぶしッ！[wait canskip=0 time=400][rep fliplr=0 tops=46,1 storages=葛木01a眼鏡(遠),藤08f(近) time=300 flipud=0 lefts=88,254 bg=o駅前パーク-(昼) indexes=1000,2000]　うむぅ〜」
+./daytime.town/街編・4日目-04.ks: @rep rule=走る感じ fliplr=0 tops=35,0 storages=藤01e(中),葛木01a眼鏡(近) time=200 flipud=0 lefts=470,40 bg=o駅前パーク(秋)-(昼) indexes=1000,2000
+←@rep rule=走る感じ fliplr=0 tops=35,0 storages=藤01e(中),葛木01a眼鏡(近) time=200 flipud=0 lefts=470,40 bg=o駅前パーク-(昼) indexes=1000,2000
+./daytime.town/街編・4日目-07.ks: @fadein time=800 rule=カーテン左から storage=o冬木大橋袂の公園1(秋)-(昼)
+←@fadein time=800 rule=カーテン左から storage=o冬木大橋袂の公園1-(昼)
+./daytime.town/街編・4日目-07.ks: @fadein time=200 rule=走る感じ(上から) storage=o冬木大橋袂の公園1(秋)-(昼)
+←@fadein time=200 rule=走る感じ(上から) storage=o冬木大橋袂の公園1-(昼)
+./daytime.town/街編・4日目-07.ks: @rep fliplr=0 storages=ギル子供01c(中) time=300 flipud=0 poss=c bg=o冬木大橋袂の公園1(秋)-(昼) indexes=3000
+←@rep fliplr=0 storages=ギル子供01c(中) time=300 flipud=0 poss=c bg=o冬木大橋袂の公園1-(昼) indexes=3000
+./hanafuda/花札-normal凛3.ks: @hfinit storage=o交差点(秋)-(昼)
+←@hfinit storage=o交差点-(昼)
+./hanafuda/花札-normal桜3.ks: @hfinit storage=o交差点(秋)-(昼)
+←@hfinit storage=o交差点-(昼)
+./hanafuda/花札-story2.ks: @hfbg storage=o庭(秋)-(昼)  time=800
+←@hfbg storage=o庭-(昼) time=800
+./hanafuda/花札-story2.ks: @hfbg time=300 rule=走る感じ storage=o庭(秋)-(昼) 
+←@hfbg time=300 rule=走る感じ storage=o庭-(昼)
+./hanafuda/花札-story2after.ks: @hfbg storage=o庭(秋)-(昼)  page=fore
+←@hfbg storage=o庭-(昼) page=fore
+./hanafuda/花札-story2after.ks: @rep textoff=0 fliplr=0 tops=376,246,133,188,397,27 storages=hf_イリヤ-立bパーツ,hf_イリヤ-立aパーツ,hf_竹刀a,hf_藤ねえ-立,hf_藤ねえ-真剣,hf_ブルマイリヤ-喜3 time=300 flipudr=0 opacities=,,0,,, lefts=296,255,460,437,7,7 bg=o庭(秋)-(昼)  indexes=1000,2000,3000,4000,5000,6000
+←@rep textoff=0 fliplr=0 tops=376,246,133,188,397,27 storages=hf_イリヤ-立bパーツ,hf_イリヤ-立aパーツ,hf_竹刀a,hf_藤ねえ-立,hf_藤ねえ-真剣,hf_ブルマイリヤ-喜3 time=300 flipudr=0 opacities=,,0,,, lefts=296,255,460,437,7,7 bg=o庭-(昼) indexes=1000,2000,3000,4000,5000,6000
+./hanafuda/花札-story2after.ks: @fadein textoff=0 time=200 storage=o庭(秋)-(昼) 
+←@fadein textoff=0 time=200 storage=o庭-(昼)
+./hanafuda/花札-story3after.ks: @hfbg storage=o庭(秋)-(昼)  page=fore
+←@hfbg storage=o庭-(昼) page=fore
+./hanafuda/花札-story4.ks: @fadein textoff=0 time=400 storage=o庭(秋)-(昼) 
+←@fadein textoff=0 time=400 storage=o庭-(昼)
+./hanafuda/花札-story4after.ks: @hfbg storage=o庭(秋)-(昼)  page=fore
+←@hfbg storage=o庭-(昼) page=fore
+./main/真・冒頭-01.ks: @fadein time=600 rule=シャッター左から storage=o庭(秋)-(朝)
+←@fadein time=600 rule=シャッター左から storage=o庭-(朝)

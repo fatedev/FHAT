@@ -1,0 +1,2050 @@
+/*******************************************************************************
+
+	風雲イリヤ城 - 竜神池
+
+*******************************************************************************/
+
+var OBJTYPE_STONE		= "OBJTYPE_STONE";
+var ANI_STONE_RANDOM	= -1;	// マップ作成時にランダムで決定される
+var ANI_STONE_NORMAL	= 0;	// 通常の足場
+var ANI_STONE_TRAP		= 1;	// 爆発する足場
+var ANI_STONE_GOAL		= 2;	// ゴールにつながる足場
+var ANI_STONE_不安定	= 3;	// 沈む足場	
+var ANI_STONE_沈む		= 4;	// 沈みつつある足場
+var ANI_STONE_沈んだ	= 5;	// 既に沈んでいる状態
+var ANI_STONE_浮上		= 6;	// 沈んでいた足場が浮上してくる
+var ANI_STONE_爆発		= 7;	// 爆発中
+var ANI_STONE_消滅		= 8;	// 消えてしまっている
+var ANI_STONE_出現		= 9;	// 消滅した足場が出現する
+
+var STONE_沈んだ_持続時間= 60;
+var STONE_消滅_持続時間 = 30;
+var STONE_沈んだ_ANIWAIT= 8;
+var STONE_沈む_ANIWAIT	= 6;
+var STONE_NORMAL_ANIWAIT= 8;
+var STONE_浮上_ANIWAIT 	= 6;
+var STONE_爆発_ANIWAIT  = 2;
+var STONE_出現_ANIWAIT	= 3;
+
+var SERVANT_JUMP_RANGE	= 300;
+var SERVANT_JUMP_RANGE_ONSERVANT = 400;
+var SERVANT_BLOWN_持続時間 = 60;
+var SERVANT_BLOWN_上昇速度 = 30;
+var SERVANT_溺れ_TIME	= 60;
+var SERVANT_JUMP_TIME	= 15;
+var SERVANT_REPEL_DISTANCE	= 60;
+var 爆発によるダメージ = 20;
+var 溺れダメージ = 0.1; // 毎フレーム減算
+var UPDATE_PLACELIST_INTERVAL = FRAME_PER_SEC*1;
+var JUMPMARK_INTERVAL = 20;
+
+var 爆発の対象サーバント = [ANI_STAND,ANI_麻痺];
+var 沈み続ける対象サーバント = [ANI_STAND, ANI_麻痺, ANI_FIGHT, ANI_DEAD];
+var 競合処理対象サーバント = [ANI_STAND, ANI_麻痺, ANI_FIGHT, ANI_FIGHT_READY];
+
+var ENEMY_LEFTHAND_TIMING	= 20;
+var ENEMY_RIGHTHAND_TIMING	= 60;
+var ENEMY_HIDE_TIMING		= 120;
+
+
+class CIrStone extends CIriyaObject
+{	
+	var IMAGEID_STONE_TYPEMASK	= 0xFF00;
+	var IMAGEID_STONE_INDEXMASK	= 0x00FF;
+	var IMAGEID_STONE			= 0x1000;
+	var IMAGEID_STONE_SELECTED	= 0x2000;
+	var IMAGEID_STONE_WATER		= 0x3000;
+	var servants = [];
+	var nextPlaces = [];
+
+	function CIrStone( _scene, _parent )
+	{
+		super.CIriyaObject( ... );
+		type		= OBJTYPE_STONE;
+		priority	= PRIORITY_GROUNDOBJ;
+		selected	= false; // 石が選択されているかどうか
+		initAnimationMethods();
+		initImageFileInfoList();
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	var selected;
+	var _old_priority;
+	var dangerMark;
+	var aniFuncList;
+	
+	function initAnimationMethods()
+	{
+		aniFuncList = [];
+		// 通常状態（普通の石）
+		aniFuncList[ ANI_STONE_NORMAL ] =
+		aniFuncList[ ANI_STONE_TRAP ] =
+		aniFuncList[ ANI_STONE_不安定 ] = function
+		{
+			var w = STONE_NORMAL_ANIWAIT;
+			var i;
+			var posz;
+			var _type = selected ? IMAGEID_STONE_SELECTED : IMAGEID_STONE;
+			if ( STAGE1_STONE_ANIMATION )
+			{
+				i = timing\w%4;
+				imageId = _type|i;
+				posz = (i<2) ? 0 : -2;
+			}
+			else
+				imageId = _type|0;
+			if ( CheckValid(dangerMark) )
+				dangerMark.z = posz;
+		};
+		
+		// 石が沈んでいる（現在進行）
+		aniFuncList[ ANI_STONE_沈む ] = function
+		{
+			var i = 4 + (timing\STONE_沈む_ANIWAIT);
+			if ( i < 10 )
+				imageId = IMAGEID_STONE|i;
+			else
+				animation = ANI_STONE_沈んだ;
+			// サーバントが乗っている場合は、沈む石に合わせてサーバントの立ち位置を下にずらす
+			for( i=0; i<servants.count; i++ )
+			{
+				if ( servants[i].animation==ANI_JUMP ) continue;
+				if ( servants[i].animation==ANI_JUMPING) continue;
+				servants[i].z = -timing/STONE_沈む_ANIWAIT*2;
+			}
+		};
+			
+		// 石が沈んだ（完了）
+		aniFuncList[ ANI_STONE_沈んだ ] = function
+		{
+			var i = ( timing\STONE_沈んだ_ANIWAIT % 3) + 11;
+			imageId = IMAGEID_STONE|i;
+			// 沈んでから一定時間経過していて、上に誰も乗っていなければ浮上する
+			if ( timing>STONE_沈んだ_持続時間 && servants.count==0 )
+				animation = ANI_STONE_浮上;
+		};
+			
+		// 石が浮き上がっている（現在進行）
+		aniFuncList[ ANI_STONE_浮上 ] = function
+		{
+			var i = timing\STONE_浮上_ANIWAIT + 14;
+			if ( i <=21 )
+				imageId = IMAGEID_STONE|i;
+			else
+				animation = ANI_STONE_不安定;
+		};
+		
+		// 石が爆発した
+		aniFuncList[ ANI_STONE_爆発 ] = function
+		{
+			if ( timing==0 )
+			{
+				_old_priority = priority;
+				priority = PRIORITY_PLAYER;
+				// 危険マーク
+				if ( CheckValid(dangerMark) )
+					dangerMark.timing=0;// アニメ時間をリセットする
+				else
+				{
+					dangerMark = new CIrDangerMark( scene, this ); // 危険マークを置く
+					dangerMark.images = scene.systemImages;
+				}
+				sound( SE_ASHIBA_EXPLOSION ); 
+			}
+			var i = timing\(STONE_爆発_ANIWAIT);
+			if ( i<=9 )
+				imageId = IMAGEID_STONE_WATER|i;
+			else
+			{
+				animation = ANI_STONE_消滅;
+				priority=_old_priority;
+			}
+		};
+
+		// 石が消えてしまった
+		aniFuncList[ ANI_STONE_消滅 ] = function
+		{
+			visible = false;
+			// 消滅してから一定時間経過していて、上に誰も乗っていなければ復活する
+			if ( timing>STONE_消滅_持続時間 && servants.count==0 )
+			{
+				animation = ANI_STONE_出現;
+				visible = true;
+			}
+		};
+		
+		// 消えていた石が出現した（現在進行）
+		aniFuncList[ ANI_STONE_出現 ] = function
+		{
+			var i = timing\STONE_出現_ANIWAIT + 14;
+			if ( i <=21 )
+				imageId = IMAGEID_STONE|i;
+			else
+				animation = ANI_STONE_TRAP;
+		};
+			
+		// ゴール用の不可視な石
+		aniFuncList[ ANI_STONE_GOAL ] = function
+		{
+			visible = false;
+		};
+	}
+	
+	function onAnimation()
+	{
+		var func = aniFuncList[ animation ];
+		if ( func )
+			func();
+	}
+	
+	// 上に乗れるかどうか（乗り続けることができるかどうか）
+	var __canStandAniList = [
+		ANI_STONE_NORMAL,
+		ANI_STONE_TRAP,
+		ANI_STONE_不安定,
+		ANI_STONE_沈む
+	];
+	function canStand()
+	{	
+		return ( __canStandAniList.find(animation) >= 0 );
+	}
+
+	// 進入可能か（これから乗ることができるかどうか）
+	var __canEnterAniList = [
+		ANI_STONE_NORMAL,
+		ANI_STONE_TRAP,
+		ANI_STONE_不安定
+	];
+	function canEnter()
+	{	
+		return ( __canEnterAniList.find(animation) >= 0 );
+	}
+	
+	
+	var __imageinfo;
+	function initImageFileInfoList()
+	{
+		__imageinfo = [];
+		__imageinfo[ IMAGEID_STONE ] = %[
+			filename:"ir_obj_ashiba00",
+			cx:77,
+			cy:30,
+		];
+		__imageinfo[ IMAGEID_STONE_SELECTED ] = %[
+			filename:"ir_obj_ashiba02",
+			cx:77,
+			cy:30,
+		];
+		__imageinfo[ IMAGEID_STONE_WATER ] = %[
+			filename:"ir_eff_water",
+			cx:70,
+			cy:170,
+		];
+	}
+	
+	var info = %[];
+	function getImageFileInfo()
+	{
+		var index = imageId & IMAGEID_STONE_INDEXMASK;
+		var inf = __imageinfo[ imageId&IMAGEID_STONE_TYPEMASK ];
+		if ( inf===void )
+			return void;
+		info.filename = inf.filename+"%02d".sprintf(index);
+		info.centerX = inf.cx;
+		info.centerY = inf.cy;
+		info.mirror = false;
+		info.adapt = true;
+		return info;
+	}
+}
+
+
+
+
+
+
+
+
+class CIrRyujinServant extends CIrServant
+{
+	var firstPositionX;
+	var firstPositionY;
+	var servants = [];
+	var nextPlaces = []; // dummy member
+	
+	function CIrRyujinServant( _scene, _parent )
+	{
+		super.CIrServant( ... );
+	}
+
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	// サーバントが所属する場所オブジェクト
+	var __place;
+	property place
+	{
+		getter()
+		{
+			return __place;
+		}
+		
+		setter(value)
+		{
+			// 同じ場所の場合は更新しない
+			if ( value == __place )
+				return;
+			// 昔いた場所のサーバントリストから自身を削除する
+			if ( __place !== void )
+				__place.servants.remove(this);
+			// 新しい場所のサーバントリストに自身を追加する
+			__place = value;
+			if ( __place !== void )
+				__place.servants.add(this);
+		}
+	}
+	
+	var ryujinemo;
+	
+	function onAnimation()
+	{
+		switch( animation )
+		{
+		case ANI_STAND:
+			if ( condition==CONDITION_PARALYZE )
+			{
+				animation = ANI_麻痺;
+				break;
+			}
+			doAnimation();
+			if ( timing === 0 )
+				scene.競合処理( this );
+			// （保険）待機中に足場が消えてしまった場合は溺れさせておく
+			if ( CheckValid(place) && !place.canStand() )
+				animation = ANI_溺れ着地;
+			break;
+			
+		case ANI_麻痺:
+			doAnimation();
+			if( condition != CONDITION_PARALYZE )
+				animation = ANI_STAND;
+			break;
+		
+		case ANI_JUMPING:
+			doAnimation();
+			if ( timing == 0 )
+			{
+				if ( place )
+				{
+					motionDestX = place.x;
+					motionDestY = place.y;
+				}
+				else
+				{
+					motionDestX = firstPositionX;
+					motionDestY = firstPositionY;
+				}
+				var time = (condition==CONDITION_RAPID) ? SERVANT_JUMP_TIME\2 : SERVANT_JUMP_TIME;
+				time = time * distanceOf(motionDestX,motionDestY)/120; // 滞空時間が距離に比例するよう調整
+				time = 30 if ( time<30 );
+				motionDestZ = 0;
+				motionHeight = 100;
+				motionLength = time; // 滞空時間
+				motionType = MOTIONTYPE_SCHEDULED_JUMP;
+				motionStart();
+			}
+			if ( motionDone )
+				enterPlace();
+			break;		
+			
+		case ANI_通常着地:
+			updatePlaceLog();
+			if ( place )
+				if ( place.animation==ANI_STONE_不安定 || place.animation==ANI_STONE_沈む )
+				{
+					// びっくりマークを表示 
+					if( CheckValid(ryujinemo) )
+						ryujinemo.enabled = false;
+					ryujinemo = new CIrEmotion(scene, this);
+					ryujinemo.animation = ANI_EMOTION_EXCLAMATION;
+					ryujinemo.images = scene.systemImages;
+					scoreInc( 得点_不安定足場に着地 );
+				}
+				else
+					if( place.animation==ANI_STONE_NORMAL )
+						scoreInc( 得点_通常足場に着地 );
+				
+			animation = ANI_LANDING;
+			break;
+		
+		case ANI_溺れ着地:
+			animation = ANI_DROWN;
+			break;
+			
+		case ANI_ゴール着地:
+			doAnimation( ANI_LANDING );
+			// アニメが変更されるまで待つ
+			if ( animation == ANI_ゴール着地 )
+				break;
+			animation = ANI_GOAL;
+			onSucceeded();
+			if ( index == 0 )
+				scene.showGoal();
+			break;
+					
+		case ANI_DROWN:
+			doAnimation();
+			hpDamage( 溺れダメージ );
+			if ( timing==0 )
+			{
+				sound( SE_DROWN );
+				stop();
+				z = -40;
+				priority = PRIORITY_PLAYER-10;
+				var eff = new CIrWaterEffect(scene,this);
+				eff.images = scene.systemImages;
+				scoreInc( 得点_溺れた );
+			}
+			if ( hp==0 )
+			{
+				scene.servantDead(this);
+				break;
+			}
+			// 念のため、一定時間毎に他のサーバントの状態を調べておく
+			{
+				var i = 0;
+				var obj;
+				while( i<servants.count )
+				{
+					obj = servants[i];
+					if( [ANI_DROWN,ANI_DROWNED,ANI_DEAD].find(obj.animation) >=0 )
+						servants.erase(i);
+					else
+						i++;
+				}
+			}			
+			// 一定時間溺れ、自分の上に他のサーバントが乗っていなければ溺れ状態を解除する
+			if ( servants.count == 0 )
+			{
+				var t = (condition==CONDITION_RAPID) ? SERVANT_溺れ_TIME/2 : SERVANT_溺れ_TIME;
+				if ( timing >= t )
+					animation = ANI_飲み込まれる;
+			}
+			break;
+			
+		case ANI_DROWNED:
+			doAnimation();
+			break;
+			
+			
+		case ANI_飲み込まれる:
+			animation = ANI_復帰;
+			break; 
+
+		case ANI_復帰２:
+			if ( timing==0 )
+			{
+				var 溺れ位置 = [
+					%[ x: 320, y:2060 ],
+					%[ x: 240, y:2040 ],
+					%[ x: 160, y:2020 ],
+					%[ x: 400, y:2080 ],
+					%[ x: 480, y:2100 ]
+				];
+				// リセット
+				stop();
+				fadeIn(30);
+				// 着地点
+				motionDestX = 溺れ位置[index].x;
+				motionDestY = 溺れ位置[index].y;
+				motionDestZ = 0;
+				accelY = 3;
+				place = void;				
+				// 出現位置
+				x = motionDestX;
+				y = motionDestY;
+				z = 300;
+				//
+				motionHeight = 0;
+				motionLength = 20;
+				motionType = MOTIONTYPE_SCHEDULED_JUMP;
+				motionStart();
+			}
+			if( ! motionDone )
+				break;
+			animation = ANI_DROWN;			
+			break;		
+
+		case ANI_復帰:
+			{
+				condition = CONDITION_PROTECTED;
+				conditionTimeLeft = 30;
+				allowAnimationWhileUsingHougu = false;
+				visible = true;
+				// 復帰位置を決定
+				var ret_index = scene.getReturnPlaceIndex(this);
+				var ret_place;		
+				// 死んだ場合はスタート地点直後の水に落とす
+				if ( hp==0 )
+				{
+					animation = ANI_復帰２;
+					break;
+				}
+				else
+				{
+					if ( ret_index>=0 )
+						ret_place = path[ ret_index ];
+					else
+						ret_place = void;
+				}
+				priority = PRIORITY_PLAYER;
+				// スタート地点に戻る場合
+				if ( ret_place == void )
+				{
+					motionDestX = firstPositionX;
+					motionDestY = firstPositionY;
+					motionDestZ = 0;
+				}
+				// 他の場所に戻る場合	
+				else
+				{
+					motionDestX = ret_place.x;
+					motionDestY = ret_place.y;
+					motionDestZ = 0;
+					// 復帰場所を含め、それ以降に通った道筋を消去する
+					var i;
+					for ( i=path.count-1; i>=ret_index; i-- )
+						path.erase(i);
+				}
+				place = ret_place;
+				// リセット
+				stop();
+				fadeIn(30);
+				// 出現位置
+				x = motionDestX;
+				y = motionDestY;
+				z = 300;
+				animation = ANI_JUMPING;
+				break;
+			}
+					
+		case ANI_KNOCKBACK:
+			doAnimation();
+			if ( timing===0 )
+			{
+				var _tan = randomRange(-5,5)/10; // 押し出される角度(tan)
+				var _dis = random32(2) ? SERVANT_REPEL_DISTANCE : -SERVANT_REPEL_DISTANCE;
+				motionDestX = x+_dis;
+				motionDestY = y+_dis*_tan;
+				motionLength = 15;
+				motionType = MOTIONTYPE_SCHEDULED_SIN;
+				motionStart();
+			}
+			if ( motionDone )
+			{
+				animation = ANI_DROWN;
+				motionType = MOTIONTYPE_DEFAULT;
+			}
+			break;
+			
+		case ANI_BLOWN:
+			doAnimation();
+			if ( timing == 0 )
+			{
+				scoreInc( 得点_吹き飛ばされた );
+				fadeOut(15);
+				stop();
+				speedZ = SERVANT_BLOWN_上昇速度;
+				// びっくりマークを消す
+				if( CheckValid(ryujinemo) )
+					ryujinemo.enabled = false;
+			}
+			if ( timing < SERVANT_BLOWN_持続時間 )
+				return;
+			fadeIn(0);
+			animation = ANI_復帰;
+			break;
+			
+		case ANI_FIGHT_WIN:
+			doAnimation( ANI_勝利 );
+			if ( timing == 0 )
+			{
+				winnerEff = new CIrWinner(scene,this);
+			}
+			if ( timing <= 45 )
+				break;
+			animation = ANI_STAND;
+			break;			
+
+		default:
+			doAnimation();
+			break;
+		}
+	}
+	
+	// 上に乗れるかどうか（乗り続けることができるかどうか）
+	function canStand()
+	{
+		return ( animation==ANI_DROWN || animation==ANI_DROWNED );
+	}
+
+	// 進入可能か（これから乗ることができるかどうか）
+	function canEnter()
+	{
+		return ( animation==ANI_DROWN || animation==ANI_DROWNED );
+	}
+	
+	// 足場まで移動する
+	function jumpTo( _place )
+	{
+		place = _place;
+		animation = ANI_JUMP;
+		if ( x < place.x )
+			direction = MUKI_RIGHT;
+		else
+			direction = MUKI_LEFT;
+	}
+	
+	// 着地する
+	function enterPlace()
+	{
+		if ( place === void )
+		{
+			animation = ANI_通常着地;
+			stop();
+			return;
+		}
+		switch ( place.animation )
+		{
+		// 通常の足場に着地した場合
+		case ANI_STONE_NORMAL:
+		case ANI_STONE_沈む:
+		case ANI_STONE_不安定:
+		case ANI_STONE_浮上:
+		case ANI_STONE_TRAP:
+		case ANI_STONE_出現:
+			stop();
+			animation = ANI_通常着地;
+			break;
+		// ゴール足場に着地した場合
+		case ANI_STONE_GOAL:
+			stop();
+			animation = ANI_ゴール着地;
+			break;
+		// 着地できない場所の場合
+		case ANI_STONE_沈んだ:
+		case ANI_STONE_爆発:
+		case ANI_STONE_消滅:
+			stop();
+			animation = ANI_溺れ着地;
+			break;
+
+		// 着地場所がサーバントだった場合	
+		case ANI_DROWN:
+			stop();
+			scoreInc( 得点_サーバントに着地 );
+			animation = ANI_通常着地;
+			break;
+
+		case ANI_DROWNED:
+			stop();
+			animation = ANI_通常着地;
+			break;
+
+		default:
+			dm( "invalid parameter in 'enterPlace' : this.type=%s /this.ani=%s /place=%s /place.ani=%s /place.type=%s".sprintf(type,animation,place,place.animation,place.type) );
+			animation = ANI_復帰;
+			break;
+		}
+	}
+	
+	// 着地できたら現在の足場を道筋ログに追加する
+	// スタート地点に着地した場合は道筋ログを消去する
+	function updatePlaceLog()
+	{
+		if ( getLastOf( path ) !== place )
+			path.add( place );
+		if ( place === void )
+			path.clear();
+	}
+}
+
+
+
+
+class CIrRyujinEnemy extends CIriyaObject
+{
+	var ANI_ENEMY_SHOW = 0;
+	var ANI_ENEMY_HIDE = 1;
+	var ANI_ENEMY_STAND = 2;
+	var onHit;
+	
+	function CIrRyujinEnemy( _scene, _parent )
+	{
+		super.CIriyaObject( ... );
+		type = "CIrRyujinEnemy";
+		priority = PRIORITY_PLAYER;
+		animation = ANI_ENEMY_SHOW;
+		enabled = STAGE1_CREATE_ENEMY;
+		autoImageMemory = true;
+		imageWidth = 256;
+		imageHeight = 180;
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+
+	function doUpdateCom()
+	{
+		super.doUpdateCom(...);
+		
+		if ( animation != ANI_ENEMY_STAND )
+			return;
+			
+		switch( timing )
+		{
+		case ENEMY_LEFTHAND_TIMING:
+			// 触手を出す
+			with( new CIrRyujinEnemyHand(scene,this) )
+			{
+				.x = randomRange( x-100, x-40);
+				.y = randomRange( y-10, y+10 );
+				.direction = MUKI_LEFT;
+				.images = scene.systemImages;
+				.onHit = onHit;
+			}
+			break;
+			
+		case ENEMY_RIGHTHAND_TIMING:
+			with( new CIrRyujinEnemyHand(scene,this) )
+			{
+				.x = randomRange( x+40, x+100);
+				.y = randomRange( y-10, y+10 );
+				.direction = MUKI_RIGHT;
+				.images = scene.systemImages;
+				.onHit = onHit;
+			}
+			break;
+			
+		case ENEMY_HIDE_TIMING:
+			// 消える
+			animation = ANI_ENEMY_HIDE;
+			break;
+		}
+	}
+
+	function onAnimation()
+	{
+		var w = 6;
+		switch( animation )
+		{
+		case ANI_ENEMY_SHOW:
+			switch( timing\w )
+			{
+			case 0:	imageId=0; break;
+			case 1:	imageId=1; break;
+			case 2:	animation=ANI_ENEMY_STAND; break;
+			}
+			break;
+		
+		case ANI_ENEMY_STAND:
+			switch( timing\w % 3 )
+			{
+			case 0:	imageId=2; break;
+			case 1:	imageId=3; break;
+			case 2:	imageId=4; break;
+			}
+			break;
+		
+		case ANI_ENEMY_HIDE:
+			switch( timing\w )
+			{
+			case 0:	imageId=1; break;
+			case 1:	imageId=0; break;
+			case 2:	enabled=false; break;
+			}
+			break;
+		
+		}
+	}
+
+	function getImageFileInfo()
+	{
+		var info = %[];
+		info.filename = "ir_char_enemy%02d".sprintf(imageId);
+		info.mirror = false;
+		info.adapt = true;
+		info.centerX = 127;
+		info.centerY = 120;
+		return info;
+	}
+}
+
+
+
+class CIrRyujinEnemyEffect extends CIriyaObject
+{
+	function CIrRyujinEnemyEffect( _scene, _parent )
+	{
+		super.CIriyaObject(...);
+		enabled = STAGE1_ENABLE_ENEMYEFF;
+		show();
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	function show()
+	{
+		animation = 1;
+	}
+	
+	function onAnimation()
+	{
+		switch( animation )
+		{
+		case 0:
+			break;
+		case 1:
+			imageId = timing\5 % 3;
+			if ( timing<60 )
+				break;
+			animation = 2;
+			break;
+		case 2:
+			if ( timing==0 )
+				fadeOut(10);
+			imageId = timing\5 % 3;
+			if ( fadeProcessing )
+				break;
+			animation = 3;
+			break;
+		case 3:
+			enabled = false;
+			break;
+		}
+	}
+	
+	function getImageFileInfo()
+	{
+		var info = %[];
+		info.filename = "ir_eff_enemy%02d".sprintf(imageId);
+		info.adapt = false;
+		info.mirror = (direction==MUKI_LEFT) ? false : true;
+		info.centerX = 135;
+		info.centerY = 120;
+		return info;	
+	}
+}
+
+
+
+class CIrRyujinEnemyHand extends CIriyaObject
+{
+	var onHit;
+	var eff;
+	
+	function CIrRyujinEnemyHand( _scene, _parent )
+	{
+		super.CIriyaObject( ... );
+		type = "CIrRyujinEnemyHand";
+		priority = PRIORITY_PLAYER;
+		autoImageMemory = true;
+		imageWidth  = 200;
+		imageHeight = 160;
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+
+	function doUpdateCom()
+	{
+		super.doUpdateCom(...);
+		//
+		var list = findHitServants(HITTEST_ONFIELD);
+		if ( list.count>0 )
+			doHit( list );
+	}
+	
+	function doHit( list )
+	{
+		var i;
+		if ( onHit )
+			for ( i=0; i<list.count; i++ )
+				onHit(this, list[i]);
+		if ( CheckValid(eff) )
+			eff.show();
+		else
+		{
+		}
+	}
+
+	function onAnimation()
+	{
+		switch( timing )
+		{
+		case 0: imageId=0;
+			sound( SE_ENEMYHAND );
+ 			break;
+ 		case 3: imageId=1; break;
+		case 9: imageId=2; break;
+		case 12:
+			imageId=3;
+			eff = new CIrRyujinEnemyEffect(scene,this);
+			eff.origin = ORIGIN_PARENT;
+			eff.priority = PRIORITY_PLAYER+10;
+			eff.direction = direction;
+			eff.images = scene.systemImages;
+			break;
+		case 40: imageId=2; break;
+		case 43: imageId=1; break;
+		case 46: imageId=0; break;
+		case 49: enabled = false;
+		}
+	}
+	
+	function getImageFileInfo()
+	{
+		var file;
+		switch( imageId )
+		{
+		case 0: file="05"; break;
+		case 1: file="06"; break;
+		case 2: file="07"; break;
+		case 3: file="08"; break;
+		default:
+			return void;
+		}
+		var info = %[];
+		info.filename = "ir_char_enemy"+file;
+		info.mirror	 = (direction==MUKI_RIGHT) ? true : false;
+		info.hitRect = %[ left:-100, top:-120, right:0, bottom:0 ];
+		info.adapt	 = true;
+		info.centerX = 126;
+		info.centerY = 90;
+		return info;
+	}
+}
+
+
+
+
+class CIrJumpMark extends CIriyaObject
+{
+	var info = %[];
+	function CIrJumpMark( _scene, _parent )
+	{
+		super.CIriyaObject( ... );
+		type = "CIrJumpMark";
+		priority = PRIORITY_PLAYER;
+		imageId = "jumpmark";
+		info.filename = "ir_sys_jump";
+		info.mirror = false;
+		info.adapt = true;
+		info.centerX = 32;
+		info.centerY = 32;
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+
+	function onAnimation()
+	{
+		switch( timing )
+		{
+		case 0:
+			fadeOut(15);
+			break;
+		case 15:
+			enabled = false;
+			break;
+		}
+	}
+	
+	function getImageFileInfo()
+	{
+		return info;
+	}
+}
+
+
+
+
+class CIrDangerMark extends CIriyaObject
+{
+	var info = %[];
+	function CIrDangerMark( _scene, _parent )
+	{
+		super.CIriyaObject( ... );
+		type = "CIrDangerMark";
+		origin = ORIGIN_PARENT;
+		priority = PRIORITY_PLAYER;
+		imageId = "danger";
+		info.filename = "ir_obj_danger";
+		info.mirror = false;
+		info.adapt = true;
+		info.centerX = 22;
+		info.centerY = 88;
+	}
+	
+	function finalize()
+	{
+		super.finalize(...);
+	}
+	
+	function onAnimation()
+	{
+		visible = (parent.animation==ANI_STONE_TRAP);
+	
+		var w = 30;
+		var i = timing\w;
+		if ( timing%w == 0 )
+		{
+			if ( i==20 )
+				fadeOut( w );
+			if ( i==21 )
+				enabled = false;
+		}
+	}
+	
+	function getImageFileInfo()
+	{
+		return info;
+	}
+}
+
+
+
+
+class CIriyaRyujin extends CIriyaSceneEx
+{
+	var stonesRootObj;
+	var stones;
+	var stonesCount;
+	var FieldXSize			= 1000;
+	var FieldYSize			= 2400;
+	var FirstCameraPosX		= FieldXSize-400;
+	var FirstCameraPosY		= 300;
+	var カーソル検知距離	= 40;
+	var DefaultStones = [
+		%[ x: 260, y:1960, animation: ANI_STONE_RANDOM ], // 0
+		%[ x: 420, y:2040, animation: ANI_STONE_RANDOM ],
+		%[ x: 560, y:2000, animation: ANI_STONE_RANDOM ],
+		%[ x: 650, y:2100, animation: ANI_STONE_RANDOM ],
+
+		%[ x: 360, y:1900, animation: ANI_STONE_RANDOM ], // 4
+		%[ x: 720, y:1920, animation: ANI_STONE_RANDOM ],	
+		%[ x: 300, y:1770, animation: ANI_STONE_RANDOM ],
+		%[ x: 340, y:1640, animation: ANI_STONE_RANDOM ],
+		
+		%[ x: 490, y:1730, animation: ANI_STONE_RANDOM ], // 8
+		%[ x: 690, y:1780, animation: ANI_STONE_RANDOM ],
+		%[ x: 460, y:1490, animation: ANI_STONE_RANDOM ],
+		%[ x: 550, y:1600, animation: ANI_STONE_RANDOM ],
+
+		%[ x: 710, y:1670, animation: ANI_STONE_RANDOM ], // 12
+		%[ x: 500, y:1290, animation: ANI_STONE_RANDOM ],
+		%[ x: 570, y:1380, animation: ANI_STONE_RANDOM ],
+		%[ x: 730, y:1350, animation: ANI_STONE_RANDOM ],
+
+		%[ x: 780, y:1430, animation: ANI_STONE_RANDOM ], // 16
+		%[ x: 780, y:1540, animation: ANI_STONE_RANDOM ],	
+		%[ x: 640, y:1220, animation: ANI_STONE_RANDOM ],
+		%[ x: 450, y:1050, animation: ANI_STONE_RANDOM ],
+
+		%[ x: 780, y:1150, animation: ANI_STONE_RANDOM ], // 20
+		%[ x: 360, y: 950, animation: ANI_STONE_RANDOM ],
+		%[ x: 640, y: 940, animation: ANI_STONE_RANDOM ],
+		%[ x: 760, y:1020, animation: ANI_STONE_RANDOM ],
+
+		%[ x: 230, y: 820, animation: ANI_STONE_RANDOM ], // 24
+		%[ x: 480, y: 860, animation: ANI_STONE_RANDOM ],
+		%[ x: 660, y: 870, animation: ANI_STONE_RANDOM ],
+		%[ x: 190, y: 620, animation: ANI_STONE_RANDOM ],
+
+		%[ x: 350, y: 750, animation: ANI_STONE_RANDOM ], // 28
+		%[ x: 450, y: 660, animation: ANI_STONE_RANDOM ],	
+		%[ x: 650, y: 630, animation: ANI_STONE_RANDOM ],
+		%[ x: 230, y: 500, animation: ANI_STONE_RANDOM ],
+		
+		%[ x: 320, y: 580, animation: ANI_STONE_RANDOM ], // 32
+		%[ x: 460, y: 510, animation: ANI_STONE_RANDOM ],	
+		%[ x: 670, y: 510, animation: ANI_STONE_RANDOM ],
+		%[ x: 600, y: 410, animation: ANI_STONE_RANDOM ],
+
+		%[ x: 310, y: 270, animation: ANI_STONE_NORMAL, toGoal:true ], // 36
+		%[ x: 420, y: 350, animation: ANI_STONE_NORMAL, toGoal:true ],	
+		%[ x: 540, y: 280, animation: ANI_STONE_NORMAL, toGoal:true ],
+		%[ x: 750, y: 350, animation: ANI_STONE_NORMAL, toGoal:true ],
+
+		%[ x: 400, y: 100, animation: ANI_STONE_GOAL ],
+		%[ x: 470, y: 120, animation: ANI_STONE_GOAL ],
+		%[ x: 540, y: 130, animation: ANI_STONE_GOAL ],
+		%[ x: 600, y: 150, animation: ANI_STONE_GOAL ],
+		%[ x: 665, y: 160, animation: ANI_STONE_GOAL ]
+	];
+	var DefaultPlayers = [
+		%[ x: 320, y:2160 ],
+		%[ x: 240, y:2140 ],
+		%[ x: 160, y:2120 ],
+		%[ x: 400, y:2180 ],
+		%[ x: 480, y:2200 ]
+	];
+	
+	var EnemyPositions = [
+		%[ x:530, y:1860 ],
+		%[ x:620, y:1500 ],
+		%[ x:530, y:1140 ],
+		%[ x:560, y: 750 ],
+		%[ x:350, y: 430 ]
+	];
+	//--------------------------------------------------------------------------
+
+	function makeStonePattern()
+	{
+		var i;
+		var stone;
+		var trapindex = 1+random32(4);
+		for ( i=0;i<DefaultStones.count; i++ )
+			with( DefaultStones[i] )
+				if ( .animation == ANI_STONE_RANDOM )
+				{
+					if ( i==trapindex )
+					{
+						.animation = ANI_STONE_TRAP;
+						trapindex = i+randomRange(4,16);
+						continue;
+					}
+					switch( random32(3) )
+					{
+					case 0:
+					case 1:
+						.animation = ANI_STONE_NORMAL;
+						break;
+					case 2:
+						.animation = ANI_STONE_不安定;
+						break;
+					}
+				}
+	}
+
+	var stoneImages;
+	
+	function CIriyaRyujin( parent, scene_id )
+	{
+		makeStonePattern();
+		super.CIriyaSceneEx( ... );
+		dm( "竜神池" );
+	}
+
+	function init()
+	{
+		super.init( ... );
+		BgmPlay( BGM_STAGE1 );
+	}
+	
+	function finalize()
+	{
+		super.finalize( ... );
+		invalidate stoneImages if ( CheckValid(stoneImages) );
+	}
+
+	function onServantPositionQuery( index )
+	{
+		var start = DefaultPlayers[index].y;
+		var len = start;
+		var pos = start-players[index].y;
+		return round( 0, pos/len*100, 100 );
+	}
+
+	// 通常カメラを更新する（宝具を使っていないときに呼び出される）
+	function normalCameraUpdate( camera )
+	{
+		if( camera.mode != CAMERAMODE_DEFAULT )
+			return false;
+			
+		if ( playerObj.animation != ANI_FIGHT )
+		{
+			camera.motionDestX = playerObj.x;
+			camera.motionDestY = playerObj.y-60;
+		}
+		return true;
+	}
+
+	// index番目のプレイヤの作成の際に呼び出される
+	function onCreateServant( _index )
+	{
+		return new CIrRyujinServant( this, servantsRootObj );
+	}
+	
+	function onInitPlayer( _servant, _index )
+	{
+		with( _servant )
+		{
+			.x = .firstPositionX = DefaultPlayers[_index].x;
+			.y = .firstPositionY = DefaultPlayers[_index].y;
+			.place = void; // プレイヤの立っている場所。サーバントまたは石オブジェクトが入る
+			.path = []; // プレイヤが通った石
+			.toGoal = void; // player を stone として扱うためのダミー変数. 文法上の問題を回避するため
+			.selected = false; // サーバントが選択されているかどうか
+			.onUpdateCom = .isPlayer ? servantPlayer : servantCom;
+		}
+	}
+	
+	var cursorObj;
+	
+	// フィールドの初期化時に呼び出される
+	function initField()
+	{
+		super.initField();
+		//
+		stoneImages = new CImageBuffer(parentWindow,parentLayer);
+		stoneImages.capacity = 10;
+
+		// 背景用オブジェクト
+		if ( DIVIDE_BACKGROUND_IMAGE )
+		{
+			var y;
+			var i=0;
+			for ( y=0; y<2400; y+=400 )
+				with( new CIrBackground(this,etcRootObj) )
+				{
+					.x = 0;
+					.y = y;
+					.filename = "ir_st1_bg%02d".sprintf(i);
+					.index = i++;
+					.imageWidth = 1024;
+					.imageHeight = 400;
+					.autoImageMemory = true;
+				}
+		}
+		else
+			with( new CIrBackground(this,etcRootObj) )
+			{
+				.filename = "ir_st1_bg";
+			}
+		
+		// 足場のルートオブジェクトを登録する
+		objects.add( stonesRootObj=new CIrRootObject(this) );
+		// 石オブジェクトを配置
+		var i;
+		var obj;
+		for ( i=0; i<DefaultStones.count; i++ )
+		{
+			with ( new CIrStone( this, stonesRootObj ) )
+			{
+				.x			= DefaultStones[i].x;
+				.y			= DefaultStones[i].y;
+				.animation	= DefaultStones[i].animation;
+				.toGoal		= DefaultStones[i].toGoal;
+				.index		= i;
+				.images		= stoneImages;
+				.imageWidth	= 180;
+				.imageHeight = 180;
+				.autoImageMemory = true;
+				.visible = STAGE1_SHOW_STONE;
+				if ( random32(1000)<STAGE1_足場にアイテムを置く確率*1000 && .animation!=ANI_STONE_GOAL)
+				{
+					if( random32(1000)<宝箱の出現確率*1000 )
+					{
+						if( random32(2)==0 )
+							putItem( .x, .y, ランダム出現するレアアイテム() );
+						else
+							putItem( .x, .y, 特定キャラを使用した場合のレアアイテム(playerObj) );
+					}
+					else
+						putItem( .x, .y );
+				}
+			}
+		}
+		stones = stonesRootObj.child;
+		stonesCount = stones.count;
+		// それぞれの足場からジャンプ可能な場所のリストを作る
+		var j;
+		for ( i=0; i<stonesCount-1; i++ )
+			for ( j=1; j<stonesCount; j++ )
+				if ( canSelect( stones[i], stones[j] ) ) // stones[i] から stones[j] にジャンプ可能？
+				{
+					stones[i].nextPlaces.add( stones[j] );
+					stones[j].nextPlaces.add( stones[i] );
+				}
+ 		// カーソル
+ 		cursorObj = new CIrBattleCursor(this,etcRootObj,true);
+ 		cursorObj.visible = false;
+ 		//
+ 		_selectedPlace = void;
+	}
+
+	//--------------------------------------------------------------------------
+	// character が obj を行き先として選択可能かどうか
+	function canSelect( character, obj )
+	{	
+		if ( ! obj.canEnter() )
+			return false;
+		var 距離;
+		//if ( character.type==OBJTYPE_STONE )
+		//	距離 = SERVANT_JUMP_RANGE_ONSERVANT;
+		//else
+			if ( character.type==OBJTYPE_SERVANT && character.place && character.place.type==OBJTYPE_SERVANT )
+				距離 = SERVANT_JUMP_RANGE_ONSERVANT;
+			else
+				距離 = SERVANT_JUMP_RANGE;
+		if ( character.distanceSq( obj.x, obj.y ) < 距離*距離 )
+			return true;
+		return false;
+	}
+
+	//--------------------------------------------------------------------------
+	// 指定した場所にあるオブジェクトを返す
+	function getStoneAt( win_x, win_y )
+	{
+		var list = getNextPlaceList( playerObj );
+		var i;
+		var distSq;
+		
+		with( currentCamera.windowToField( win_x, win_y ) )
+		{
+			for ( i=0; i<list.count; i++ )
+			{
+				distSq = list[i].distanceSq( .x, .y );
+				if ( distSq < カーソル検知距離*カーソル検知距離 )
+					return list[i];
+			}
+		}
+		return void;
+	}
+
+	//--------------------------------------------------------------------------
+	// servant が行くことのできる場所の一覧を返す
+	var __listBuffers = [];
+	function getNextPlaceList( servant )
+	{
+		if ( __listBuffers[servant.index] == void )
+		{
+			__listBuffers[servant.index] = %[];
+		}
+		else
+		{
+			var buf = __listBuffers[servant.index];
+			if ( buf.place==servant.place && buf.nexttime>timerCount )
+				return buf.list;
+		}
+		var _list = [];
+		var i;
+		// 足場
+		var obj;
+		if ( servant.place && servant.place.nextPlaces.count>0 )
+			for ( i=0; i<servant.place.nextPlaces.count; i++ )
+			{
+				obj = servant.place.nextPlaces[i];
+				if ( servant.place!=obj && canSelect(servant,obj) )
+					_list.add( obj );
+			}
+		else
+			for ( i=0; i<stonesCount; i++ )
+			{
+				obj = stones[i];
+				if ( servant.place!=obj && canSelect(servant,obj) )
+					_list.add( obj );
+			}
+		// サーバント
+		for ( i=0; i<players.count; i++ )
+		{
+			obj = players[i];
+			if ( servant.place!=obj && canSelect(servant,obj) )
+				_list.add( obj );
+		}
+		//
+		__listBuffers[servant.index] = %[
+			place:servant.place,
+			list:_list,
+			nexttime:timerCount+UPDATE_PLACELIST_INTERVAL
+		];
+		return _list;
+	}
+	
+
+	//--------------------------------------------------------------------------
+	// 指定した石に所属し、animations で指定したアニメをしているサーバントのリストを返す
+	// animatioins に void を指定した場合は、アニメを問わない
+	function findServantsOnPlace( place, animations = void )
+	{
+		if ( place === void )
+			return [];
+		var i;
+		var obj;
+		var __list = [];
+		for ( i=0; i<place.servants.count; i++ )
+		{
+			obj = place.servants[i];
+			if ( animations && animations.find(obj.animation)<0 )
+				continue;
+			__list.add( obj );
+		}
+		return __list;
+	}
+	
+	
+	//--------------------------------------------------------------------------
+	// place の次のとび先が指定されている場合はその場所オブジェクトを返す
+	// 指定されていない場合は void を返す
+	function getSpecifiedNextPlace( servant )
+	{
+		var place = servant.place;
+		// 飛び先が指定されていない場合
+		if ( place===void )
+			return void;
+		if ( place.toGoal===void )
+			return void;
+		// ゴール位置へ飛ばす
+		if ( place.toGoal )
+			return stones[ stonesCount-1-servant.index ];
+	}
+	
+	
+	//--------------------------------------------------------------------------
+	// マウスカーソルでポイントされているジャンプ可能なオブジェクトを返す
+	function getUserPointingPlace( servant )
+	{
+		var place = getStoneAt( input.x, input.y );
+		if ( place === void )
+			return void;
+		if( ! canSelect(servant,place) )
+			return void;
+		//if ( servant.distanceSq(place.x, place.y) > SERVANT_JUMP_RANGE*SERVANT_JUMP_RANGE)
+		//	return void;
+		return place;
+	}
+	
+	
+	//--------------------------------------------------------------------------
+	// 指定した場所を選択状態にする
+	var _selectedPlace;
+	property selectedPlace
+	{
+		setter( _place )
+		{
+			if ( _selectedPlace && _selectedPlace!=_place )
+				_selectedPlace.selected = false;
+			if ( _place )
+			{
+				_selectedPlace = _place;
+				_selectedPlace.selected = true;
+			}
+			else
+				_selectedPlace = void;
+		}
+		
+		getter()
+		{
+			return _selectedPlace;
+		}
+	}
+	
+	
+	// 可能な飛び先を表示する
+	function showNextPlaceMark( servant )
+	{
+		var list = getNextPlaceList( servant );
+		var i;
+		var mark;
+		for (i=0; i<list.count; i++ )
+		{
+			with( new CIrJumpMark(this, servant) )
+			{
+				.x = list[i].x;
+				.y = list[i].y;
+				.z = 10;
+				.images = systemImages;
+			}
+		}
+	}
+	
+	function onShadowUpdate( shadow )
+	{
+		// 影を更新する
+		switch ( shadow.parent.animation )
+		{
+		case ANI_DROWN:
+		case ANI_DROWNED:
+		case ANI_飲み込まれる:
+		case ANI_BLOWN:
+			shadow.visible = false;
+			break;
+		default:
+			shadow.visible = true;
+			break;
+		}
+	}
+	
+	function servantDead( servant )
+	{
+		with( servant )
+		{
+			var 溺れていた = (.animation==ANI_DROWN );
+			var サーバントに乗っていた = ( CheckValid(.place) && .place.type==OBJTYPE_SERVANT );
+		
+			if( 溺れていた || サーバントに乗っていた )
+				.animation = ANI_DROWNED;
+			else
+			{
+				.animation = ANI_DEAD;
+				.place = void;
+			}
+			.onFailed();
+			if( サーバントが倒れたら無条件で宝箱が出現する || .トドメをさされた==playerObj )
+			{
+				var info = サーバントを倒した場合のレアアイテム(servant);
+				if( info )
+					putItem( .x, .y, info );
+			}
+		}
+	}
+	
+	function servantAction( servant )
+	{
+		with( servant )
+		{
+			// プレイヤ以外のサーバントは、ダウンしても復帰できる
+			if ( ALLOW_RIVAL_RESURRECTION )
+			{		
+				// 死んだ状態で…
+				if ( .animation==ANI_DEAD || .animation==ANI_DROWNED )
+					// 死んでから一定時間経過していて…
+					if ( .timing>=REQUIREDTIME_RESURRECTION )
+						// 死んでいるのがプレイヤではなく…
+						if ( .isPlayer==false )
+							// 上に誰も乗っていないならば復活する
+							if ( servant.servants.count==0 )
+							{
+								.onRestart();
+								.animation = ANI_復帰;
+								return false;
+							}
+			}
+			// 待機状態のときのみ行動可能
+			if ( .animation!=ANI_STAND )
+				return false;
+			// ダウン
+			if ( .hp == 0 )
+			{
+				servantDead( servant );
+				return false;
+			}
+			// 次のとび先が指定されている場合は、強制移動する
+			var next = getSpecifiedNextPlace( servant );
+			if ( next )
+			{
+				.jumpTo( next );
+				return false;
+			}
+		}
+		return true;
+	}
+	
+	function hideBattleCursor()
+	{
+		parentLayer.cursor = crDefault;
+		cursorObj.visible = false;
+	}
+	
+	function showBattleCursor()
+	{
+		parentLayer.cursor = crNone;
+		cursorObj.visible = true;
+	}
+	
+	function battleCursorVisibleQuery()
+	{
+		// 足場に誰も立っていなければカーソルは表示しない
+		if ( selectedPlace.servants.count==0 )
+			return false;
+		// 足場にいるサーバントの状態を調べる
+		var i;
+		var obj;
+		for ( i=0; i<selectedPlace.servants.count; i++ )
+		{
+			obj = selectedPlace.servants[i];
+			if ( [ANI_DROWN,ANI_DROWNED,ANI_DEAD,ANI_JUMP].find(obj.animation) < 0 )
+				 return true;
+		}
+		return false;
+	}
+	
+	
+	
+	var oldsel;
+	function servantPlayer( servant )
+	{
+		// 待機状態以外では選択状態を解除しておく
+		if ( servant.animation != ANI_STAND )
+			selectedPlace = void;
+		// 
+		if ( ! servantAction(servant) )
+		{
+			//カーソルを消しておく
+			hideBattleCursor();
+			return;
+		}
+		// 可能な飛び先を表示する
+		if ( servant.timing%JUMPMARK_INTERVAL==1 )
+			showNextPlaceMark( servant );
+		// 混乱している場合は適当に行動する
+		if ( servant.condition == CONDITION_CONFUSE )
+		{
+			randomJumpEx( servant, 0 );
+			return;
+		}
+		// ユーザによって飛び先が指定されたら移動する
+		if ( STAGE1_STONE_FOCUS )
+		{
+			selectedPlace = getUserPointingPlace( servant );
+			// ポイント場所が変わった場合は音を鳴らす
+			if ( oldsel!=selectedPlace )
+			{
+				if ( selectedPlace )
+					syssound( SE_ASHIBA_POINT );
+				oldsel = selectedPlace;
+			}
+			var useBattleCur = false;
+			// 剣カーソルを表示するかどうかを決定
+			if ( selectedPlace )
+			{
+				if ( battleCursorVisibleQuery() )
+					useBattleCur = true;
+			}
+			// カーソルを設定
+			if ( useBattleCur )
+				showBattleCursor();
+			else
+				hideBattleCursor();
+			// 表示非表示にかかわらず、剣カーソルの位置は常に更新しておく
+			cursorObj.x = input.x;
+			cursorObj.y = input.y;
+		}
+		if ( input.left==0 )
+		{
+			selectedPlace = getUserPointingPlace( servant );
+			if ( input.left==0 && selectedPlace )
+			{
+				servant.jumpTo( selectedPlace );
+				return;
+			}
+		}
+		// 右クリックで法具使用
+		if ( input.right==0 )
+			servantUseItem( servant );
+	}
+	
+	function servantUseItem( servant )
+	{
+		if ( super.servantUseItem(...) )
+		{
+			cursorObj.visible = false;
+			parentLayer.cursor = crDefault;
+			return true;
+		}
+		else
+			return false;
+	}
+
+	
+	// safe: 有利な石を選ぶ確率
+	function randomJumpEx( servant, safe )
+	{
+		var list = getNextPlaceList( servant );
+		// 飛び先が存在しない
+		if ( list.count==0 )
+			return;
+		// 飛び先が一箇所のみ
+		if ( list.count==1 )
+		{
+			if ( ENABLE_RIVAL_ACTION )
+				servant.jumpTo( list[0] );
+			return;
+		}
+		// 飛び先を、Y座標の若い順（ゴールに近い順）でソートする
+		list.sort( compareByY );
+		// 得点をつけていく
+		var i;
+		for ( i=0; i<list.count; i++ )
+		{
+			var p1, p2;
+			p1 = i*4/list.count; // ゴールから遠いほど高得点. 最もゴールから離れていて2ポイント
+			switch( list[i].animation )
+			{
+			case ANI_DROWN:
+			case ANI_DROWNED:
+			case ANI_STONE_NORMAL:
+				p2 = 0; // 最も安全
+				break;
+			case ANI_STONE_TRAP:
+				p2 = 3; // 最も危険
+				break;
+			default:
+				p2 = 1; // 中程度の危険
+				break;
+			}
+			list[i].__dangerplacepoint = p1+p2; // 総合危険度を判断
+		}
+		// 得点の低い順（安全でゴールに近い順番）にソートする
+		list.sort( compareByDangerPoint );
+		// 希望通りのジャンプができる確率. 一定の確率で、完全ランダム移動する
+		var index;
+		if( random32(10) > 0 )
+		{
+			index = list.count-1;
+			for ( i=0; i<list.count-1; i++ )
+				if ( random32(1000) < 1000*safe )
+				{
+					index = i;
+					break;
+				}
+		}
+		else
+			index = random32(list.count);
+		// ジャンプ
+		servant.jumpTo( list[index] );
+	}
+	
+	function compareByDangerPoint( obj1, obj2 )
+	{
+		return obj1.__dangerplacepoint < obj2.__dangerplacepoint;
+	}
+	
+	function compareByY( obj1, obj2 )
+	{
+		return obj1.y < obj2.y;
+	}
+
+	function act_check( servant )
+	{
+		// プレイヤとサーバントの距離. -100 〜 +100 の範囲
+		var d = playerObj.position - servant.position;
+		if ( d > 20 ) // プレイヤよりも遅れている場合
+			return random32(100) < 20;
+		if ( d > -20 ) // プレイヤと同じ程度の場合
+			return random32(100) < 10;
+		else // プレイヤよりも早い場合
+			return random32(100) < 5;
+	}
+
+	function servantCom( servant )
+	{
+//		if ( servant.hp==0 && CheckValid(servant.トドメをさされた) )
+//			dm( "id=%xH トドメ=%xH".sprintf(servant.characterId, servant.トドメをさされた.characterId ) );
+		if ( ! servantAction(servant) )
+			return;
+		// 混乱状態だったら適当に行動する
+		if ( servant.condition==CONDITION_CONFUSE )
+		{
+			randomJumpEx(servant,0);
+			return;
+		}
+		// 待機状態になってから一定時間待つ
+		if ( servant.timing < 10 )
+			return;
+		// 沈みかけている足場にいる場合は、より早いタイミングで行動する
+		if ( servant.place && servant.place.animation==ANI_STONE_沈む )
+		{
+			if ( random32(100) < 20 )
+				return;
+		}
+		if ( ! act_check(servant) )
+			return;
+		if ( ENABLE_HOUGU )
+		{
+			// 宝具使う？離れているほど高い確率で使用
+			var 分子 = max(10,playerObj.position-servant.position); // 分母は10〜100の値になる
+			var 分母 = 400;
+			if ( noUseHouguTimer==0 && gameTimerTime()>NO_HOUGU_TIME && random32(分母)<分子 )
+				if ( servantUseItem( servant ) )
+					return;
+		}
+		// ランダムでジャンプ
+		var s;
+		if( isAutoPlayMode() && servant==playerObj )
+			s = 0.8;
+		else
+			s = (servant.rank/players.count*0.5)+0.3; // 安全な道を選ぶ確率 s は 0.3〜0.8 の値になる
+		randomJumpEx(servant, s);
+	}
+
+	function onBattleEnd( winner, loser )
+	{
+		loser.animation = ANI_DROWN;
+		with( winner )
+		{
+			.animation = ANI_FIGHT_WIN;
+			.stop();
+			if ( CheckValid( .place ) )
+			{
+				.x = .place.x;
+				.y = .place.y;
+				if ( .place.animation==ANI_STONE_沈んだ )
+					.animation = ANI_DROWN;
+			}
+		}
+	}
+	
+	
+	// servant が復活するべき位置オブジェクトを返す
+	// スタート地点に戻る場合には void を返す
+	function getReturnPlaceIndex( servant )
+	{
+		var i=0;
+		var place;
+		var 何個前に戻るか = (servant.hp>0) ? 2 : 0; // 0：現在の場所	1：直前にいた場所	2:〜
+		for ( i=servant.path.count-何個前に戻るか-1; i>=0; i-- )
+		{
+			place = servant.path[i];
+			if ( canReturnToPlace( place ) )
+				return i;
+		}
+		return -1;
+	}		
+	
+	
+	// 復活場所として place を選択できるかどうか
+	function canReturnToPlace( place )
+	{
+		// 足場以外（サーバント等）には復活できない
+		if ( place.type != OBJTYPE_STONE )
+			return false;
+		// 現時点で進入不可能な場所には復活できない	
+		if ( !place.canEnter() )
+			return false;
+		// 現在他のサーバントがいる足場には復活できない	
+		var list = findServantsOnPlace( place,[/*ANI_STAND*/, ANI_FIGHT, ANI_FIGHT_READY] );
+		if ( list.count>0 )
+			return false;
+		//
+		return true;
+	}	
+	
+	
+	
+	// 着地した足場に他のサーバントがいた場合の処理。
+	// 相手が一人なら小競り合いが発生し、
+	// 二人いた場合は自分が押し出される
+	function 競合処理( servant )
+	{
+		// スタート地点の場合は何もしない
+		if ( servant.place === void )
+			return;
+		// 足場の上にいるサーバントのリストを得る
+		var list;
+		list = findServantsOnPlace( servant.place, 競合処理対象サーバント );
+		list.remove( servant );
+		// 小競り合い？
+		if ( list.count == 1 )
+		{
+			// 石の上にいるサーバントが麻痺状態だった場合は、そのサーバントが押し出される
+			if ( list[0].animation == ANI_麻痺 )
+				list[0].animation = ANI_KNOCKBACK;
+			else
+			{
+				if ( ENABLE_FIGHT )
+					battleStart( servant, list[0] );
+			}
+			return;
+		}
+		// 押し出される？
+		if ( list.count >= 2 )
+		{
+			servant.animation = ANI_KNOCKBACK;
+			return;
+		}
+	}
+	
+	function servantHitEnemy( enemy, servant )
+	{
+		with( servant )
+		{
+			if ( .condition==CONDITION_NODAMAGE || .condition==CONDITION_PROTECTED )
+				return;
+			switch( .animation )
+			{
+			case ANI_STAND:
+			case ANI_麻痺:
+				.animation = ANI_BLOWN;
+				break;
+			case ANI_JUMPING:
+				// ジャンプ中止
+				.motionType = MOTIONTYPE_DEFAULT;
+				.animation = ANI_BLOWN;
+				break;
+			}
+		}
+	}
+		
+	function createEnemy( x, y )
+	{
+		with( new CIrRyujinEnemy(this,etcRootObj) )
+		{
+			.x = x;
+			.y = y;
+			.images = systemImages;
+			.onHit = servantHitEnemy;
+		}
+	}
+	
+	var _i;
+	var _enemytimer = void;
+	function enemyProc()
+	{
+		if ( _enemytimer===void )
+		{
+			_i = 2;
+			_enemytimer = 0;
+		}
+		else
+			_enemytimer++;
+		// 出現のタイミング
+		if ( _enemytimer%(150) > 0 )
+			return;
+		// 出現場所
+		//var i = random32( EnemyPositions.count );
+		_i = (_i+1)%EnemyPositions.count;
+		with( EnemyPositions[ _i ] )
+			createEnemy( .x, .y );
+	}
+	
+	
+	//--------------------------------------------------------------------------
+	// イベント進行
+	//--------------------------------------------------------------------------
+	function onEventFirst()
+	{
+		with( normalCamera )
+		{
+			.motionDestX = 400;
+			.motionDestY = playerObj.y;
+		}
+	}
+	
+	function onEventStart()
+	{
+		servantsRootObj.changeChildAnimation( ANI_STAND );
+	}
+	
+	function onEventLast()
+	{
+		if ( parentLayer.getStageSelectFlag() )
+		{
+			next = SCENE_TITLE;
+			return;
+		}
+	
+		switch( parentLayer.getCallType() )
+		{
+		case CALLTYPE_NORMAL:
+			next = SCENE_STAGE1_NEXT;
+			return;
+		case CALLTYPE_ADV:
+			next = SCENE_STAGE1_ADV_NEXT;
+			return;
+		default:
+			next = SCENE_TITLE;
+			return;
+		}
+	}
+	
+	
+	var 沈む対象 = [ANI_STAND,ANI_麻痺,ANI_FIGHT,ANI_DROWN,ANI_DROWNED];
+	var 沈み続ける対象 = [ANI_STAND,ANI_麻痺,ANI_FIGHT,ANI_FIGHT_READY];
+	function onEventPlaying()
+	{
+@if( DEBUG_MODE )
+		if ( input.del==0 )
+		{
+			// ゴール位置へ飛ばす
+			players[0].jumpTo(
+					stones[ stonesCount-1 ]
+				);
+		}
+@endif
+		// スキップ機能
+		if ( input.control==0 )
+		{
+			parentLayer.setUseStageSkipFlag();
+			eventSwitch = EVENTSWITCH_LAST;
+		}
+		// 宝具処理
+		if( houguEventProcessing )
+			return;			
+		// サーバントが立っている足場の処理
+		var i;
+		var servant;
+		var nextPlaceAni;
+		var ani;
+		for ( i=0; i<players.count; i++ )
+		{
+			servant = players[i];
+			if ( servant.place == void )
+				continue;
+			nextPlaceAni = void;
+			ani = servant.animation;
+			switch( servant.place.animation )
+			{
+			// 通常状態（爆発する石）の上に立っている場合
+			case ANI_STONE_TRAP:
+				if( ani==ANI_STAND || ani==ANI_麻痺 )
+				{
+					// 石の上にいるサーバントはダメージを受け、吹き飛ばされる
+					servant.animation = ANI_BLOWN;
+					servant.hpDamage( 爆発によるダメージ );
+					nextPlaceAni = ANI_STONE_爆発; // 石を爆発させる
+				}
+				break;
+
+			// 通常状態（沈む石）の上に立っている場合
+			case ANI_STONE_不安定:
+				// 無敵状態の場合は沈まない。
+				if ( /*servant.condition==CONDITION_NODAMAGE || */servant.condition==CONDITION_PROTECTED )
+					break;
+				if ( 沈む対象.find(ani) >= 0 )
+					nextPlaceAni = ANI_STONE_沈む; // 石が沈み始める
+				break;
+				
+			// 沈んだ石の上に立っている場合
+			case ANI_STONE_沈んだ:
+				if ( 沈み続ける対象.find(ani) >= 0 )
+					servant.animation = ANI_DROWN;
+				break;
+			}
+			
+			if ( nextPlaceAni !== void )
+			{
+				servant.place.animation = nextPlaceAni;
+			}
+		}
+
+		switch( playerObj.animation )
+		{
+		case ANI_GOAL:
+			eventSwitch = EVENTSWITCH_GOAL;
+			break;
+		case ANI_DEAD:
+		case ANI_DROWNED:
+			if ( playerObj.timing >= AFTER_DEAD_TIME )
+				eventSwitch = EVENTSWITCH_FAILED;
+			break;
+		}
+		enemyProc();		
+	}
+}
+

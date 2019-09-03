@@ -1,0 +1,1849 @@
+
+/*
+
+	ゲームメインシステムCGオブジェクト管理
+
+*/
+
+
+
+
+var		IR_INFO_TOP_FACE_SHIFT_Y_SIZE=12;
+// 重ね合わせレイヤのサイズ( = "ir_info_top.bmp"のサイズ)
+var		IR_INFO_TOP_IMAGE_SIZE_W=160;
+var		IR_INFO_TOP_IMAGE_SIZE_H=(96+IR_INFO_TOP_FACE_SHIFT_Y_SIZE);
+
+
+
+// トップ表示用管理クラス
+class CIriyaPrintTopRunner
+{
+var		parWin,parLayer;
+
+
+	function CIriyaPrintTopRunner( _par_window, _par_layer )
+	{
+		parWin   = _par_window;
+		parLayer = _par_layer;
+
+		InitBuffer();
+	}
+	function finalize()
+	{
+		Release();
+	}
+
+	// 表示ローカルレイヤ番号
+	var		LOCAL_LAYER_CHARA	=0;
+	var		LOCAL_LAYER_WAKU	=-1;
+
+	var		CHARA_FADE_TIME		=6;
+
+	var		prn_base_x,prn_base_y;
+
+	var		now_top_player_id;
+	var		prn_buf;
+	var		base_cg;
+	var		face_cg;
+
+
+	function InitBuffer()
+	{
+		now_top_player_id = -1;
+
+		prn_base_x = 0;
+		prn_base_y = 0;
+
+		prn_buf = void;
+		base_cg = void;
+		face_cg = void;
+		return;
+	}
+
+
+	function Release()
+	{
+	var		i;
+		// 重ね合わせバッファ
+		if (CheckValid(prn_buf)  ==  true) {
+			EasyReleaseLayer( prn_buf );
+			prn_buf = void;
+		}
+		// 枠
+		if (CheckValid(base_cg)  ==  true) {
+			EasyReleaseLayer( base_cg );
+			base_cg = void;
+		}
+		// 顔CG
+		if (CheckValid(face_cg)  ==  true) {
+			for (i=0;  i<face_cg .count;  i++) {
+				if (CheckValid(face_cg)  ==  false)
+					continue;
+				delete_anime_alpha( face_cg[i] );
+			}
+			releaseArray( face_cg );
+			face_cg = void;
+		}
+
+
+		InitBuffer();
+		return;
+	}
+
+	// Alphaアニメデータの削除
+	function delete_anime_alpha( p_obj )
+	{
+		invalidate p_obj.Alpha;
+		delete p_obj.Alpha;
+		return;
+	}
+	// Alphaアニメデータの生成
+	function create_anime_alpha( p_obj )
+	{
+		with ( p_obj )
+		{
+			if ((typeof p_obj.Alpha)  !==  "undefined")
+				delete_anime_alpha( p_obj );
+
+			.Alpha = new CNumAnime();
+			.Alpha.SetAnimeParam( 0,255, CHARA_FADE_TIME );
+			.Alpha.Stop();
+		}
+		return;
+	}
+
+	function create_face_cg( _player_id )
+	{
+	var		_cg;
+	var		file_name;
+		file_name = "ir_top%02d".sprintf(ConvertServantCharaIDtoServantNo(parLayer.CharaStatus[_player_id].GetServantID()));
+		with (_cg = EasyCreateLayerObject(parWin,prn_buf,file_name,clNone, false, 0,0, 0))
+		{
+	    	@if( DEBUG_MODE )
+				dm( "face_load_name"+"("+_player_id+")"+file_name );
+			@endif
+			.setPos( (IR_INFO_TOP_IMAGE_SIZE_W-.imageWidth)/2, 0 );
+			.setPriority( LOCAL_LAYER_CHARA );
+			create_anime_alpha( _cg );
+		}
+		return ( _cg );
+	}
+
+
+	function Init()
+	{
+	var		i;
+	var		file_name;
+		Release();
+
+		// 重ね合わせレイヤ
+		with (prn_buf = new CSpriteLayer(parWin,parLayer))
+		{
+			.visible = false;
+			.setPriority( PRIORITY_INFO_OBJ );
+			.setImageSize( IR_INFO_TOP_IMAGE_SIZE_W, IR_INFO_TOP_IMAGE_SIZE_H );
+			.setSize( IR_INFO_TOP_IMAGE_SIZE_W, IR_INFO_TOP_IMAGE_SIZE_H );
+		}
+
+		// 枠
+		with (base_cg = EasyCreateLayerObject(parWin,prn_buf, "ir_info_top", clNone, false, 0,0, 0))
+		{
+			.setPos( 0,IR_INFO_TOP_FACE_SHIFT_Y_SIZE );
+			.setPriority( LOCAL_LAYER_WAKU );
+		}
+
+
+		// 顔CG
+		face_cg = new Array();
+		for (i=0;  i<MAX_PLAYER_NUM;  i++) {
+			face_cg[i] = create_face_cg( i );
+		}
+
+		return;
+	}
+
+
+	function chara_face_fade_in( _player_id, direct )
+	{
+		with ( face_cg[_player_id] )
+		{
+			.Alpha.SetDirectionAdd();
+			if (direct  ==  false)
+					.Alpha.Start();
+			else	.Alpha.StartEx( CHARA_FADE_TIME );
+
+			.visible = true;
+		}
+		return;
+	}
+	function chara_face_fade_out( _player_id, direct )
+	{
+		with ( face_cg[_player_id] )
+		{
+			.Alpha.SetDirectionDec();
+			if (direct  ==  false)
+					.Alpha.Start();
+			else	.Alpha.StartEx( 0 );
+
+			.visible = true;
+		}
+		return;
+	}
+
+	function ChageTopCG( _player_id, prn_direct=true )
+	{
+		if (now_top_player_id  ==  _player_id)
+			return;
+
+		if (CheckValid(face_cg)  ==  true) {
+			if (now_top_player_id  !=  -1)
+				chara_face_fade_out( now_top_player_id, prn_direct );
+
+			if (_player_id  !=  -1)
+				chara_face_fade_in( _player_id, prn_direct );
+		}
+
+		now_top_player_id = _player_id;
+		return;
+	}
+	function Print(flag=true)
+	{
+	var		i;
+
+		prn_buf.visible = flag;
+
+		base_cg.visible = flag;
+
+		for (i=0;  i<MAX_PLAYER_NUM;  i++)
+			face_cg[i].visible = false;
+		if (now_top_player_id  !=  -1)
+			face_cg[now_top_player_id].visible = true;
+
+		update_print_pos();
+		return;
+	}
+
+
+	function update_print_pos()
+	{
+		prn_buf.setPos( prn_base_x, prn_base_y );
+		return;
+	}
+
+
+	function SetBasePosition( _prn_x, _prn_y )
+	{
+		prn_base_x = _prn_x;
+		prn_base_y = _prn_y;
+		update_print_pos();
+		return;
+	}
+	function GetBasePositionX()
+	{
+		return ( prn_base_x );
+	}
+	function GetBasePositionY()
+	{
+		return ( prn_base_y );
+	}
+
+	function Update( _top_id )
+	{
+	var		i;
+		ChageTopCG( _top_id, false );
+
+		for (i=0;  i<MAX_PLAYER_NUM;  i++) {
+			with ( face_cg[i] )
+			{
+				if (.Alpha.useFlag  !=  "UPDATE")
+					continue;
+				.opacity = .Alpha.Update();
+			}
+		}
+
+		return;
+	}
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+// レーダー表示用管理クラス
+class CIriyaPrintRader
+{
+var		parWin,parLayer;
+
+	function CIriyaPrintRader( _par_window, _par_layer )
+	{
+		parWin   = _par_window;
+		parLayer = _par_layer;
+
+		InitBuffer();
+	}
+	function finalize()
+	{
+		Release();
+	}
+
+
+
+	var	FACE_FADE_OUT_TIME=16;
+
+
+	var	PRN_VIT_NO_USE	=-1;		// ボス体力未使用フラグ
+	var	DEC_VIT_SPEED = 0.008;		// BOSS体力減らし量
+	var	BOSS_FACE_ANIME_CYCLE=4;	// アニメサイクル
+
+
+	// 重ね合わせ用バッファサイズ(= ir_info_map**.bmp)
+	var	IR_INFO_IMAGE_SIZE_W=320;
+	var	IR_INFO_IMAGE_SIZE_H=80;
+
+	// ローカルレイヤ情報
+	var	LOCAL_LAYER_PL_FONT	=10;
+	var	LOCAL_LAYER_CHARA	=0+MAX_PLAYER_NUM;
+	var	LOCAL_LAYER_VIT		=-1;
+	var	LOCAL_LAYER_MAP		=-5;
+
+	// 顔表示位置情報
+	var	PRN_CHARA_SX		=28;
+	var	PRN_CHARA_EX		=292;
+	var	PRN_CHARA_Y			=(80-64);
+	var	PRN_CHARA_POS_W		=(PRN_CHARA_EX-PRN_CHARA_SX);
+
+	var	BOSS_FACE_PX		=10;
+
+	var	PRN_MAP_Y		=80-48;
+
+
+
+
+	var		prn_base_x,prn_base_y;
+
+
+	var		now_boss_vit_ave,_boss_vit_ave;
+	var		boss_face_anime_count,boss_face_anime_flag,boss_face_page;
+	var		boss_change_page_num;
+
+	var		prn_buf;		// 重ね合わせバッファ
+	var		map_cg,vit_cg;
+	var		face_cg;
+	var		fnt_player;
+
+	var		pos_ave;
+	var		cahra_enable;
+		var		CHARA_ENABLE_FLAG_ENABLE=0;
+		var		CHARA_ENABLE_FLAG_FADE_OUT=1;
+	function InitBuffer()
+	{
+		prn_base_x = 0;
+		prn_base_y = 0;
+
+		prn_buf = void;
+		map_cg = void;
+		vit_cg = void;
+		face_cg = void;
+		fnt_player = void;
+
+		pos_ave      = void;
+		cahra_enable = void;
+
+		now_boss_vit_ave = PRN_VIT_NO_USE;
+		boss_face_anime_flag = false;
+		return;
+	}
+
+	function Release()
+	{
+		// 重ね合わせバッファ
+		if (CheckValid(prn_buf)  ==  true) {
+			EasyReleaseLayer( prn_buf );
+			prn_buf = void;
+		}
+
+		// MAP
+		if (CheckValid(map_cg)  ==  true) {
+			EasyReleaseLayer( map_cg );
+			map_cg = void;
+		}
+		// ボス体力表示
+		if (CheckValid(vit_cg)  ==  true) {
+			EasyReleaseLayer( vit_cg );
+			vit_cg = void;
+		}
+
+
+		// 顔
+		if (CheckValid(face_cg)  ==  true) {
+		var		i;
+			for (i=0;  i<face_cg.count;  i++) {
+				if (CheckValid(face_cg[i])  ==  true) {
+					ReleaseFadeAnime( face_cg[i] );
+					invalidate face_cg[i];
+				}
+			}
+			invalidate face_cg;
+			face_cg = void;
+		}
+
+		if (CheckValid(fnt_player)  ==  true) {
+			EasyReleaseLayer( fnt_player );
+			fnt_player = void;
+		}
+
+
+		if (CheckValid(pos_ave)  ==  true) {
+			invalidate pos_ave;
+			pos_ave = void;
+		}
+		if (CheckValid(cahra_enable)  ==  true) {
+			invalidate cahra_enable;
+			cahra_enable = void;
+		}
+
+
+		InitBuffer();
+		return;
+	}
+
+
+	function Init( _map_no, _prn_type )
+	{
+	var		i;
+
+		Release();
+
+		// 重ね合わせレイヤ
+		with (prn_buf = new CSpriteLayer(parWin,parLayer))
+		{
+			.visible = false;
+			.setPriority( PRIORITY_INFO_OBJ );
+			.setImageSize( IR_INFO_IMAGE_SIZE_W, IR_INFO_IMAGE_SIZE_H );
+			.setSize( IR_INFO_IMAGE_SIZE_W, IR_INFO_IMAGE_SIZE_H );
+		}
+
+
+		if (_map_no  !=  4) {
+			// MAP
+			with (map_cg = EasyCreateLayerObject(parWin,prn_buf, "ir_info_map%02d".sprintf(_map_no), clNone, false, 0,0, 0))
+			{
+				.visible = true;
+				.setPos( 0,PRN_MAP_Y );
+				.setPriority( LOCAL_LAYER_MAP );
+			}
+			// 顔CG
+			face_cg = new Array();
+			for (i=0;  i<MAX_PLAYER_NUM;  i++) {
+				with (face_cg[i] = EasyCreateLayerObject(parWin,prn_buf, "ir_radar%02d".sprintf(ConvertServantCharaIDtoServantNo(parLayer.CharaStatus[i].GetServantID())), clNone, false, 0,0, 0))
+				{
+					.visible = true;
+					.setPos( PRN_CHARA_SX-.imageWidth/2, PRN_CHARA_Y );
+					.setPriority( LOCAL_LAYER_CHARA + (MAX_PLAYER_NUM-i) );
+				}
+			}
+if (_prn_type  ==  1) {
+			with (fnt_player = EasyCreateLayerObject(parWin,prn_buf, "ir_info_player00", clNone, false, 0,0, 0))
+			{
+				.visible = true;
+				.setPriority( LOCAL_LAYER_PL_FONT );
+			}
+			set_player_font();
+}
+
+			// 位置情報
+			pos_ave = new Array();
+			for (i=0;  i<MAX_PLAYER_NUM;  i++)
+				pos_ave[i] = 0;
+
+			cahra_enable = new Array();
+			for (i=0;  i<MAX_PLAYER_NUM;  i++)
+				cahra_enable[i] = CHARA_ENABLE_FLAG_FADE_OUT;
+			for (i=0;  i<MAX_PLAYER_NUM;  i++)
+				cahra_enable[i] = CHARA_ENABLE_FLAG_ENABLE;
+		} else {
+			// ボス体力アベレージ
+			now_boss_vit_ave = 1;
+			_boss_vit_ave    = 1;
+			boss_face_anime_count = 0;
+
+			// MAP
+			with (map_cg = EasyCreateLayerObject(parWin,prn_buf, "ir_info_map0400", clNone, false, 0,0, 0))
+			{
+				.visible = true;
+				.setPos( 0,PRN_MAP_Y );
+				.setPriority( LOCAL_LAYER_MAP );
+			}
+			// ボス体力表示
+			with (vit_cg = EasyCreateLayerObject(parWin,prn_buf, "ir_info_map0401", clNone, false, 0,0, 0))
+			{
+				.visible = true;
+				.setPos( 0+64,PRN_MAP_Y+18 );
+				.setPriority( LOCAL_LAYER_VIT );
+			}
+			update_boss_vit_cg();
+
+			// 顔CG
+			face_cg = new Array();
+			for (i=0;  i<2;  i++) {
+				with (face_cg[i] = EasyCreateLayerObject(parWin,prn_buf, "ir_info_map04%02d".sprintf(2+i), clAdapt, false, 0,0, 0))
+				{
+					.visible = false;
+					.setPos( BOSS_FACE_PX, IR_INFO_IMAGE_SIZE_H-.imageHeight );
+					.setPriority( LOCAL_LAYER_CHARA );
+				}
+			}
+			face_cg[0].visible = true;
+		}
+		return;
+	}
+
+
+	function Print(prn_flag=true)
+	{
+		prn_buf.visible = prn_flag;
+
+		if (prn_flag  ==  true)
+			Update();
+		return;
+	}
+
+
+	function ChangeBossVitAve( _new_ave )
+	{
+		if (now_boss_vit_ave  ==  PRN_VIT_NO_USE)
+			return;
+		if (now_boss_vit_ave  ==  0)
+			return;
+
+		if (boss_face_anime_flag  ==  false) {
+			boss_face_anime_flag = true;
+			boss_face_page = 0;
+			change_face_page();
+			boss_change_page_num = 0;
+		}
+
+		now_boss_vit_ave = _new_ave;
+		if (now_boss_vit_ave  <  0)
+			now_boss_vit_ave = 0;
+		return;
+	}
+
+	function change_face_page()
+	{
+		face_cg[boss_face_page].visible = false;
+		boss_face_page ^= 1;
+		face_cg[boss_face_page].visible = true;
+		boss_face_anime_count = BOSS_FACE_ANIME_CYCLE;
+		boss_change_page_num += 1;
+		return;
+	}
+	function reset_face_page()
+	{
+		face_cg[0].visible = true;
+		face_cg[1].visible = false;
+		boss_face_anime_flag = false;
+		return;
+	}
+	function end_face_page()
+	{
+		face_cg[0].visible = false;
+		face_cg[1].visible = true;
+		boss_face_anime_flag = false;
+		return;
+	}
+
+	function UpdateBossVitAve()
+	{
+		if (now_boss_vit_ave  ==  PRN_VIT_NO_USE)
+			return;
+
+
+		if (boss_face_anime_flag  !=  false) {
+			boss_face_anime_count -= 1;
+			if (boss_face_anime_count  ==  0) {
+				change_face_page();
+			}
+		}
+
+
+
+		if (now_boss_vit_ave  ==  _boss_vit_ave) {
+			if (boss_face_anime_flag  !=  false) {
+				if (boss_change_page_num  >=  2) {
+					if (now_boss_vit_ave  ==  0)
+							end_face_page();
+					else	reset_face_page();
+				}
+			}
+			return;
+		}
+
+		_boss_vit_ave -= DEC_VIT_SPEED;
+		if (_boss_vit_ave  <  now_boss_vit_ave)
+			_boss_vit_ave = now_boss_vit_ave;
+
+		update_boss_vit_cg();
+		return;
+	}
+	function update_boss_vit_cg()
+	{
+		if (CheckValid(vit_cg)  ==  false)
+			return;
+
+		with ( vit_cg )
+		{
+			.setSize( (int)(.imageWidth * _boss_vit_ave), .imageHeight );
+		}
+		return;
+	}
+
+
+
+
+	function update_print_pos()
+	{
+		prn_buf.setPos( prn_base_x, prn_base_y );
+		return;
+	}
+
+
+	function SetBasePosition( _prn_x, _prn_y )
+	{
+		prn_base_x = _prn_x;
+		prn_base_y = _prn_y;
+		update_print_pos();
+		return;
+	}
+	function GetBasePositionX()
+	{
+		return ( prn_base_x );
+	}
+	function GetBasePositionY()
+	{
+		return ( prn_base_y );
+	}
+
+
+	function SetPositionAverage( _player_id, _ave, _enable_flag )
+	{
+		if (CheckValid(pos_ave)  ==  false)
+			return;
+		if (cahra_enable[_player_id]  ==  CHARA_ENABLE_FLAG_ENABLE) {
+			pos_ave[_player_id] = _ave;
+			if (_enable_flag  ==  false) {
+				cahra_enable[_player_id] = CHARA_ENABLE_FLAG_FADE_OUT;
+				EasyStartFadeAnime( face_cg[_player_id], 255, 0, FACE_FADE_OUT_TIME );
+				if (_player_id  ==  0) {
+					if (CheckValid(fnt_player)  ==  true)
+						EasyStartFadeAnime( fnt_player, 255, 0, FACE_FADE_OUT_TIME );
+				}
+			}
+		}
+		return;
+	}
+
+
+
+	function set_player_font()
+	{
+		if (CheckValid(face_cg)  ==  false)
+			return;
+		if (CheckValid(fnt_player)  ==  false)
+			return;
+
+		with ( fnt_player )
+		{
+		var		px,py;
+
+			px = face_cg[0].left+face_cg[0].imageWidth/2;
+			px -= .imageWidth/2;
+
+			py = face_cg[0].top - .imageHeight;
+			.setPos( px, py );
+		}
+		ProcessFadeAnime( fnt_player );
+		return;
+	}
+
+	function Update()
+	{
+	var		i;
+	var		pos;
+
+		if (CheckValid(vit_cg)  ==  true) {
+			UpdateBossVitAve();
+			return;
+		}
+
+		if (CheckValid(pos_ave)  ==  false)
+			return;
+		if (CheckValid(face_cg)  ==  false)
+			return;
+
+		for (i=0;  i<MAX_PLAYER_NUM;  i++) {
+			with ( face_cg[i] )
+			{
+				pos = (int)(PRN_CHARA_POS_W*pos_ave[i]/100);
+				pos = PRN_CHARA_SX + pos - .imageWidth/2;
+				.setPos( pos, PRN_CHARA_Y );
+			}
+			ProcessFadeAnime( face_cg[i] );
+		}
+		set_player_font();
+		return;
+	}
+
+
+
+}
+
+
+
+
+
+class CIriyaPrintTimeCG
+{
+var		parWin,parLayer;
+	function  CIriyaPrintTimeCG( _pr_win, _pr_layer )
+	{
+		parWin   = _pr_win;
+		parLayer = _pr_layer;
+
+		init_buffer();
+		update_print_pos  = _dammy_func;
+	}
+	function finalize()
+	{
+		Release();
+	}
+
+
+
+	// タイム表示レイヤ番号
+	var		TIME_LAYER_TITLE		=0;
+	var		TIME_LAYER_M10		=TIME_LAYER_TITLE+1;
+	var		TIME_LAYER_M01		=TIME_LAYER_M10+1;
+	var		TIME_LAYER_M		=TIME_LAYER_M01+1;
+	var		TIME_LAYER_S10		=TIME_LAYER_M+1;
+	var		TIME_LAYER_S01		=TIME_LAYER_S10+1;
+	var		MAX_MINIMUM_TIME_LAYER	=TIME_LAYER_S01+1;
+	var		TIME_LAYER_S		=MAX_MINIMUM_TIME_LAYER;
+	var		TIME_LAYER_MS100	=TIME_LAYER_S+1;
+	var		TIME_LAYER_MS010	=TIME_LAYER_MS100+1;
+	var		TIME_LAYER_MS001	=TIME_LAYER_MS010+1;
+	var		MAX_TIME_LAYER		=TIME_LAYER_MS001+1;
+
+	var		prn_base_x,prn_base_y;
+	var		layer_offset;
+
+	var		time;
+
+	var		max_time_layer;
+
+	var		type;
+			var		TYPE_NORMAL="NORMAL";
+			var		TYPE_RETIRE="RETIRE";
+
+	var		update_print_pos;
+
+
+	var		time_type;
+
+	function init_buffer()
+	{
+		time = void;
+
+		prn_base_x = 0;
+		prn_base_y = 0;
+
+		layer_offset = 0;
+
+		type = void;
+
+		time_type = 0;
+
+		max_time_layer = MAX_TIME_LAYER;
+
+		update_print_pos  = _dammy_func;
+		return;
+	}
+
+	function Release()
+	{
+		// タイム表示レイヤ
+		if (CheckValid(time)  ==  true) {
+			ReleaseArray( time );
+			time = void;
+		}
+
+		init_buffer();
+		return;
+	}
+
+
+
+	function SetPrintTimeType( _type )
+	{
+		switch ( _type )
+		{
+		case 0:
+			max_time_layer = MAX_MINIMUM_TIME_LAYER;
+			break;
+		case 1:
+			max_time_layer = MAX_TIME_LAYER;
+			break;
+		}
+		return;
+	}
+	function Init( cg_bank, ex_cg_bank, ex_type=TYPE_NORMAL, _time_type=0 )
+	{
+		// 表示レイヤ生成
+		time = new Array();
+
+		time_type = _time_type;
+		switch ( ex_type )
+		{
+		case TYPE_NORMAL:
+			type = TYPE_NORMAL;
+			create_normal_time_cg( cg_bank,ex_cg_bank );
+			break;
+
+		case TYPE_RETIRE:
+			type = TYPE_RETIRE;
+			create_retire_cg( cg_bank,ex_cg_bank );
+			break;
+		}
+
+		return;
+	}
+
+	function _dammy_func()
+	{
+		return;
+	}
+
+	function create_normal_time_cg( cg_bank, ex_cg_bank )
+	{
+	var		i;
+		if (CheckValid(time)  ==  false)
+			return;
+
+		for (i=0;  i<max_time_layer;  i++) {
+			with (time[i] = new CSpriteLayer(parWin,parLayer))
+			{
+				.visible = false;
+				SetLayerInfoParam( time[i], cg_bank, ,, layer_offset );
+				.setSize( 32, 32 );
+			}
+		}
+		// 表示CGの固定しているものは定義しておく
+		with ( time[TIME_LAYER_TITLE] )
+		{
+			if (time_type  ==  0) {
+				.setSize( 96, 32 );
+				.setUV( 0, 0 );
+			} else {
+				SetLayerInfoParam( time[TIME_LAYER_TITLE], ex_cg_bank, ,, );
+			}
+		}
+		with ( time[TIME_LAYER_M] )
+		{
+			.setSize( 32, 32 );
+			.setUV( 416, 0 );
+		}
+		if (max_time_layer  >  TIME_LAYER_S) {
+			with ( time[TIME_LAYER_S] )
+			{
+				.setSize( 32, 32 );
+				.setUV( 416, 0 );
+			}
+		}
+		update_print_pos  = _update_print_pos_normal;
+		return;
+	}
+	function create_retire_cg( cg_bank )
+	{
+		if (CheckValid(time)  ==  false)
+			return;
+
+		with (time[0] = new CSpriteLayer(parWin,parLayer))
+		{
+			.visible = false;
+
+			SetLayerInfoParam( time[0], cg_bank, ,, layer_offset );
+		}
+		update_print_pos  = _update_print_pos_retire;
+		return;
+	}
+
+
+	function _update_print_pos_normal()
+	{
+	var		pos_x,pos_y,i;
+
+		pos_x = prn_base_x;
+		pos_y = prn_base_y;
+
+		if (CheckValid(time)  ==  false)
+			return;
+
+
+		for (i=TIME_LAYER_TITLE;  i<max_time_layer;  i++) {
+			time[i].setPos( pos_x, pos_y );
+			switch ( i )
+			{
+			case TIME_LAYER_M:
+			case TIME_LAYER_S:
+				pos_x += (32-(4+6));
+				break;
+			case TIME_LAYER_M01:
+			case TIME_LAYER_S01:
+				pos_x += (32-(4+6));
+				break;
+			case TIME_LAYER_TITLE:
+				if (time_type  ==  0)
+						pos_x += 80;
+				else	pos_x += (160+8);
+				break;
+			default:
+				pos_x += (32-4);
+				break;
+			}
+		}
+		return;
+	}
+	function _update_print_pos_retire()
+	{
+		if (CheckValid(time)  ==  false)
+			return;
+		time[0].setPos( prn_base_x, prn_base_y );
+		return;
+	}
+
+
+
+	// 設定されている時間で表示CGを設定する
+	function SetTimeCG( _time_convert )
+	{
+		if (type  !=  TYPE_NORMAL)
+			return;
+		if (CheckValid(time)  ==  false)
+			return;
+		with ( _time_convert )
+		{
+			// minute
+			if (.CheckUpdate(.TIME_UPDATE_M)  ==  true) {
+				time[TIME_LAYER_M10].setUV( 96+.GetTimeData(.TIME_DATA_M10)*32, 0 );
+				time[TIME_LAYER_M01].setUV( 96+.GetTimeData(.TIME_DATA_M01)*32, 0 );
+			}
+
+			// second
+			if (.CheckUpdate(.TIME_UPDATE_S)  ==  true) {
+				time[TIME_LAYER_S10].setUV( 96+.GetTimeData(.TIME_DATA_S10)*32, 0 );
+				time[TIME_LAYER_S01].setUV( 96+.GetTimeData(.TIME_DATA_S01)*32, 0 );
+			}
+
+			if (max_time_layer  >  TIME_LAYER_S) {
+				// milli second
+				if (.CheckUpdate(.TIME_UPDATE_MS)  ==  true) {
+					time[TIME_LAYER_MS100].setUV( 96+.GetTimeData(.TIME_DATA_MS100)*32, 0 );
+					time[TIME_LAYER_MS010].setUV( 96+.GetTimeData(.TIME_DATA_MS010)*32, 0 );
+					time[TIME_LAYER_MS001].setUV( 96+.GetTimeData(.TIME_DATA_MS001)*32, 0 );
+				}
+			}
+		}
+		return;
+	}
+
+
+	function SetBasePriority( _offset )
+	{
+	var		i;
+		layer_offset = _offset;
+
+		if (CheckValid(time)  ==  true) {
+			for (i=0;  i<time.count;  i++) {
+				time[i].setPriority( layer_offset );
+			}
+		}
+		return;
+	}
+	function Print( flag=true )
+	{
+	var		i;
+		if (CheckValid(time)  ==  false)
+			return;
+		for (i=0;  i<time.count;  i++)
+			time[i].visible = flag;
+		return;
+	}
+	function SetBasePosition( _prn_x, _prn_y )
+	{
+		prn_base_x = _prn_x;
+		prn_base_y = _prn_y;
+		update_print_pos();
+		return;
+	}
+	function GetBasePositionX()
+	{
+		return ( prn_base_x );
+	}
+	function GetBasePositionY()
+	{
+		return ( prn_base_y );
+	}
+}
+
+
+
+// ステージ経過時間表示管理クラス:
+class CIriyaPrintStageTime extends CIriyaPrintTimeCG
+{
+	function CIriyaPrintStageTime( _par_window, _par_layer )
+	{
+		super.CIriyaPrintTimeCG( _par_window, _par_layer );
+
+		init_buffer();
+	}
+	function finalize()
+	{
+		Release();
+
+		super.finalize();
+	}
+
+
+	var		time_convert;
+
+	var		time_count,left_time_count;
+
+	var		cg_bank;		// CG読み込みバンク
+
+	function init_buffer()
+	{
+		time_count = -1;
+		left_time_count = -1;
+
+		cg_bank = void;
+		super.init_buffer();
+		return;
+	}
+	function Release()
+	{
+		EasyObjectInvalidate( time_convert );
+		time_convert = void;
+
+		// CG読み込みバンク
+		if (CheckValid(cg_bank)  ==  true) {
+			EasyReleaseLayer( cg_bank );
+			cg_bank = void;
+		}
+
+
+		super.Release();
+
+		init_buffer();
+		return;
+	}
+
+
+	function Init()
+	{
+		Release();
+
+
+		time_convert = new CIriyaStageTimeConvert();
+
+		// CG読み込み
+		cg_bank = EasyCreateLayerObject( parWin,parLayer, "ir_info_time", clNone, false, 0,0, 0 );
+		SetBasePriority( PRIORITY_INFO_OBJ );
+
+
+		super.SetPrintTimeType( USE_MSEC_TIMER );	// 強制的に桁を少なくする???
+		super.Init( cg_bank  );
+
+		update_time_cg();
+		update_print_pos();
+		return;
+	}
+
+	// 設定されている時間で表示CGを設定する
+	function update_time_cg()
+	{
+		time_convert.Convert( left_time_count );
+		SetTimeCG( time_convert );
+		return;
+	}
+
+	function SetTime( _time )
+	{
+		if (time_count  ==  _time)
+			return;
+		time_count = _time;
+		if (time_count  >  MAX_TIME_COUNT)
+			time_count = MAX_TIME_COUNT;
+
+		update_time_cg();
+		return;
+	}
+	function SetLeftTime( _time )
+	{
+		if (left_time_count  ==  _time)
+			return;
+		left_time_count = _time;
+		if (left_time_count  >  MAX_TIME_COUNT)
+			left_time_count = MAX_TIME_COUNT;
+		if (left_time_count  <  0)
+			left_time_count = 0;
+		return;
+	}
+
+	function UpdateTime()
+	{
+		SetLeftTime( left_time_count - 1 );
+		SetTime( time_count + 1 );
+		return;
+	}
+	function GetNowTime()
+	{
+		return ( time_count );
+	}
+	function CheckTimeOver()
+	{
+		if (left_time_count  >  0)
+				return ( false );
+		else	return ( true );
+	}
+
+}
+
+
+
+
+
+// ゲーム中の割り込み用ボタン
+class CIriyaGamePauseButton extends CIriyaNormalButton
+{
+var		hit_id;
+var			ID_HIT_YES=1;
+var			ID_HIT_NO =0;
+
+	function CIriyaGamePauseButton( _pr_win, _pr_layer )
+	{
+		super.CIriyaNormalButton( _pr_win, _pr_layer );
+		reset_buffer();
+	}
+
+	function finalize()
+	{
+		super.finalize( ... );
+	}
+
+
+	function reset_buffer()
+	{
+		hit_id = ID_HIT_NO;
+		return;
+	}
+	function Init()
+	{
+		reset_buffer();
+		super.Init();
+		return;
+	}
+	function Release()
+	{
+		super.Release();
+		return;
+	}
+
+	function Start()
+	{
+		super.Start( "NORMAL" );
+		return;
+	}
+
+	function Reset()
+	{
+		reset_buffer();
+		Start();
+		return;
+	}
+
+
+	function CreateButton( _layer_offset )
+	{
+		Init();
+		SetLayerPriority( _layer_offset-0 );
+		LoadFocusCG( "ir_pbutton01" );
+		LoadUnFocusCG( "ir_pbutton00" );
+		AssignUnFocusCG();
+		SetLayerPosition( 800, 600 );
+		SetClickCallbackFunc( hit_callback, 0 );
+
+		SetClickSEPlayFile( SE_GAME_PAUSE_SELECT );
+		SetFocusSEPlayFile( SE_GAME_PAUSE_FOCUS );
+		return;
+	}
+
+
+	function hit_callback( _id )
+	{
+		super.Stop();
+		super.Print();
+		hit_id = ID_HIT_YES;
+		return;
+	}
+	function GetHitID()
+	{
+		return ( hit_id );
+	}
+}
+
+
+
+
+
+
+
+
+class CIriyaGSysCGManage
+{
+var		parWin,parLayer;
+var		parScene;
+
+
+	function CIriyaGSysCGManage( _parent_window, _parent_layer, _parent_scene )
+	{
+		parWin   = _parent_window;
+		parLayer = _parent_layer;
+		parScene = _parent_scene;
+		InitBuffer();
+	}
+	function finalize()
+	{
+		Release();
+	}
+
+
+	var		UPDATE_MODE_FRAME_NONE			=-1;	// 待機状態
+	var		UPDATE_MODE_FRAME_NORMAL		=0;		// 通常状態
+	var		UPDATE_MODE_FRAME_IN			=1;		// フレームインアニメ
+	var		UPDATE_MODE_FRAME_OUT			=2;		// フレームアウトアニメ
+	var		UPDATE_MODE_PAUSE				=3;		// ポーズボタン待機状態
+	var		UPDATE_MODE_TITLE_RET_FADE_END	=4;		// タイトルに戻る後のフェード完了状態
+	var		update_mode;
+
+	var		option_menu;
+
+	var		logo_cg;
+	var		pause_btn;
+	var		stage_time;
+	var		top_chara;
+	var		rader_map;
+	var		stage_time_count_flag;
+	function InitBuffer()
+	{
+		update_mode = UPDATE_MODE_FRAME_NONE;
+
+		option_menu = void;
+
+		logo_cg = void;
+		pause_btn = void;
+		stage_time = void;
+		top_chara = void;
+		rader_map = void;
+
+		stage_time_count_flag = false;
+
+		return;
+	}
+
+	// Yアニメデータの削除
+	function delete_anime_y_obj( p_obj )
+	{
+		if ((typeof p_obj.AnimeY)  ===  "undefined")
+			return;
+
+		invalidate p_obj.AnimeY;
+		delete p_obj.AnimeY;
+		return;
+	}
+	// Yアニメデータの生成
+	function create_anime_y_data( p_obj, sy,ey )
+	{
+		if (parScene.parentLayer.isAutoPlayMode()  ==  true)
+			ey = sy;
+		with ( p_obj )
+		{
+			if ((typeof p_obj.AnimeY)  !==  "undefined")
+				delete_anime_y_obj( p_obj );
+
+			.AnimeY = new CSinAnime();
+			.AnimeY.SetAnimeParam( sy,ey, 0, FRAME_IN_TIME,FRAME_IN_TIME );
+		}
+		return;
+	}
+
+	function Release()
+	{
+		// ポーズメニュー
+		if (CheckValid(option_menu)  ==  true) {
+			release_option_menu();
+		}
+
+
+		// ロゴ
+		if (CheckValid(logo_cg)  ==  true) {
+			delete_anime_y_obj( logo_cg );
+			EasyObjectInvalidate( logo_cg );
+			logo_cg = void;
+		}
+		// ポーズボタン
+		if (CheckValid(pause_btn)  ==  true) {
+			delete_anime_y_obj( pause_btn );
+			pause_btn.Release();
+			EasyObjectInvalidate( pause_btn );
+			pause_btn = void;
+		}
+
+		// ステージ経過時間
+		if (CheckValid(stage_time)  ==  true) {
+			delete_anime_y_obj( stage_time );
+			stage_time.Release();
+			EasyObjectInvalidate( stage_time );
+			stage_time = void;
+		}
+
+		// トップ表示
+		if (CheckValid(top_chara)  ==  true) {
+			delete_anime_y_obj( top_chara );
+			top_chara.Release();
+			EasyObjectInvalidate( top_chara );
+			top_chara = void;
+		}
+
+		// MAP表示
+		if (CheckValid(rader_map)  ==  true) {
+			delete_anime_y_obj( rader_map );
+			rader_map.Release();
+			EasyObjectInvalidate( rader_map );
+		}
+
+
+
+		InitBuffer();
+		return;
+	}
+
+
+
+	// トップ表示
+	var		POS_TOP_SX=(SCREEN_SIZE_W-IR_INFO_TOP_IMAGE_SIZE_W)/2;
+	var		POS_TOP_SY=-IR_INFO_TOP_IMAGE_SIZE_H;
+	var		POS_TOP_EY=0;
+
+	// ステージ経過時間表示開始位置
+	var		POS_TIME_SX=SCREEN_SIZE_W-312;
+	var		POS_TIME_SY=-32;
+	var		POS_TIME_EY=12;
+
+	// ロゴ表示開始位置
+	var		POS_LOGO_SX=0;
+	var		POS_LOGO_SY=SCREEN_SIZE_H;
+	var		POS_LOGO_EY=SCREEN_SIZE_H-128;
+
+	// MAP表示開始位置
+	var		POS_MAP_SX=240;
+	var		POS_MAP_SY=SCREEN_SIZE_H;
+	var		POS_MAP_EY=POS_LOGO_EY;
+//	var		POS_MAP_EY=SCREEN_SIZE_H-48;
+	var		POS_MAP_OFF_Y=(128-80);
+
+
+	// ポーズボタン表示開始位置
+	var		POS_PAUSE_SX=SCREEN_SIZE_W-240;
+	var		POS_PAUSE_SY=SCREEN_SIZE_H;
+	var		POS_PAUSE_EY=POS_LOGO_EY;
+//	var		POS_PAUSE_EY=SCREEN_SIZE_H-88;
+	var		POS_PAUSE_OFF_Y=(128-88);
+
+
+	var		FRAME_IN_TIME=24;
+
+
+	// システムのオブジェクトを生成する
+	function Create()
+	{
+	var		_stage_no;
+	var		create_top_info;
+	var		create_pos_info;
+
+		Release();
+
+
+		// ステージID変換
+		create_pos_info = true;
+		create_top_info = true;
+		switch ( parScene.id )
+		{
+		case SCENE_STAGE1:
+			_stage_no = 1;
+			break;
+		case SCENE_STAGE2:
+			create_pos_info = true;
+			create_top_info = false;
+			_stage_no = 2;
+			break;
+		case SCENE_STAGE3:
+			_stage_no = 3;
+			break;
+
+		case SCENE_GAMEOVER:
+			UpdateMapInfo = dammy_func;
+			return;
+		default:
+			create_pos_info = false;
+			create_top_info = false;
+			_stage_no = 4;
+			break;
+		}
+
+		if (PRINT_TOP_RUNNER  ==  0) {
+			create_top_info = false;
+			create_pos_info = false;
+		}
+
+
+		// ロゴCG作成
+		logo_cg = EasyCreateLayerObject( parWin, parLayer, "ir_info_logo", clNone, false, POS_LOGO_SX,POS_LOGO_SY, PRIORITY_INFO_OBJ );
+		create_anime_y_data( logo_cg, POS_LOGO_SY, POS_LOGO_EY );
+
+		// ポーズボタン
+		with (pause_btn = new CIriyaGamePauseButton(parWin,parLayer))
+		{
+			.CreateButton( PRIORITY_INFO_OBJ );
+			.SetLayerPosition( POS_PAUSE_SX, POS_PAUSE_SY );
+			create_anime_y_data( pause_btn, POS_PAUSE_SY, POS_PAUSE_EY );
+		}
+
+		// ステージ経過時間
+		stage_time = new CIriyaPrintStageTime( parWin,parLayer );
+		stage_time.Init();
+		stage_time.SetLeftTime( START_LEFT_TIME );
+		stage_time.SetTime( 0 );
+		stage_time.SetBasePosition( POS_TIME_SX, POS_TIME_SY );
+		create_anime_y_data( stage_time, POS_TIME_SY, POS_TIME_EY );
+
+
+		// トップ表示
+		if (create_top_info  ==  true) {
+			top_chara = new CIriyaPrintTopRunner( parWin,parLayer );
+			top_chara.Init();
+			top_chara.ChageTopCG( 0 );
+			top_chara.SetBasePosition( POS_TOP_SX, POS_TOP_SY );
+			create_anime_y_data( top_chara, POS_TOP_SY, POS_TOP_EY );
+		}
+		// MAP表示
+		rader_map = new CIriyaPrintRader( parWin,parLayer );
+		rader_map.Init( _stage_no, create_pos_info );
+		rader_map.SetBasePosition( POS_MAP_SX, POS_MAP_SY );
+		create_anime_y_data( rader_map, POS_MAP_SY, POS_MAP_EY );
+
+		set_frame_in_cg_pos();
+		return;
+	}
+	// システムのオブジェクトをフレームインの開始
+	function FrameIn()
+	{
+		update_mode = UPDATE_MODE_FRAME_IN;
+
+		// ロゴCG
+		if (CheckValid(logo_cg)  ==  true) {
+			with ( logo_cg )
+			{
+				.AnimeY.SetDirectionAdd();
+				.AnimeY.Start();
+				if (parScene.parentLayer.isAutoPlayMode()  ==  false)
+					.visible = true;
+			}
+		}
+
+		// ポーズボタン
+		if (CheckValid(pause_btn)  ==  true) {
+			with ( pause_btn )
+			{
+				.AnimeY.SetDirectionAdd();
+				.AnimeY.Start();
+				if (parScene.parentLayer.isAutoPlayMode()  ==  false)
+					.Print();
+			}
+		}
+
+		// ステージ経過時間
+		if (CheckValid(stage_time)  ==  true) {
+			with ( stage_time )
+			{
+				.AnimeY.SetDirectionAdd();
+				.AnimeY.Start();
+				if (parScene.parentLayer.isAutoPlayMode()  ==  false)
+					.Print();
+			}
+		}
+
+		// トップ表示
+		if (CheckValid(top_chara)  ==  true) {
+			with ( top_chara )
+			{
+				.AnimeY.SetDirectionAdd();
+				.AnimeY.Start();
+				if (parScene.parentLayer.isAutoPlayMode()  ==  false)
+					.Print();
+			}
+		}
+
+		// MAP表示
+		if (CheckValid(rader_map)  ==  true) {
+			with ( rader_map )
+			{
+				.AnimeY.SetDirectionAdd();
+				.AnimeY.Start();
+				if (parScene.parentLayer.isAutoPlayMode()  ==  false)
+					.Print();
+			}
+		}
+
+
+		set_frame_in_cg_pos();
+		return;
+	}
+	// システムのオブジェクトをフレームアウトの開始
+	function FrameOut()
+	{
+		update_mode = UPDATE_MODE_FRAME_OUT;
+
+		// ロゴCG
+		if (CheckValid(logo_cg)  ==  true) {
+			with ( logo_cg )
+			{
+				.AnimeY.SetDirectionDec();
+				.AnimeY.Start();
+				.visible = true;
+			}
+		}
+		// ポーズボタン
+		if (CheckValid(pause_btn)  ==  true) {
+			with ( pause_btn )
+			{
+				.Stop();
+
+				.AnimeY.SetDirectionDec();
+				.AnimeY.Start();
+				.Print();
+			}
+		}
+
+		// ステージ経過時間
+		if (CheckValid(stage_time)  ==  true) {
+			with ( stage_time )
+			{
+				.AnimeY.SetDirectionDec();
+				.AnimeY.Start();
+				.Print();
+			}
+		}
+
+		// トップ表示
+		if (CheckValid(top_chara)  ==  true) {
+			with ( top_chara )
+			{
+				.AnimeY.SetDirectionDec();
+				.AnimeY.Start();
+				.Print();
+			}
+		}
+
+		// MAP表示
+		if (CheckValid(rader_map)  ==  true) {
+			with ( rader_map )
+			{
+				.AnimeY.SetDirectionDec();
+				.AnimeY.Start();
+				.Print();
+			}
+		}
+
+		set_frame_in_cg_pos();
+		return;
+	}
+
+	// 各オブジェクトの座標の更新
+	function set_frame_in_cg_pos()
+	{
+		if (CheckValid(logo_cg)  ==  true) {
+			with ( logo_cg )
+			{
+				.top = .AnimeY.GetNowNum();
+			}
+		}
+		if (CheckValid(pause_btn)  ==  true) {
+			with ( pause_btn )
+			{
+				.SetLayerPosition( .GetLayerPositionX(), .AnimeY.GetNowNum()+POS_PAUSE_OFF_Y );
+			}
+		}
+		if (CheckValid(stage_time)  ==  true) {
+			with ( stage_time )
+			{
+				.SetBasePosition( .GetBasePositionX(), .AnimeY.GetNowNum() );
+			}
+		}
+		if (CheckValid(top_chara)  ==  true) {
+			with ( top_chara )
+			{
+				.SetBasePosition( .GetBasePositionX(), .AnimeY.GetNowNum() );
+			}
+		}
+		if (CheckValid(rader_map)  ==  true) {
+			with ( rader_map )
+			{
+				.SetBasePosition( .GetBasePositionX(), .AnimeY.GetNowNum()+POS_MAP_OFF_Y );
+			}
+		}
+		return;
+	}
+	function GetStageTimePosY()
+	{
+		return ( stage_time.AnimeY.GetNowNum() );
+	}
+
+	// フレームインorアウトのアニメが終了しているかチェックする
+	function end_frame_inout_anime()
+	{
+		if (CheckValid(logo_cg)  ==  true) {
+			if (logo_cg.AnimeY.CheckUpdateState()  !=  "END")
+				return ( false );
+		}
+		if (CheckValid(pause_btn)  ==  true) {
+			if (pause_btn.AnimeY.CheckUpdateState()  !=  "END")
+				return ( false );
+		}
+		if (CheckValid(stage_time)  ==  true) {
+			if (stage_time.AnimeY.CheckUpdateState()  !=  "END")
+				return ( false );
+		}
+		if (CheckValid(top_chara)  ==  true) {
+			if (top_chara.AnimeY.CheckUpdateState()  !=  "END") {
+				return ( false );
+			}
+		}
+		if (CheckValid(rader_map)  ==  true) {
+			if (rader_map.AnimeY.CheckUpdateState()  !=  "END")
+				return ( false );
+		}
+
+
+		return ( true );
+	}
+
+	function frame_in_out_anime()
+	{
+		if (CheckValid(logo_cg)  ==  true)
+			logo_cg.AnimeY.Update();
+		if (CheckValid(pause_btn)  ==  true)
+			pause_btn.AnimeY.Update();
+		if (CheckValid(pause_btn)  ==  true)
+			stage_time.AnimeY.Update();
+		if (CheckValid(top_chara)  ==  true)
+			top_chara.AnimeY.Update();
+		if (CheckValid(rader_map)  ==  true)
+			rader_map.AnimeY.Update();
+		return;
+	}
+
+
+
+	// オプションメニューを開放
+	function release_option_menu()
+	{
+		ReleaseOptionMenu( option_menu );
+		option_menu = void;
+		return;
+	}
+
+	// オプションメニューの作成
+	function reset_option_menu()
+	{
+		option_menu = ResetOptionMenu( option_menu, parWin, parLayer, parScene );
+		return;
+	}
+
+
+	// ステージの経過時間を返す
+	function GetNowStageTime()
+	{
+		return ( stage_time.GetNowTime() );
+	}
+
+
+	// 現在のモードを返す
+	function GetNowMode()
+	{
+		return ( update_mode );
+	}
+
+
+	// ボスの体力表示を変更
+	function ChangeBossVitAve( _new_ave )
+	{
+		rader_map.ChangeBossVitAve( _new_ave );
+		return;
+	}
+
+	// 各種更新戻り値
+	var	UPDATE_RET_NORMAL_STATE			=0;		// 通常状態
+	var	UPDATE_RET_PAUSE_STATE			=1;		// ポーズ状態
+	var	UPDATE_RET_TITLE_RET_FADE_END	=2;		// タイトルに戻る後のフェード完了状態
+
+	var	UPDATE_RET_SIGNAL_END_FADE_IN	=10;	// フェードインが終了した
+	var	UPDATE_RET_SIGNAL_PAUSE			=11;	// ポーズボタンが押された
+	var	UPDATE_RET_SIGNAL_RET_TITLE		=12;	// タイトルに戻るが押された
+	var	UPDATE_RET_SIGNAL_RET_GAME		=13;	// ゲームに戻るが押された
+	function Update()
+	{
+		switch ( update_mode )
+		{
+		case UPDATE_MODE_FRAME_NORMAL:
+			if (CheckValid(pause_btn)  ==  true) {
+				if (pause_btn.GetHitID()  ==  pause_btn.ID_HIT_YES) {
+					reset_option_menu();
+					update_mode = UPDATE_MODE_PAUSE;
+					return ( UPDATE_RET_SIGNAL_PAUSE );
+				}
+			}
+			return ( UPDATE_RET_NORMAL_STATE );
+
+
+		case UPDATE_MODE_FRAME_IN:
+		case UPDATE_MODE_FRAME_OUT:
+			if (end_frame_inout_anime()  ==  true) {
+				update_mode = UPDATE_MODE_FRAME_NORMAL;
+				if (CheckValid(pause_btn)  ==  true) {
+					pause_btn.Start();
+					UpdateCursorPos( parScene );
+				}
+				return ( UPDATE_RET_SIGNAL_END_FADE_IN );
+			}
+
+			frame_in_out_anime();
+
+			set_frame_in_cg_pos();
+			return ( UPDATE_RET_NORMAL_STATE );
+
+
+		case UPDATE_MODE_PAUSE:
+			var		ret;
+			with ( option_menu )
+			{
+				// オプションメニュー処理
+				switch ( .ProcessUpdate() )
+				{
+				case .PROCESS_RET_NROMAL:
+					return ( UPDATE_RET_PAUSE_STATE );
+				case .PROCESS_RET_TITLE:
+					ret = UPDATE_RET_SIGNAL_RET_TITLE;
+					update_mode = UPDATE_MODE_TITLE_RET_FADE_END;
+					break;
+				case .PROCESS_RET_GAME:
+					ret = UPDATE_RET_SIGNAL_RET_GAME;
+
+					update_mode = UPDATE_MODE_FRAME_NORMAL;
+					if (CheckValid(pause_btn)  ==  true)
+						pause_btn.Reset();
+					break;
+				}
+			}
+			release_option_menu();	// オプションメニューを開放
+			return ( ret );
+
+		case UPDATE_MODE_TITLE_RET_FADE_END:
+			return ( UPDATE_RET_TITLE_RET_FADE_END );
+
+		case UPDATE_MODE_FRAME_NONE:
+			break;
+		}
+		return ( UPDATE_RET_NORMAL_STATE );
+	}
+
+
+
+	// ステージ経過時間をステップさせる
+	function StepTime()
+	{
+		if (stage_time_count_flag  ==  false)
+			return;
+		if (CheckValid(stage_time)  ==  false)
+			return;
+		stage_time.UpdateTime();
+		return;
+	}
+	function CheckTimeOver()
+	{
+		if (stage_time_count_flag  ==  false)
+			return ( false );
+		return ( stage_time.CheckTimeOver() );
+	}
+
+
+	function StartTime()
+	{
+		//
+		stage_time_count_flag = true;
+		return;
+	}
+	
+	function StopTime()
+	{
+		//
+		stage_time_count_flag = false;
+		return;
+	}
+
+
+	function UpdateMapInfo()
+	{
+	var		i;
+	var		enable_flag;
+
+
+		for (i=0;  i<MAX_PLAYER_NUM;  i++) {
+			if (CheckValid(top_chara)  ==  true) {
+				if (parScene.getServantRank(i)  ==  0)
+					top_chara.Update(i);
+			}
+
+			if (parScene.players[i].status  !=  STATUS_FAILED)
+					enable_flag = true;
+			else	enable_flag = false;
+
+			rader_map.SetPositionAverage( i, parScene.getServantPosition(i), enable_flag );
+		}
+		rader_map.Update();
+
+		return;
+	}
+	function dammy_func()
+	{
+		return;
+	}
+}
+

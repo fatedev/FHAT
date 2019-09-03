@@ -1,0 +1,439 @@
+
+// 簡易ステージセレクトメニュー
+class CIriyaStageSelectMenu
+{
+var		parWin,parLayer;
+
+	function CIriyaStageSelectMenu( _pr_win, _pr_layer )
+	{
+		parWin   = _pr_win;
+		parLayer = _pr_layer;
+
+		init_buffer();
+	}
+	function finalize()
+	{
+		Release();
+	}
+
+	var		MAX_BACK_FADE_ALHA=214;		// 背景輝度ダウンアルファ値
+	var		BACK_FADE_OUT_TIME=(int)(6);
+
+//	var		LAYER_TUTORIAL		=0;
+	var		LAYER_MENU_CG		=-1;
+	var		LAYER_BACK			=-2;
+
+
+	var		LAYER_LOCAL_BUTTON	=0;
+	var		LAYER_LOCAL_BACK	=0;
+
+
+
+	var		prn_menu;
+	var		menu_cg;
+	var		menu_back;
+
+	var		prn_back;
+
+
+	var		prn_layer_offset;
+	var		prn_px,prn_py;
+
+	var		select_id;
+
+
+	var		convert_id;
+
+	var		mode;
+	var		MODE_NONE		=-1;
+	var		MODE_FADE_IN	= 0;
+	var		MODE_SELECT		= 10;
+	var		MODE_FADE_OUT	= 20;
+	var		MODE_END		= 50;
+
+	function init_buffer()
+	{
+		mode = MODE_NONE;
+
+
+		prn_layer_offset = 0;
+		prn_px = 0;
+		prn_py = 0;
+
+		Reset();
+
+		prn_menu = void;
+		menu_cg  = void;
+		menu_back  = void;
+
+		prn_back = void;
+		return;
+	}
+	function Release()
+	{
+	var		i;
+
+		Stop();
+
+		if (CheckValid(menu_cg)  ==  true) {
+			for (i=0;  i<menu_cg.count;  i++) {
+				menu_cg[i].Release();
+				EasyObjectInvalidate( menu_cg[i] );
+				menu_cg[i] = void;
+			}
+			EasyObjectInvalidate( menu_cg );
+			menu_cg = void;
+		}
+		if (CheckValid(menu_back)  ==  true) {
+			for (i=0;  i<menu_back.count;  i++) {
+				EasyReleaseLayer( menu_back[i] );
+				menu_back[i] = void;
+			}
+			EasyObjectInvalidate( menu_back );
+			menu_back = void;
+		}
+
+
+		if (CheckValid(prn_back)  ==  true) {
+			ReleaseFadeAnime( prn_back );
+			EasyReleaseLayer( prn_back );
+			prn_back = void;
+		}
+
+		if (CheckValid(prn_menu)  ==  true) {
+			ReleaseFadeAnime( prn_menu );
+			EasyReleaseLayer( prn_menu );
+			prn_menu = void;
+		}
+
+
+		if (CheckValid(convert_id)  ==  true) {
+			EasyObjectInvalidate( convert_id );
+			convert_id = void;
+		}
+		return;
+	}
+
+
+
+
+	function Init()
+	{
+	var		i;
+	var		_scene_id;
+
+
+		Release();
+
+		convert_id = new CIriyaGameHelpID();
+
+		with (prn_menu = new CSpriteLayer(parWin,parLayer))
+		{
+			.setPriority( prn_layer_offset+LAYER_MENU_CG );
+			.setPos( prn_px, prn_py );
+			.setSize( 0, 0 );
+		}
+
+		with (prn_back = new CSpriteLayer(parWin, parLayer))
+		{
+			.setPriority( prn_layer_offset+LAYER_BACK );
+			.layerImageFromFill( 0,0, SCREEN_SIZE_W, SCREEN_SIZE_H, RGBA_MAKE(0,0,0,255), false );
+		}
+
+
+		menu_back = new Array();
+		menu_cg = new Array();
+
+
+		add_menu_back( "TOP" );
+
+		with ( convert_id )
+		{
+			for (i=0;  i<4;  i++) {
+				switch ( i )
+				{
+				case 0:
+					if (parLayer.CheckLook(SCENE_STAGE1)  ==  0)
+						continue;
+					_scene_id = SCENE_STAGE1;
+					break;
+				case 1:
+					if (parLayer.CheckLook(SCENE_STAGE2)  ==  0)
+						continue;
+					_scene_id = SCENE_STAGE2;
+					break;
+				case 2:
+					if (parLayer.CheckLook(SCENE_STAGE3)  ==  0)
+						continue;
+					_scene_id = SCENE_STAGE3;
+					break;
+				case 3:
+					if (parLayer.CheckLook(SCENE_BOSS)  ==  0)
+						continue;
+					_scene_id = SCENE_BOSS;
+					break;
+				}
+
+				add_menu( .ConvertSceneIDToStageNo(_scene_id), void,SE_STAGESELECT_MENU_FOCUS );
+
+			}
+		}
+
+		add_menu( convert_id.GetMaxHelpStageNo(), void,SE_STAGESELECT_MENU_FOCUS  );
+		add_menu_back( "BOTTOM" );
+		return;
+	}
+
+
+	function add_menu( _stage_no, _click_play_name, _focus_play_name )
+	{
+	var		menu_page;
+
+		menu_page = menu_cg.count;
+		with (menu_cg[menu_page] = new CIriyaNormalButton(parWin,prn_menu))
+		{
+			.Init();
+			.SetLayerPriority( LAYER_LOCAL_BUTTON );
+			.LoadUnFocusCG( "ir_tutorial01_%02d".sprintf(_stage_no) );
+			.LoadFocusCG( "ir_tutorial02_%02d".sprintf(_stage_no) );
+			.SetLayerPosition( 32, prn_menu.height );
+			.SetClickCallbackFunc( push_btn_callback, _stage_no );
+			.SetCancelCallback( cancel_call_back );
+			.SetFocusSEPlayFile( _focus_play_name );
+			.SetClickSEPlayFile( _click_play_name );
+			.Print();
+		}
+
+		add_menu_back( "NORMAL" );
+		return;
+	}
+	function add_menu_back( add_type )
+	{
+	var		now_page;
+	var		file_name;
+		switch ( add_type )
+		{
+		case "TOP":
+			file_name = "ir_stagesel00_00";
+			break;
+		case "NORMAL":
+			file_name = "ir_tutorial00_01";
+			break;
+		case "BOTTOM":
+			file_name = "ir_tutorial00_02";
+			break;
+		}
+
+		now_page = menu_back.count;
+		menu_back[now_page] = EasyCreateLayerObject( parWin,prn_menu, file_name,
+							clNone, true, 0,prn_menu.height, LAYER_LOCAL_BACK );
+
+		with ( prn_menu )
+		{
+			.setSize( menu_back[now_page].imageWidth, .height+menu_back[now_page].imageHeight );
+		}
+		return;
+	}
+
+
+
+	// 表示レイヤの表示優先度オフセット位置を指定する
+	function SetPriorityOffset( _offset )
+	{
+		prn_layer_offset = _offset;
+		if (CheckValid(prn_menu)  ==  true) {
+			prn_menu.setPriority( prn_layer_offset+LAYER_MENU_CG );
+			prn_back.setPriority( prn_layer_offset+LAYER_BACK );
+		}
+		return;
+	}
+
+	function SetBasePosition( _px, _py )
+	{
+		prn_px = _px;
+		prn_py = _py;
+		if (CheckValid(prn_menu)  ==  true)
+			prn_menu.setPos( prn_px, prn_py );
+		return;
+	}
+	function SetAutoBasePosition()
+	{
+	var	prn_x;
+		prn_x = (SCREEN_SIZE_W-prn_menu.width) / 2;
+		SetBasePosition( prn_x, OPTION_MENU_PRINT_POS_Y );
+		return;
+	}
+
+	function Reset()
+	{
+		select_id = -1;
+		return;
+	}
+	function Print()
+	{
+		if (CheckValid(prn_menu)  ==  true)
+			prn_menu.visible = true;
+		if (CheckValid(prn_back)  ==  true)
+			prn_back.visible = true;
+		return;
+	}
+	function FadeIn()
+	{
+		mode = MODE_FADE_IN;
+
+		if (CheckValid(prn_menu)  ==  true)
+			EasyStartFadeAnime( prn_menu, 0, 255, BACK_FADE_OUT_TIME );
+		if (CheckValid(prn_back)  ==  true)
+			EasyStartFadeAnime( prn_back, 0, MAX_BACK_FADE_ALHA, BACK_FADE_OUT_TIME );
+		return;
+	}
+	function FadeOut()
+	{
+		if (CheckValid(prn_menu)  ==  true)
+			EasyStartFadeAnime( prn_menu, 255, 0, BACK_FADE_OUT_TIME );
+		if (CheckValid(prn_back)  ==  true)
+			EasyStartFadeAnime( prn_back, MAX_BACK_FADE_ALHA, 0, BACK_FADE_OUT_TIME );
+		return;
+	}
+	function fade_anime()
+	{
+	var		ret;
+		ret = false;
+
+		if (ProcessFadeAnime(prn_menu)  ==  "UPDATING")
+			ret = true;
+		if (ProcessFadeAnime(prn_back)  ==  "UPDATING")
+			ret = true;
+		return ( ret );
+	}
+
+
+	function reset_select_menu()
+	{
+	var		i;
+		if (CheckValid(menu_cg)  ==  false)
+			return;
+		for (i=0;  i<menu_cg.count;  i++)
+			menu_cg[i].Print();
+		return;
+	}
+
+
+
+
+
+	function Update()
+	{
+		switch ( mode )
+		{
+		case MODE_NONE:
+			break;
+
+		case MODE_SELECT:
+			break;
+
+		case MODE_FADE_IN:
+			if (fade_anime()  ==  true)
+				break;
+			mode = MODE_SELECT;
+			Start();
+			break;
+		case MODE_FADE_OUT:
+			if (fade_anime()  ==  true)
+				break;
+			mode = MODE_END;
+			break;
+
+		case MODE_END:
+			break;
+		}
+		return;
+	}
+
+	function Start()
+	{
+	var		i;
+		Reset();
+
+		if (CheckValid(menu_cg)  ==  true) {
+			for (i=0;  i<menu_cg.count;  i++)
+				menu_cg[i].Start();
+		}
+		if (CheckValid(prn_back)  ==  true) {
+			with ( prn_back )
+			{
+				.setMouseDownCallback( back_button_hit );
+				.setHitCheckAlphaLimit( "ALL" );
+			}
+		}
+		UpdateCursorPos2( parLayer );
+		return;
+	}
+	function Stop()
+	{
+	var		i;
+		if (CheckValid(menu_cg)  ==  true) {
+			for (i=0;  i<menu_cg.count;  i++) {
+				menu_cg[i].Stop();
+				menu_cg[i].Print();
+			}
+		}
+		if (CheckValid(prn_back)  ==  true) {
+			with ( prn_back )
+			{
+				.setMouseDownCallback( void );
+				.setHitCheckAlphaLimit( "NONE" );
+			}
+		}
+		return;
+	}
+
+	function GetSelectID()
+	{
+		return ( select_id );
+	}
+
+
+	// ボタン上でのプッシュ割り込み
+	function push_btn_callback( _id )
+	{
+		select_id = _id;
+		if (select_id  ==  convert_id.GetMaxHelpStageNo()) {
+			cancel_call_back();
+			return;
+		}
+
+		stopSound( ,, );
+		PlaySE( SE_STAGESELECT_MENU_SELECT );
+
+		Stop();
+		mode = MODE_END;
+
+//		change_tutorial();
+		return;
+	}
+	function back_button_hit( _layer, _x,_y, _button,_shift )
+	{
+		if (_button  ==  mbRight)
+			cancel_call_back();
+		return;
+	}
+	// ボタン上でのキャンセル
+	function cancel_call_back()
+	{
+		select_id  = -1;
+		Stop();
+
+		stopSound( ,, );
+		PlaySE( SE_STAGESELECT_MENU_CANCEL );
+
+
+		mode = MODE_FADE_OUT;
+		reset_select_menu();
+		FadeOut();
+		return;
+	}
+
+}
+
+

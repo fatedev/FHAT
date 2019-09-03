@@ -1,0 +1,1896 @@
+/*-----------------------------------------------------------------------------/
+/	Copyright (C) 2004 TYPE-MOON All Rights Reserved.
+/		花札ゲーム用のメッセージ表示レイヤー
+/-----------------------------------------------------------------------------*/
+@if(__HF_MESSAGELAYER_DEFINED__==0)
+@set(__HF_MESSAGELAYER_DEFINED__=1)
+Scripts.execStorage("subroutine.tjs");
+Scripts.execStorage("HFChipLayer.tjs");
+var basiccolor = rgb(108, 24, 17);
+
+//	取得役
+class GetYakuLayer extends ChipLayer
+{
+	var bgcolor	= 0x00000000;
+
+	var name, point;
+
+	function GetYakuLayer(win, par, name, point)
+	{
+		super.ChipLayer(...);
+		this.name	= name;
+		this.point	= point;
+
+		//	画像を取得
+		var layer = [];
+		layer[0]	= new global.Layer(win, this);
+		layer[0].loadImages("hf_得点_文");
+		layer[1]	= new global.Layer(win, this);
+		layer[1].loadImages("hf_得点_"+name);
+
+		//	サイズを設定
+		var nwh = layer[1].imageWidth >> 1;
+		setSize(nwh + 187 + layer[0].imageWidth, layer[1].imageHeight);
+
+		//	役、文を描画
+		fillRect(0, 0, width, height, bgcolor);
+		copyRect(0, 0, layer[1], 0, 0, layer[1].imageWidth, layer[1].imageHeight);
+		with(layer[0])
+			copyRect(width-.imageWidth, 6, layer[0], 0, 0, .imageWidth, .imageHeight);
+
+		//	得点数を描画
+		layer[0].loadImages("hf_得点_役点数");
+		var l = 157 + nwh, t = 2;
+		var num = string point;
+		var fw = layer[0].imageWidth \ 10;
+		for(var i=num.length - 1; i>=0; i--)
+		{
+			copyRect(l, t, layer[0], fw * +num[i], 0, fw, layer[0].imageHeight);
+			l	-= 21;
+		}
+		releaseArray(layer);
+
+		left	= 130 - nwh;	//	横位置のみ自明
+	}
+
+	function finalize()
+	{
+		super.finalize(...);
+	}
+
+	function broadenTo(w=width, h=height, opa, time=fadetime, accel=0, delay=0, func, name="broaden")
+	{
+		var elm = %[];
+		with(elm)
+		{
+			.width		= w;
+			.height		= h;
+			.opacity	= opa;
+			.time		= time;
+			.accel		= accel;
+			.construct	= broaden_construct;
+			.func		= func;
+			.init		= broaden_init;
+		}
+		start(name, elm, delay);
+	}
+
+	function broaden_init(elm)
+	{
+		with(elm)
+		{
+			.swidth		= width;
+			.sheight	= height;
+			.sopacity	= opacity;
+		}
+	}
+
+	function broaden_construct(elm, per)
+	{
+		with(elm)
+		{
+			var w = int((.width - .swidth) * per + .swidth), h = int((.height - .sheight) * per + .sheight);
+			setSize(w, h);
+			opacity	= int((.opacity - .sopacity) * per + .sopacity);
+		}
+	}
+
+	function open(time, accel, delay, func)
+	{
+		height	= 0;
+		opacity	= 0;
+		visible	= true;
+		broadenTo(, imageHeight, 255, time, accel, delay, func);
+	}
+}
+
+//	取得役一覧
+class GetYakuListLayer extends ChipLayer
+{
+	var borderstorages	= [
+		"hf_得点ウィンドウa",
+		"hf_得点ウィンドウb",
+		"hf_得点ウィンドウc"
+	];
+	var oneyaku	= %[height:38,namecenter:130,nametop:7,monleft:317,montop:13,numleft:287,numtop:9,numstep:21];
+	var sumpoint= %[left:273,top:15,step:29];
+	var monstorage	= "hf_得点_文";
+
+	var fadetime = 300, fadeaccel = 2;
+
+	var marginTop	= 16;
+	var basetop;
+
+	var showed;
+	var ylayers;
+	var pointlayer;
+
+	var curpoint;
+
+	function GetYakuListLayer(win, par)
+	{
+		name	= "役一覧レイヤー";
+		super.ChipLayer(...);
+		absolute	= YakuListAbsolute;
+		hitThreshold= 128;	//	透過
+	}
+
+	function finalize()
+	{
+		releaseArray(ylayers);
+		super.finalize(...);
+	}
+
+	//	画像の作成と表示
+	function show(yakus, time=fadetime, accel=fadeaccel, delay=0, pos="center")
+	{
+		if(showed)
+			return;
+		showed	= true;
+
+		//	素材の読み込み
+		var layers	= [];
+		for(var i=0; i<borderstorages.count; i++)
+		{
+			var layer = new global.Layer(window, this);
+			with(layer)
+			{
+				.loadImages(borderstorages[i]);
+				.setSizeToImageSize();
+			}
+			layers.add(layer);
+		}
+
+		//	サイズ変更
+		var th = layers[0].height, ch = oneyaku.height * yakus.count;
+		var w = layers[0].width, h = th + ch + layers[2].height;
+		setSize(w, h);
+
+		//	枠の作成
+		with(layers[0])
+			copyRect(0, 0, layers[0], 0, 0, .width, .height);
+		face	= dfOpaque,	holdAlpha	= false;
+		with(layers[1])
+			operateStretch(0, th, w, ch, layers[1], 0, 0, .width, .height, omOpaque);
+		face	= dfAlpha;
+		with(layers[2])
+			copyRect(0, th + ch, layers[2], 0, 0, .width, .height);
+
+		//	役の描画
+		var layer = layers[0];
+		var numl = layers[1];
+		with(numl)
+		{
+			.loadImages("hf_得点_役点数");
+			.width = numl.imageWidth \ 10;
+		}
+		var minus = layers[2];
+		with(minus)
+		{
+			.loadImages("hf_得点_役マイナス");
+			.setSizeToImageSize();
+		}
+		var point	= 0;
+		var t = th;
+		var lastnum = "";
+		for(var i=0; i<yakus.count; i++)
+		{
+			with(layer)
+			{
+				//	役名
+				.loadImages("hf_得点_"+yakus[i][0]);
+				var l = oneyaku.namecenter - (.imageWidth >> 1);
+				operateRect(l, t + oneyaku.nametop - ((.imageHeight - 24) \ 2), layer, 0, 0, .imageWidth, .imageHeight);
+
+				//	文
+				.loadImages(monstorage);
+				var l = oneyaku.monleft;
+				operateRect(l, t + oneyaku.montop, layer, 0, 0, .imageWidth, .imageHeight);
+			}
+
+			//	文数
+			var num = string(int(yakus[i][1]));
+			var nl = oneyaku.left + sumpoint.left;
+			dm(yakus[i][0]+" = "+yakus[i][1]+" → \""+num+"\"");
+			for(var j=num.length-1; j>=0; j--)
+			{
+				if(num[j] == "-")
+					operateRect(nl - (minus.width - numl.width), t + oneyaku.numtop, minus, 0, 0, minus.width, minus.height);
+				else
+					operateRect(nl, t + oneyaku.numtop, numl, numl.width * +num[j], 0, numl.width, numl.imageHeight);
+				nl	-= oneyaku.numstep;
+			}
+
+			t		+= oneyaku.height;
+			point	+= yakus[i][1];
+		}
+
+		//	合計点数の描画
+		var num = string(int(point));
+		var nl = sumpoint.left;
+		with(numl)
+		{
+			.loadImages("hf_得点_合計点数");
+			.width = numl.imageWidth \ 10;
+		}
+		for(var i=num.length-1; i>=0; i--)
+		{
+			operateRect(nl, t + sumpoint.top, numl, numl.width * +num[i], 0, numl.width, numl.imageHeight);
+			nl	-= sumpoint.step;
+		}
+		releaseArray(layers);
+
+		//	表示開始
+		var l;
+		if(pos == "center")
+		{
+			l = (parent.width - width) >> 1;
+			t = basetop - height;
+			if(t < marginTop)
+				t	= marginTop;
+		}
+		else if(pos == "rightbottom")
+		{
+			l	= parent.width - width - marginTop;
+			t	= parent.height - height - marginTop;
+		}
+		else if(pos == "lefttop")
+		{
+			l	= marginTop;
+			t	= marginTop;
+		}
+		else if(pos == "rightcenter")
+		{
+			l	= parent.width - width - marginTop;
+			t	= parent.faces[0].top + parent.faces[0].height + marginTop;
+		}
+		setPos(l, t);
+		opacity	= 0;
+		visible	= true;
+		moveTo(l, t, 255, time, accel, delay);
+	}
+
+	function hide(time=fadetime, accel=fadeaccel, delay=0)
+	{
+		if(showed)
+			moveTo(,, 0, time, accel, delay, closeThis);
+		showed	= false;
+	}
+
+	function closeThis()
+	{
+		setImageSize(1, 1);
+		visible	= false;
+	}
+
+	function countUp(yaku)
+	{
+		curpoint	+= yaku.point;
+		dm(yaku.name+": "+yaku.point+"文 (total: "+curpoint+"文)");
+		pointlayer.jumpChange(curpoint);
+	}
+
+	//	レイヤーをドラグ可能にする
+	var lastx, lasty, pressed;
+	function onMouseDown(x, y, button, shift)
+	{
+		if(!(this isvalid))
+			return;
+
+		if(button == mbLeft)
+		{
+			pressed	= true;
+			lastx	= x;
+			lasty	= y;
+		}
+	}
+
+	function onMouseMove(x, y)
+	{
+		if(!(this isvalid))
+			return;
+
+		if(pressed)
+		{
+			var mx = x - lastx, my = y - lasty;
+
+			//	画面の外に出過ぎないように
+			var l = left + mx, t = top + my;
+			var wh	= width \ 2, hh = height \ 2;
+			var ww	= window.scWidth - wh, hw = window.scHeight - hh;
+			l	= l < -wh ? -wh : (l > ww ? ww : l);
+			t	= t < -hh ? -hh : (t > hw ? hw : t);
+			setPos(l, t);
+
+			lastx	= x - mx;
+			lasty	= y - my;
+		}
+	}
+
+	function onMouseUp(x, y, button, shift)
+	{
+		if(!(this isvalid))
+			return;
+
+		if(pressed)
+			pressed	= false;
+	}
+}
+
+//	数字表示レイヤー
+class NumberLayer extends ChipLayer
+{
+	var storage;
+	var align;	//	0: left, 1: center, 2: right
+	var num	= 0;
+	var fw;
+
+	function NumberLayer(win, par, storage, align=0)
+	{
+		name	= "NumberLayer";
+		super.ChipLayer(...);
+		this.storage	= storage;
+		this.align		= align;
+
+		drawNumber();
+	}
+
+	function drawNumber()
+	{
+		dm("draw number: "+number);
+		var layer, ow, nw;
+		with(layer = new global.Layer(window, this))
+		{
+			.loadImages(storage);
+			fw = .imageWidth \ 10;
+			var fh = .imageHeight;
+			var str = string(number);
+			ow	= width;
+			nw	= fw * str.length;
+			if(ow != nw)
+				setSize(nw, fh);
+			var l = 0;
+			for(var i=0; i<str.length; i++)
+			{
+				copyRect(l, 0, layer, fw * +str[i], 0, fw, fh);
+				l	+= fw;
+			}
+		}
+		invalidate layer;
+//		alignment(ow, nw);
+		saveOriginal();
+	}
+
+	function alignment(ow, nw, oh, nh)
+	{
+		var l = left, t = top;
+		var dw = nw - ow;
+		switch(align)
+		{
+		case 0:	//	左あわせ
+			break;
+
+		case 1:	//	中央あわせ
+			l	-= dw \ 2;
+			break;
+
+		case 2:	//	右あわせ
+			l	-= dw;
+			break;
+		}
+
+		super.setPos(l, t);
+	}
+
+	var next;
+	function jumpChange(no, time=400, accel=2, delay=0)
+	{
+		time	>>= 1;
+		next	= no;
+		var ns = string next;
+		var nw = ns.length * fw;
+		dm(@"(${left}, ${top}) ${width} → ${nw}(${fw})");
+		mmTo(left+(width>>1), top, 0, height, time, accel, delay, changeStoredNumber);
+		mmTo(left - (nw - width), top, nw, height, time, accel);
+	}
+
+	function changeStoredNumber()
+	{
+		dm(number+" → "+next);
+		number	= next;
+	}
+
+	property number
+	{
+		setter(n)
+		{
+			if(n !== number)
+			{
+				num	= n;
+				drawNumber();
+			}
+		}
+		getter	{ return num; }
+	}
+}
+
+//	ポップアップレイヤー
+class PopupLayer extends ChipLayer
+{
+	var storage	= "hf_確認ウィンドウ";
+	var chars	= "abcdefghi";
+	var textcolor	= basiccolor;
+
+	function PopupLayer(win, par)
+	{
+		super.ChipLayer(...);
+	}
+
+	function finalize()
+	{
+		super.finalize(...);
+	}
+
+	function makeBackground(w, h)
+	{
+		//	画像の読み込み
+		var layers	= [];
+		for(var i=0; i<chars.length; i++)
+		{
+			with(layers[i] = new global.Layer(window, this))
+			{
+				.loadImages(storage+chars[i]);
+				.setSizeToImageSize();
+			}
+		}
+
+		//	背景を書き込み
+		var l = layers[0].width, t = layers[0].height;
+		setSize(w + layers[0].width + layers[2].width, h + layers[0].height + layers[6].height);
+		with(layers[0])
+			copyRect(0, 0, layers[0], 0, 0, .width, .height);
+		with(layers[2])
+			copyRect(l+w, 0, layers[2], 0, 0, .width, .height);
+		face	= dfOpaque,	holdAlpha	= false;
+		with(layers[1])
+			operateStretch(l, 0, w, .height, layers[1], 0, 0, .width, .height, omOpaque);
+		with(layers[3])
+			operateStretch(0, t, .width, h, layers[3], 0, 0, .width, .height, omOpaque);
+		with(layers[4])
+			operateStretch(l, t, w, h, layers[4], 0, 0, .width, .height);
+		with(layers[5])
+			operateStretch(l+w, t, .width, h, layers[5], 0, 0, .width, .height, omOpaque);
+		with(layers[7])
+			operateStretch(l, t+h, w, .height, layers[7], 0, 0, .width, .height, omOpaque);
+		face	= dfAlpha;
+		with(layers[6])
+			copyRect(0, t+h, layers[6], 0, 0, .width, .height);
+		with(layers[8])
+			copyRect(l+w, t+h, layers[8], 0, 0, .width, .height);
+		releaseArray(layers);
+
+		return [l, t];
+	}
+}
+
+//	こいこい確認レイヤー
+class KoikoiConfirmLayer extends PopupLayer
+{
+	var fadetime = 300, fadeaccel = 2;
+	var margin	= 4;
+	var linespacing	= 2;
+
+	var button = [];
+	var yesfunc, nofunc;
+	var showed;
+	var acceptable;
+
+	var onLButtonDown;
+
+	function KoikoiConfirmLayer(win, par, fh=24)
+	{
+		name	= "確認・メッセージレイヤー";
+		super.PopupLayer(...);
+		absolute	= KoikoiConfirmAbsolute;
+		font.height	= fh;
+	}
+
+	function finalize()
+	{
+		super.finalize(...);
+	}
+
+	//	こいこいの確認
+	function confirmShoubu(yesfunc, nofunc, time=fadetime, accel=fadeaccel, delay=0, xoffset=0, yoffset=0)
+	{
+		hitThreshold= 0;	//	透過しない
+
+		this.yesfunc	= yesfunc;
+		this.nofunc		= nofunc;
+
+		//	確認メッセージ「こいこいしますか？」読み込み
+		var layer	= new global.Layer(window, this);
+		layer.loadImages("hf_こいこいしますか？");
+
+		//	ボタンを用意
+		button[0] = new PushButtonLayer(window, this, "hf_こいこいボタン");
+		button[1] = new PushButtonLayer(window, this, "hf_勝負ボタン");
+		var bh = button[0].height > button[1].height ? button[0].height : button[1].height;
+
+		//	背景
+		var w = layer.imageWidth + margin * 2, h = layer.imageHeight + bh + margin * 3;
+		var pos = makeBackground(w, h);
+
+		//	ボタンを設定
+		var cleft= (width >> 1);
+		var btop = pos[1] + margin * 2 + layer.height;
+		with(button[0])
+		{
+			.setPos(cleft - (w >> 2) - (.width >> 1), btop);
+			.visible	= true;
+		}
+		with(button[1])
+		{
+			.setPos(cleft + (w >> 2) - (.width >> 1), btop);
+			.visible	= true;
+		}
+
+		//	確認メッセージ書き込み
+		operateRect(pos[0]+margin, pos[1]+margin, layer, 0, 0, layer.imageWidth, layer.imageHeight,, 255);
+		release(layer);
+
+		//	表示
+		show(time, accel, delay, xoffset, yoffset);
+	}
+
+	//	確認
+	function confirm(msg, yesfunc, nofunc, time=fadetime, accel=fadeaccel, delay=0, xoffset=0, yoffset=0)
+	{
+		hitThreshold	= 0;
+
+		this.yesfunc	= yesfunc;
+		this.nofunc		= nofunc;
+
+		//	メッセージ
+		msg	= msg.split("\n");
+
+		//	ボタン
+		button[0]	= new PushButtonLayer(window, this, "hf_はい");
+		button[1]	= new PushButtonLayer(window, this, "hf_いいえ");
+		var bh = button[0].height > button[1].height ? button[0].height : button[1].height;
+
+		//	表示領域の決定
+		var iw = 0, ih = (font.height + linespacing) * msg.count + margin + bh;
+		for(var i=0; i<msg.count; i++)
+		{
+			var fw = font.getTextWidth(msg[i]);
+			iw	= fw if iw < fw;
+		}
+
+		//	背景
+		var w = (margin << 1) + iw;
+		var pos = makeBackground(w, (margin << 1) + ih);
+
+		//	テキスト描画
+		var l = pos[0] + margin, t = pos[1] + margin;
+		for(var i=0; i<msg.count; i++)
+		{
+			if(msg[i] != "")
+				drawText(l, t, msg[i], textcolor);
+			t += font.height + linespacing;
+		}
+
+		//	ボタン配置
+		var center	= width >> 1;
+		t	+= margin;
+		with(button[0])
+		{
+			.setPos(center - (w >> 2) - (.width >> 1), t);
+			.visible	= true;
+		}
+		with(button[1])
+		{
+			.setPos(center + (w >> 2) - (.width >> 1), t);
+			.visible	= true;
+		}
+
+		//	表示
+		show(time, accel, delay, xoffset, yoffset);
+	}
+
+	//	メッセージ表示
+	function message(msg, time=fadetime, accel=fadeaccel, delay=0, xoffset=0, yoffset=0)
+	{
+		hitThreshold= 256;	//	透過する
+
+		msg	= msg.split("\n");
+
+		//	表示領域の決定
+		var iw = 0, ih = (font.height + linespacing) * msg.count;
+		for(var i=0; i<msg.count; i++)
+		{
+			var fw = font.getTextWidth(msg[i]);
+			iw	= fw if iw < fw;
+		}
+
+		//	背景
+		var pos = makeBackground((margin << 1) + iw, (margin << 1) + ih);
+
+		//	テキスト描画
+		var l = pos[0] + margin, t = pos[1] + margin;
+		for(var i=0; i<msg.count; i++)
+		{
+			if(msg[i] != "")
+				drawText(l, t, msg[i], textcolor);
+			t += font.height + linespacing;
+		}
+
+		//	表示
+		show(time, accel, delay, xoffset, yoffset);
+	}
+
+	function show(time=fadetime, accel=fadeaccel, delay=0, xoffset=0, yoffset=0)
+	{
+		if(showed)
+			return;
+		showed	= acceptable	= true;
+		pressed	= false;	//	押下後にhideされると"pressed=true"の状態が保持されている可能性があるので
+
+		//	表示位置設定
+		var l = ((parent.width - width) >> 1) + xoffset, t = ((parent.height - height) >> 1) + yoffset;
+		setPos(l, t);
+
+		//	表示開始
+		opacity	= 0;
+		visible	= true;	dm(name+" visible: "+visible);
+		moveTo(,, 255, time, accel, delay);
+	}
+
+	function hide(time=fadetime, accel=fadeaccel, delay=0)
+	{
+		if(!showed)
+			return;
+		showed	= acceptable	= false;
+
+		//	消去開始
+		moveTo(,, 0, time, accel, delay, closeThis);
+	}
+
+	function closeThis()
+	{
+		setImageSize(1, 1);
+		release(button[0]);
+		release(button[1]);
+		visible	= false;
+	}
+
+	//	指定時間後に閉じる
+	function reserveClose(time)
+	{
+		hide(,, time);
+	}
+
+	function onButtonDown(btn)
+	{
+		if(!acceptable)
+			return;
+
+		if(btn == button[0])
+			yesfunc(this);
+		else
+			nofunc(this);
+		acceptable	= false;
+	}
+
+	//	レイヤーをドラグ可能にする
+	var lastx, lasty, pressed;
+	function onMouseDown(x, y, button, shift)
+	{
+		if(!acceptable)
+			return;
+
+		if(button == mbLeft)
+		{
+			if(onLButtonDown)
+				onLButtonDown();
+			else
+			{
+				pressed	= true;
+				lastx	= x;
+				lasty	= y;
+			}
+		}
+	}
+
+	function onMouseMove(x, y)
+	{
+		if(pressed)
+		{
+			var mx = x - lastx, my = y - lasty;
+
+			//	画面の外に出過ぎないように
+			var l = left + mx, t = top + my;
+			var wh	= width \ 2, hh = height \ 2;
+			var ww	= window.scWidth - wh, hw = window.scHeight - hh;
+			l	= l < -wh ? -wh : (l > ww ? ww : l);
+			t	= t < -hh ? -hh : (t > hw ? hw : t);
+			setPos(l, t);
+
+			lastx	= x - mx;
+			lasty	= y - my;
+		}
+	}
+
+	function onMouseUp(x, y, button, shift)
+	{
+		if(pressed)
+			pressed	= false;
+	}
+}
+
+//	フェイスレイヤー
+class FaceLayer extends ChipLayer
+{
+	var faces	= "喜怒哀楽";
+	var shakewidth	= 10;
+	var shaketime	= 500;
+
+	var face_pos	= %[left0:615,top0:5,left1:5,top1:419];	//	フェイスの基本位置
+	var balloon_pos	= %[left0:12,top0:122,left1:164,top1:40];	//	ふきだしの位置(フェイスからのオフセット)
+
+	var player, names;	//	基本情報
+
+	var _no;	//	キャラの番号
+	var _exp;	//	表情
+	var	defaultFace	= "楽";	//	通常の表情
+
+	var balloon;	//	ふきだし
+
+	var timer;		//	顔を元に戻すタイマー
+	var restore;	//	戻す必要があるか
+	var stockvoice;	//	交互に喋るときのセリフストック
+
+	var said;
+
+	var elm;
+
+	var option;		//	各種マーク
+
+	function FaceLayer(win, par, player, names)
+	{
+		name	= "顔: "+player;
+		with(this)
+		{
+			.player	= player;	//	0:CPU(上) / 1:プレイヤー(下)
+			.names	= names;	//	チームのキャラクター名
+		}
+		_no		= 0;			//	0:リーダー / 1〜:その他
+		_exp	= defaultFace;	//	表情
+		super.ChipLayer(...);
+
+		loadImages();
+		setSizeToImageSize();
+		setPos(defaultLeft, defaultTop);
+		absolute	= FaceAbsolute;
+		visible	= true;
+
+		balloon = new BalloonLayer(win, par, this);
+	}
+
+	property defaultLeft{ getter { return face_pos["left"+player]; } }
+	property defaultTop	{ getter { return face_pos["top"+player]; } }
+
+	function finalize()
+	{
+		release(timer);
+		release(balloon);
+		super.finalize(...);
+	}
+
+	property name
+	{
+		setter(n)	{ super.name = n; }
+		getter		{ return "顔レイヤー: "+names[no]+"("+exp+")";	}
+	}
+
+	property storage
+	{
+		getter	{ return "hf_"+names[no]+"-"+exp; }
+	}
+
+	function loadImages()
+	{
+		if(Storages.isExistentStorage(storage+".png") || Storages.isExistentStorage(storage+".tlg"))
+		{
+			super.loadImages(storage);
+			setSizeToImageSize();
+			if(grayscale)
+				doGrayScale();
+		}
+		else
+		{//	顔が存在しない
+			setImageSize(1, 1);
+			fillRect(0, 0, 1, 1, 0x00000000);
+@if(DEBUG==1)
+			popupMessage("顔画像 \""+storage+"\" が存在しません。");
+@endif
+		}
+	}
+
+	//	ふきだしを表示
+	//		bt : 震えるか？
+	function voice(n=no, e=exp, t, time, bt=false, restore=true, delay=0, stockvoice)
+	{
+//		dm("=================voice["+player+"]: delay = "+delay+" / text = "+t+" / time = "+time);
+		n	= no if n < 0;	//	-1なら現在のキャラクターのまま
+		if(delay > 0)
+		{
+			with(elm = %[])
+			{
+				.n	= n;
+				.e	= e;
+				.t	= t;
+				.time	= time;
+				.bt		= bt;
+				.restore= restore;
+				.stock	= stockvoice;
+			}
+			release(timer);
+			timer	= new Timer(onTimeout, "");
+			with(timer)
+				.interval	= delay, .enabled	= true;
+			dm("elm = "+elm);
+			return;
+		}
+
+		//	オプション付きか？
+		var e2 = e.split("-");
+//		dm("e2.count = "+e2.count+" / e2[0] = "+e2[0]+" / e2[1] = "+e2[1]);
+		if(e2.count > 1)
+		{
+			e		= e2[0];	//	通常の表情
+			option	= e2[1];	//	オプション
+		}
+		else
+			option	= void;
+
+//		finishAll();	//	現在実行中の動作を終了させる(必要な処理まで全て止まってしまうので、終了できない)
+
+		bt	= 1 if e == "怒";		//	"怒"なら、震える
+		this.restore	= restore;
+		this.stockvoice	= stockvoice;
+		delay	= 0;
+		if(t != "")
+		{
+			delay = change(n, e);
+			with(balloon)
+			{
+				.finishAll();
+				.text	= t;
+				.btype	= +bt if bt !== void;
+				.draw();	//	レイヤーを作って、
+				//	表示位置を決定
+				var l = left + balloon_pos["left"+player], t = top + balloon_pos["top"+player];
+				if(player)
+					.setPos(l, t - .height);
+				else
+					.setPos(l - .width, t);
+//				dm("****** voice pos ("+.left+", "+.top+")");
+				.show(time, delay);
+				.shake(shakewidth, shaketime,, delay) if bt;
+			}
+			said	= true;
+
+			release(timer);
+			timer	= new Timer(onTimeout, "");
+		}
+		else
+		{//	顔変えのみ
+			delay	= change(n, e, time);
+
+			release(timer);
+			timer	= new Timer(onRecover, "");
+		}
+//dm("voice: "+t+" = "+(time+delay));
+		with(timer)
+		{
+			.interval	= time + delay;
+			.enabled	= true;
+		}
+
+		shake(shakewidth, shaketime,, delay) if bt;
+	}
+
+	//	元に位置へ戻る
+	function ret(time=0, accel=0, delay=0, opa=opacity)
+	{
+		moveTo(face_pos["left"+player], face_pos["top"+player], opa, time, accel, delay);
+		absolute	= (5 - no) * 10000;
+	}
+
+	//	顔を変更する(一定時間後元に戻すことも可)
+	var turntime	= 100;
+	function change(n, e, time = 0)
+	{
+//		dm(@"============ ${no} == ${n} / ${exp} == ${e} / time = ${time} ===============");
+		if(typeof e == "Integer")
+			e	= faces[e];
+		timer.enabled	= false if timer !== void;
+
+		var otime	= 0;
+		finish("fold");		//	回転処理を終了させる(実行されていれば)
+		finish("unfold");
+		if(n !== no)
+		{//	キャラクターが変化するとき→回転して変わる
+			_no	= n;
+			_exp= e;
+
+			saveOriginal();	//	現在の画像をコピー
+			finishAll();
+			setDefaultPos();
+			magnifyTo(1, height, turntime,,, onTurnHalf, "fold");
+			magnifyTo(width, height, turntime,,, dispOption, "unfold");
+
+			otime	= turntime << 1;
+		}
+		else if(e !== exp)
+		{//	表情のみ変わるとき
+			exp= e;
+			setDefaultPos();
+			dispOption();
+		}
+		absolute	= BalloonAbsolute - 1000;	//	セリフ表示中のみ前に出る
+
+		//	現時点でふきだしを表示中なら、隠す(表情と言ってることが違うなんてことになるので)
+		hideBalloon();
+
+		return otime;	//	処理時間
+	}
+
+	function shake(sw = 5, time=500, accel=0, delay=0, func)
+	{
+		super.shake(sw, time, accel, delay, setDefaultPos);
+	}
+
+	function setDefaultPos()
+	{
+		setPos(defaultLeft, defaultTop);
+	}
+
+	//	ふきだしを閉じる
+	function hideBalloon()
+	{
+		with(balloon)
+		{
+			.visible	= false;
+			.timer.enabled	= false;
+		}
+	}
+
+	//	汗マーク、怒マークを表示する
+	function dispOption()
+	{
+		if(option == void)
+			return;
+
+		switch(option)
+		{
+		case "汗":	new global.ImpatientIconLayer(window, parent, this); break;
+		case "怒":	new global.AngerIconLayer(window, parent, this); break;
+		}
+	}
+
+	//	回転が半ばに達した
+	function onTurnHalf()
+	{
+		//	orgへ次の画像を読み込む
+		org.loadImages(storage);
+	}
+
+	function onTimeout()
+	{
+		invalidate timer; timer = void;
+		if(elm)
+		{
+			with(elm)
+				voice(.n, .e, .t, .time, .bt, .restore,, .stock);
+			invalidate elm;
+			elm	= void;
+		}
+		else
+		{
+			//	balloonからonHideVoiceが呼ばれるので、ここでは何もしない
+		}
+	}
+
+	function onRecover()
+	{
+		invalidate timer; timer = void;
+
+		onHideVoice();
+	}
+
+	//	セリフ表示が終了した
+	function onHideVoice()
+	{
+		//	必要なら顔を元へ戻す
+		exp	= defaultFace if restore;
+
+		absolute	= FaceAbsolute;	//	元の前後位置へ戻す
+
+		//	入れ子のセリフストックがあれば、
+		if(stockvoice != void)
+		{
+			if(typeof parent.setSerif != "undefined")
+				parent.setSerif((player + 1) & 1, [stockvoice]);	//	相手側にセリフを設定する
+
+			stockvoice	= void;
+			return;
+		}
+
+		//	次のセリフへ
+		if(typeof parent.nextVoice != "undefined")
+			parent.nextVoice(player);
+	}
+
+	//	顔を元に戻す
+	function resetFace()
+	{
+		//	発言中でなければ、
+		if(!said)
+		{
+			timer.enabled	= false;
+			exp	= defaultFace;	//	元に戻す
+		}
+	}
+
+	//	キャラクター(0:リーダー)
+	property no
+	{
+		setter(n)
+		{
+			if(n !== no)
+			{
+				_no	= n;
+				loadImages();
+			}
+		}
+		getter	{ return _no; }
+	}
+
+	//	表情(0: 喜, 1:怒, 2:哀, 3:楽)
+	property exp
+	{
+		setter(e)
+		{
+			if(typeof e == "Integer")
+				e	= faces[e];
+			if(e !== exp)
+			{
+				_exp	= e;
+				loadImages();
+			}
+		}
+		getter	{ return _exp; }
+	}
+
+	var _grayscale	= false;
+	property grayscale
+	{
+		setter(g)
+		{
+			if(grayscale !== g)
+			{
+				_grayscale	= g;
+				if(g)
+					doGrayScale();	//	カラー → モノクロ(グレイスケール化)
+				else
+					loadImages();	//	モノクロ → カラー(画像再読み込み)
+			}
+		}
+		getter	{ return _grayscale; }
+	}
+}
+
+var	hanafudaMarks	= [];
+function finishAllMarks(obj)
+{
+	var	array	= [];
+	array.assign(hanafudaMarks);
+	for(var i=0; i<array.count; i++)
+	{
+		if(obj == void || array[i] instanceof obj)
+			invalidate array[i];
+	}
+}
+
+//	汗マーク
+class ImpatientIconLayer extends ParticleLayer
+{
+	function ImpatientIconLayer(win, par, trg, defpos=true, falltime=500, disptime=800)
+	{
+		dm("make 汗マーク");
+		name	= "汗マーク";
+		super.ParticleLayer(...);
+
+		loadImages("hf_汗マーク");
+		setSizeToImageSize();
+		hitThreshold= 256;
+		opacity		= 255;
+
+		var l, t;
+		if(defpos)
+			l = trg.defaultLeft + 126, t = trg.defaultTop + 15;
+		else
+			l = trg.left + 126, t = trg.top + 15;
+		setPos(l, t);
+		moveTo(l, t += 63, 255, falltime, -2);	//	流れ落ちる
+		moveTo(l, t, 255, disptime,,, endOfMove);	//	消去
+		visible	= true;
+
+		hanafudaMarks.add(this);
+	}
+
+	function finalize()
+	{
+		for(var i=0; i<hanafudaMarks.count; i++)
+		{
+			if(hanafudaMarks[i] == this)
+			{
+				hanafudaMarks.erase(i);
+				break;
+			}
+		}
+		super.finalize(...);
+	}
+}
+
+//	怒りマーク
+class AngerIconLayer extends ParticleLayer
+{
+	var elm;
+
+	//	count <= 0 だと、finish/stopするまで繰り返す
+	function AngerIconLayer(win, par, trg, defpos=true, count=2, time=300)
+	{
+		dm("make 怒マーク");
+		name	= "怒マーク";
+		super.ParticleLayer(...);
+
+		loadImages("hf_怒マーク");
+		setSizeToImageSize();
+		hitThreshold= 256;
+		opacity		= 255;
+
+		if(defpos)
+			setPos(trg.defaultLeft + 100, trg.defaultTop - 7);
+		else
+			setPos(trg.left + 100, trg.top - 7);
+		var mag = 0.75;
+		var w = int(width * mag), h = int(height * mag);
+		saveOriginal();
+		if(count > 0)
+		{
+			for(var i=0; i<count; i++)
+			{
+				magnifyTo(w, h, time);
+				magnifyTo(width, height, time);
+			}
+			magnifyTo(w, h, time,,, endOfMove);
+		}
+		else
+		{
+			elm	= %[w:w, h:h, time:time];
+			magnifyTo(w, h, time);
+			magnifyTo(width, height, time,,, repeat);
+		}
+		visible	= true;
+
+		hanafudaMarks.add(this);
+	}
+
+	function finalize()
+	{
+		for(var i=0; i<hanafudaMarks.count; i++)
+		{
+			if(hanafudaMarks[i] == this)
+			{
+				hanafudaMarks.erase(i);
+				break;
+			}
+		}
+		super.finalize(...);
+	}
+
+	function repeat()
+	{
+		with(elm)
+		{
+			magnifyTo(.w, .h, .time);
+			magnifyTo(width, height, .time,,, repeat);
+		}
+	}
+}
+
+//	ふきだしレイヤー
+class BalloonLayer extends ChipLayer
+{
+	var marginwidth	= 64;	//	枠部分のサイズが不明なので、マージンとして取っておく分の幅
+	var linespacing	= 2;
+
+	var charatime	= 30;	//	一文字の表示時間
+
+	//	ふきだしのタイプ
+	var exts	= [ "", "ギザ" ];	//	画像ファイル名につける拡張
+	var gwtypes	= [ 0, 1 ];			//	繰り返しで間を埋めるか？
+	var btype;
+
+	var owner;
+	var _text;
+	var curline;
+	var textcolor;
+	var timer;
+	var charatimer;				//	文字描画タイマー
+	var currow, curcol;			//	現在の描画行、列
+	var charaleft, charatop;	//	文字描画の基本位置
+	var drawed;
+
+	var layers;
+
+	var _textwidth, _textheight;
+
+	function BalloonLayer(win, par, owner, ff, fh=24, fc=basiccolor)
+	{
+		this.owner	= owner;
+		super.ChipLayer(...);
+		_text	= [];
+		curline	= 0;
+		font.face	= ff if ff != void;
+		font.height	= fh;
+		textcolor	= fc;
+		timer = new Timer(onTimeout, "");
+		with(charatimer = new Timer(onDrawChara, ""))
+			.interval	= charatime;
+		absolute	= BalloonAbsolute;
+	}
+
+	function finalize()
+	{
+//		releaseArray(layers);
+		release(charatimer);
+		release(timer);
+		release(_text);
+		super.finalize(...);
+	}
+
+	//-------------------------------------------------------------------------
+	//	表示文字列操作
+	function clear()
+	{
+		_text.clear();
+		curline	= 0;
+		_textwidth = _textheight = 0;
+		drawed	= false;
+	}
+
+	function add(text)
+	{
+		_text[curline]	+= text;
+		_textwidth = _textheight = -1;
+		drawed	= false;
+	}
+
+	function addCR()
+	{
+		curline++;
+		drawed	= false;
+	}
+
+	property text
+	{
+		setter(t)
+		{
+			if(typeof t == "Object")
+			{
+				_text.clear();
+				_text.assign(t);
+			}
+			else
+			{
+				release(_text);
+				_text	= t.split("\n");
+			}
+			curline	= _text.count - 1;
+			_textwidth = _textheight = -1;
+			drawed	= false;
+		}
+		getter	{ return _text; }
+	}
+
+	//-------------------------------------------------------------------------
+
+	//	テキスト部分の幅
+	property textwidth
+	{
+		getter
+		{
+			if(_textwidth < 0)
+			{
+				//	必要サイズ計測
+				var txt = text, nw = 0;
+				for(var i=0; i<txt.count; i++)
+				{
+					var fw = font.getTextWidth(txt[i]);
+					nw	= fw if nw < fw;
+				}
+				if(gwtypes[btype])
+				{
+					nw	= (nw \ layers[1].width + 1) * layers[1].width;
+				}
+				_textwidth	= nw;
+			}
+			return _textwidth;
+		}
+	}
+
+	//	テキスト部分の高さ
+	property textheight
+	{
+		getter
+		{
+			if(_textheight < 0)
+			{
+				var nh = text.count * (font.height + linespacing) - linespacing;
+				if(gwtypes[btype])
+				{
+					nh	= (nh \ layers[3].height + 1) * layers[3].height;
+				}
+				_textheight	= nh;
+			}
+			return _textheight;
+		}
+	}
+
+	//	画像作成
+	function draw()
+	{
+		if(drawed || text == "")
+			return;
+
+		//	素材の読み込み
+		layers = [];
+		for(var i=0; i<9; i++)
+		{
+			var layer;
+			with(layer = new global.Layer(window, this))
+			{
+				.loadImages("hf_ふきだし"+exts[btype]+"0"+(i+1));
+				.setSizeToImageSize();
+			}
+			layers.add(layer);
+		}
+
+		//	背景用意
+		var nw = textwidth, nh = textheight;
+		var l = layers[0].width, t = layers[0].height;
+		setSize(l + nw + layers[2].width, t + nh + layers[6].height);	//	サイズ決定
+		with(layers[0])
+			copyRect(0, 0, layers[0], 0, 0, .width, .height);
+		with(layers[2])
+			copyRect(l+nw, 0, layers[2], 0, 0, .width, .height);
+		face	= dfOpaque,	holdAlpha	= false;
+		with(layers[4])
+			operateStretch(l, t, nw, nh, layers[4], 0, 0, .width, .height);
+		face	= dfAlpha;
+		with(layers[6])
+			copyRect(0, t+nh, layers[6], 0, 0, .width, .height);
+		with(layers[8])
+			copyRect(l+nw, t+nh, layers[8], 0, 0, .width, .height);
+		if(gwtypes[btype])
+		{
+			//	画像サイズの整数倍で作成
+			with(layers[1])
+			{
+				var pos;
+				var w = layers[1].width, h = layers[3].height;
+				pos	= l;
+				for(var i=nw \ w; i>0; i--)
+				{
+					with(layers[1])
+						copyRect(pos, 0, layers[1], 0, 0, .width, .height);
+					with(layers[7])
+						copyRect(pos, t + nh, layers[7], 0, 0, .width, .height);
+					pos	+= w;
+				}
+				pos	= t;
+				for(var i=nh \ h; i>0; i--)
+				{
+					with(layers[3])
+						copyRect(0, pos, layers[3], 0, 0, .width, .height);
+					with(layers[5])
+						copyRect(l + nw, pos, layers[5], 0, 0, .width, .height);
+					pos	+= h;
+				}
+			}
+		}
+		else
+		{
+			//	ぴったりのサイズで作成
+			face	= dfOpaque;	holdAlpha	= false;
+			with(layers[1])
+				operateStretch(l, 0, nw, .height, layers[1], 0, 0, .width, .height, omOpaque);
+			with(layers[3])
+				operateStretch(0, t, .width, nh, layers[3], 0, 0, .width, .height, omOpaque);
+			with(layers[5])
+				operateStretch(l+nw, t, .width, nh, layers[5], 0, 0, .width, .height, omOpaque);
+			with(layers[7])
+				operateStretch(l, t+nh, nw, .height, layers[7], 0, 0, .width, .height, omOpaque);
+			face	= dfAlpha;
+		}
+		releaseArray(layers);
+		layers	= void;
+
+		//	文字描画
+		l	= (width - nw) >> 1;
+		t	= (height - nh) >> 1;
+		charaleft	= l, charatop	= t;
+
+		//	文字表示タイマー開始
+		currow = curcol = 0;
+		charatimer.enabled	= true;
+
+		drawed	= true;
+	}
+
+	var disptime;
+
+	//	表示
+	function show(ct=70, delay=0)
+	{
+		if(delay > 0)
+		{
+			with(timer)
+				.interval	= delay, .enabled	= true;
+			disptime	= ct;
+			return;
+		}
+
+		//	文字数で表示時間を決定
+		var time	= 0;
+		for(var i=0; i<text.count; i++)
+			time	+= ct * text[i].length;
+		time	= 1000 if time < 1000;	//	最低限の表示時間
+
+		//	ふきだしを出現させる
+		opacity	= 0;
+		finishAll();
+		moveTo(,, 255, 200);
+		visible	= true;
+
+		//	タイマー起動
+		if(time > 0)
+		{
+			with(timer)
+				.enabled = false, .interval = time, .enabled = true;
+		}
+		//	最終的に time = 0 なら消去する必要がある
+	}
+
+	function hide()
+	{
+		moveTo(,, 0, 200,,, hideend);
+	}
+
+	function hideend()
+	{
+		visible	= false;
+		owner.said	= false;	//	発言終了をfaceへ送る
+
+		//	表示が消えたら、次のセリフ
+		if(typeof owner.onHideVoice != "undefined")
+			owner.onHideVoice();
+	}
+
+	function shake()
+	{
+//		dm("balloon shake: "+text);
+		super.shake(...);
+	}
+
+	function onMouseDown()
+	{
+		//	マウスがクリックされたら、タイムアウト
+		onTimeout();
+	}
+
+	function onTimeout()
+	{
+		dm("ふきだし: time out("+disptime+")");
+		if(disptime !== void)
+		{
+			//	ふきだしを出す
+			show(disptime);
+			disptime	= void;
+		}
+		else
+		{
+			//	ふきだしを消す
+			timer.enabled	= false;
+			hide();
+		}
+	}
+
+	//	一文字ずつ描画
+	function onDrawChara()
+	{
+		//	表示文字を決定
+		var line, chara;
+		do
+		{
+			if(currow >= text.count)
+			{
+				charatimer.enabled	= false;
+				return;
+			}
+			line = text[currow];
+			if(curcol >= line.length)
+				currow++, curcol = 0;
+			else
+				chara	= line[curcol];
+		}
+		while(chara === void);
+
+		//	文字を描画
+		var l	= charaleft + font.getTextWidth(line.substr(0, curcol));
+		var t	= charatop + (font.height + linespacing) * currow;
+		drawText(l, t, chara, textcolor);
+
+		curcol++;
+	}
+}
+
+//	札に関連する役をポップアップ
+class RelatedYakuPopupLayer extends PopupLayer
+{
+//	var fudawidth = 24, fudaheight = 39;
+	var linespacing	= 1;
+	var maxfudacount= 10;
+	var textcolor	= basiccolor;
+	var margin	= 4;
+	var noget_color = 0x000000, noget_opacity = 160;
+	var doesntget_color = 0x800000, doesntget_opacity = 160;
+
+	var timer;
+	var lastfuda;
+	var showed;
+	var requester;
+	var toCursorPos;
+
+	function RelatedYakuPopupLayer(win, par, fh=14)
+	{
+		name	= "関連役ポップアップ";
+		super.PopupLayer(...);
+
+		timer	= new Timer(_show, "");
+		font.height	= fh;
+		absolute	= PopupAbsolute;
+		hitThreshold= 256;	//	すべて透過
+	}
+
+	function finalize()
+	{
+		release(timer);
+		super.finalize();
+	}
+
+	function draw(fuda)
+	{
+		if(lastfuda === fuda)
+			return true;
+
+		//	札に関連する役の情報を取得
+		var yakus = parent.game.getRelatedYakus(1, fuda);
+		if(yakus == void)
+			return false;
+		dm("yakus.count = "+yakus.count);
+
+		//	表示に必要なサイズを計算
+		var layer = shareimages.get("xsmall");
+		var fudawidth = layer.width, fudaheight = layer.height;
+		var w, h;
+		for(var i=0; i<yakus.count; i++)
+		{
+			var text	= yakus[i][0];
+			var fudas	= yakus[i][1];
+			var tw, tmp;
+			for(var j=0; j<text.count; j++)
+				tw = tmp if (tmp = font.getTextWidth(text[j])) > tw;
+			var th = text.count * (font.height + linespacing);
+
+			var fw = fudawidth * (fudas.count > maxfudacount ? maxfudacount : fudas.count);
+
+			w	= tw if w < tw;
+			w	= fw if w < fw;
+			h	+= th + margin;
+			h	+= fudaheight if fudas.count > 0;	//	札を表示する必要があるときだけ。
+		}
+
+		//	背景を描画
+		var pos = makeBackground(w, h);
+
+		//	役を描画
+		var l = pos[0], t = pos[1];
+//		var layer = new global.Layer(window, this);
+		for(var i=0; i<yakus.count; i++)
+		{
+			var text	= yakus[i][0];
+			var fudas	= yakus[i][1];
+
+			//	テキストを描画
+			for(var j=0; j<text.count; j++)
+			{
+				drawText(l, t, text[j], textcolor);
+				t	+= font.height + linespacing;
+			}
+
+			//	札を描画
+			var fl = l;
+			for(var j=0; j<fudas.count && j < maxfudacount; j++)
+			{
+				var fuda	= fudas[j];
+				with(layer)
+				{
+//					.loadImages("hf_ss%02d-%1d".sprintf(fuda[0] \ 4 + 1, fuda[0] % 4 + 1));
+//					copyRect(fl, t, layer, 0, 0, .imageWidth, .imageHeight);
+					copyRect(fl, t, layer, .width * (fuda[0] % 4), .height * (fuda[0] \ 4), .width, .height);
+
+					//	状態に応じて、違いを表す
+					if(fuda[1] == 1)
+//						colorRect(fl, t, .imageWidth, .imageHeight, noget_color, noget_opacity);	//	未取得の札
+						colorRect(fl, t, .width, .height, noget_color, noget_opacity);	//	未取得の札
+					else if(fuda[1] == 2)
+//						colorRect(fl, t, .imageWidth, .imageHeight, doesntget_color, doesntget_opacity);	//	相手が取った札
+						colorRect(fl, t, .width, .height, doesntget_color, doesntget_opacity);	//	相手が取った札
+
+//					fl	+= .imageWidth;
+					fl	+= .width;
+				}
+			}
+			t	+= fudaheight + margin;
+		}
+//		invalidate layer;
+
+		lastfuda	= fuda;
+		return true;
+	}
+
+	function show(req, fuda, to_cursorpos, delay=500)
+	{
+		if(showed)
+			return;
+		showed	= true;
+
+		requester	= req;			//	要請元
+		toCursorPos	= to_cursorpos;	//	表示位置(カーソル位置に表示するか？)
+
+		//	描画
+		if(!draw(fuda))
+			return;
+
+		//	表示予約
+		if(delay > 0)
+		{
+			with(timer)
+				.interval = delay, .enabled = true;
+		}
+		else
+			_show();
+	}
+
+	function _show()
+	{
+		//	表示位置を取得
+		var l, t;
+		if(toCursorPos)
+			l = parent.cursorX, t = parent.cursorY;
+		else
+			l = requester.left + requester.width, t = requester.top;
+
+		//	表示位置補正
+		l	-= width if(l + width >= parent.width);
+		l	= margin if(l < margin);
+		t	-= height;// if(t + height >= parent.height);
+		t	= margin if(t < margin);
+		setPos(l, t);
+
+		timer.enabled	= false;
+		visible	= true;
+	}
+
+	function hide()
+	{
+		if(!showed)
+			return;
+		showed	= false;
+
+		timer.enabled	= false;
+		visible	= false;
+	}
+}
+
+//-----------------------------------------------------------------------------
+//	宝具選択メニュー
+class TreasureMenuLayer extends PopupLayer
+{
+	var fadetime = 300, fadeaccel = 2;
+	var spacing	= 2;
+
+	var showed;
+	var buttons;
+
+	function TreasureMenuLayer(win, par, fh=24)
+	{
+		name		= "宝具選択メニュー";
+		super.PopupLayer(...);
+		absolute	= KoikoiConfirmAbsolute;
+		font.height	= fh;
+	}
+
+	function finalize()
+	{
+		release(buttons);
+	}
+
+	//	メニュー表示(宝具一覧、 時間、加速度、遅延)
+	function show(tlist, time=fadetime, accel=fadeaccel, delay=0, cx, cy, game)
+	{
+		if(showed)
+			return;
+		showed	= true;
+		pressed	= false;	//	押下後にhideされると"pressed=true"の状態が保持されている可能性があるので
+
+		hitThreshold	= 0;
+
+		//	使用可能宝具のボタン作成
+		buttons = [];
+		var w, h;
+		for(var i=0; i<tlist.count; i++)
+		{
+//			dm("treasure: "+tlist[i][4]);
+			var treasure = tlist[i];
+			with(buttons[i] = new PushButtonLayer(window, this, "hf_宝具メニュー_"+treasure[4]))
+			{
+				.name		= treasure[4];
+				.enabled = .focusable = treasure[0];		//	使えない宝具は無効状態
+				.servant	= treasure[1];
+				.treasure	= treasure[2];
+				.hint		= game.getTreasureHint(treasure[4]);
+				.visible	= true;
+				w	= .width if .width > w;
+				h	+= .height + spacing;
+			}
+		}
+		var btn;
+		with(btn = new PushButtonLayer(window, this, "hf_宝具メニュー_close"))
+		{
+			.name		= "close";
+			.servant	= void;
+			.treasure	= void;
+			.visible	= true;
+			h	+= .height + spacing;
+		}
+		buttons.add(btn);
+
+		//	背景作成
+		var pos = makeBackground(w, h);
+
+		//	ボタン位置調整
+		var l = pos[0], t = pos[1];
+		for(var i=0; i<buttons.count; i++)
+		{
+			with(buttons[i])
+			{
+				.setPos(l + ((w - .width)>>1), t);
+				t += .height + spacing;
+			}
+		}
+
+		//	表示位置設定
+		cx	= parent.width >> 1 if cx === void;
+		cy	= parent.height >> 1 if cy === void;
+		var l = cx - (width >> 1), t = cy - (height >> 1);
+		l	= l < 0 ? 0 : (l+width > parent.width ? parent.width - width : l);
+		t	= t < 0 ? 0 : (t+height > parent.height ? parent.height - height : t);
+		setPos(l, t);
+
+		//	表示開始
+		opacity	= 0;
+		visible	= true;	dm(name+" visible: "+visible);
+		moveTo(,, 255, time, accel, delay);
+	}
+
+	function hide(time=fadetime, accel=fadeaccel, delay=0)
+	{
+		if(!showed)
+			return;
+		showed	= false;
+
+		//	消去開始
+		moveTo(,, 0, time, accel, delay, closeThis);
+		return time;
+	}
+
+	function closeThis()
+	{
+		setImageSize(1, 1);
+		releaseArray(buttons);
+		visible	= false;
+	}
+
+	function onButtonDown(btn)
+	{
+		//	ボタン名を親に返す。そして閉じる
+		parent.hideSpecialMenu(btn.name, btn.servant, btn.treasure);
+	}
+
+	//	レイヤーをドラグ可能にする
+	var lastx, lasty, pressed;
+	function onMouseDown(x, y, button, shift)
+	{
+		if(button == mbLeft)
+		{
+/*			if(onLButtonDown)
+				onLButtonDown();
+			else
+*/			{
+				pressed	= true;
+				lastx	= x;
+				lasty	= y;
+			}
+		}
+		else if(typeof parent.onMouseDown != "undefined")
+			parent.onMouseDown(...);
+	}
+
+	function onMouseMove(x, y)
+	{
+		if(pressed)
+		{
+			var mx = x - lastx, my = y - lasty;
+			setPos(left + mx, top + my);
+			lastx	= x - mx;
+			lasty	= y - my;
+		}
+	}
+
+	function onMouseUp(x, y, button, shift)
+	{
+		if(pressed)
+			pressed	= false;
+	}
+}
+
+@endif
+/*-----------------------------------------------------------------------------/
+/	End of ChipLayer.tjs
+/-----------------------------------------------------------------------------*/
